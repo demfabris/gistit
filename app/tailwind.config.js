@@ -9,9 +9,13 @@ module.exports = {
       safelist: ['dark']
     }
   },
-  darkMode: 'class', // or 'media' or 'class'
+  darkMode: 'class',
   theme: {
-    extend: {}
+    extend: {
+      width: {
+        layout: '900px'
+      }
+    }
   },
   variants: {
     extend: {

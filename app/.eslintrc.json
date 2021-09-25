@@ -2,7 +2,8 @@
   "extends": [
     "next/core-web-vitals",
     "plugin:jest/recommended",
-    "plugin:prettier/recommended"
+    "plugin:prettier/recommended",
+    "plugin:tailwind/recommended"
   ],
   "env": {
     "jest/globals": true

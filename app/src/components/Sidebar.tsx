@@ -36,7 +36,7 @@ export const Sidebar = ({ sidebarHandler }: Props) => {
         >
           <VscChromeClose size={24} />
         </button>
-        <nav className="pt-24 w-full">
+        <nav className="w-full pt-24">
           <Navigation
             text="Search"
             href="/search"
@@ -71,12 +71,12 @@ interface NavigationProps {
 const Navigation = ({ text, icon, href, callback }: NavigationProps) => {
   return (
     <div
-      className="border-b-2 border-gray-200 dark:border-gray-700 last:border-b-0"
+      className="border-b-2 border-gray-200 dark:border-gray-700 last:border-b-0 hover:text-blue-500"
       onClick={() => callback?.call(globalThis)}
     >
       <a
         href={href}
-        className="h-16 cursor-pointer pl-8 text-sm font-semibold flex items-center border-l-4 border-transparent hover:border-blue-500"
+        className="flex items-center h-16 pl-8 text-sm font-semibold cursor-pointer"
       >
         <i className="pr-4">{icon}</i>
         {text}
@@ -96,8 +96,8 @@ const NavigationDropDown = ({ text, icon }: NavigationDropDownProps) => {
     <div className="flex flex-col border-b-2 border-gray-200 dark:border-gray-700">
       <div
         onClick={() => setDrop((state) => !state)}
-        className={`cursor-pointer pl-8 text-sm h-16 flex items-center font-semibold border-l-4 border-transparent hover:border-blue-500 ${
-          drop ? 'border-blue-500' : ''
+        className={`cursor-pointer pl-8 text-sm h-16 flex items-center font-semibold hover:text-blue-500 ${
+          drop ? 'text-blue-500' : ''
         }`}
       >
         <i className="pr-4">{icon}</i>
@@ -127,7 +127,7 @@ interface SubNavigationProps {
 }
 const SubNavigation = ({ text, href, icon }: SubNavigationProps) => {
   return (
-    <li className="cursor-pointer flex font-semibold items-center pl-16 w-full h-12 text-xs border-l-4 border-transparent hover:border-blue-500">
+    <li className="flex items-center w-full h-12 pl-16 text-xs font-semibold cursor-pointer hover:text-blue-500">
       <a href={href} className="flex items-center">
         <i className="pr-4">{icon}</i>
         {text}
