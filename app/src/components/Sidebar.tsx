@@ -21,12 +21,12 @@ export const Sidebar = ({ sidebarHandler }: Props) => {
   return (
     <>
       <div
-        className={`fixed flex right-0 top-0 w-full bg-black h-full z-10 transition-all ${
-          state ? "opacity-30" : "pointer-events-none opacity-0"
+        className={`fixed flex right-0 top-0 w-full bg-gray-900 h-full z-10 transition-all ${
+          state ? "opacity-50" : "pointer-events-none opacity-0"
         }`}
       />
       <div
-        className={`fixed right-0 top-0 w-4/6 h-full shadow-2xl bg-white dark:bg-gray-900 z-20 transition transform ${
+        className={`fixed right-0 top-0 w-72 h-full border-l-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-20 transition transform ${
           state ? "" : "translate-x-full"
         }`}
       >
@@ -70,11 +70,13 @@ interface NavigationProps {
 }
 const Navigation = ({ text, icon, href, callback }: NavigationProps) => {
   return (
-    <div onClick={() => callback?.call(globalThis)}>
+    <div
+      className="border-b-2 border-gray-200 dark:border-gray-700 last:border-b-0"
+      onClick={() => callback?.call(globalThis)}
+    >
       <a
         href={href}
-        className="h-16 cursor-pointer pl-8 text-sm font-semibold flex items-center border-l-4 border-transparent
-        hover:border-blue-500"
+        className="h-16 cursor-pointer pl-8 text-sm font-semibold flex items-center border-l-4 border-transparent hover:border-blue-500"
       >
         <i className="pr-4">{icon}</i>
         {text}
@@ -91,11 +93,12 @@ const NavigationDropDown = ({ text, icon }: NavigationDropDownProps) => {
   const [drop, setDrop] = useState(false);
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col border-b-2 border-gray-200 dark:border-gray-700">
       <div
         onClick={() => setDrop((state) => !state)}
-        className={`cursor-pointer pl-8 text-sm h-16 flex items-center font-semibold border-l-4 border-transparent
-          hover:border-blue-500 ${drop ? "border-blue-500" : ""}`}
+        className={`cursor-pointer pl-8 text-sm h-16 flex items-center font-semibold border-l-4 border-transparent hover:border-blue-500 ${
+          drop ? "border-blue-500" : ""
+        }`}
       >
         <i className="pr-4">{icon}</i>
         {text}
@@ -124,7 +127,7 @@ interface SubNavigationProps {
 }
 const SubNavigation = ({ text, href, icon }: SubNavigationProps) => {
   return (
-    <li className="cursor-pointer flex font-semibold items-center pl-16 w-full h-12 text-xs border-blue-200 border-l-4 hover:border-blue-500">
+    <li className="cursor-pointer flex font-semibold items-center pl-16 w-full h-12 text-xs border-l-4 border-transparent hover:border-blue-500">
       <a href={href} className="flex items-center">
         <i className="pr-4">{icon}</i>
         {text}

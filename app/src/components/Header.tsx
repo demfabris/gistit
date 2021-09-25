@@ -39,7 +39,7 @@ const Logo = () => {
 const Hamburguer = ({ ...rest }) => {
   return (
     <button className="md:hidden" {...rest}>
-      <VscMenu size={24} />
+      <VscMenu size={24} className="text-gray-800 dark:text-white" />
     </button>
   );
 };
@@ -83,7 +83,7 @@ const NavigationButton = ({
   return (
     <div
       onClick={() => callback?.call(globalThis)}
-      className="text-sm px-3 md:px-6 flex justify-center h-8 items-center font-medium
+      className="text-sm px-2 md:px-4 flex justify-center h-8 items-center font-medium
         border-2 border-transparent"
     >
       <a
@@ -117,17 +117,15 @@ const Search = () => {
         onFocus={handleOpen}
         onBlur={handleClose}
         tabIndex={0}
-        className="flex items-center h-9 border-2 rounded-full border-blue-500 px-6 
-        cursor-pointer text-sm text-blue-500 font-bold"
+        className="flex items-center h-10 border-2 rounded-full border-blue-500 px-6 cursor-pointer text-sm text-blue-500 font-bold"
       >
         <VscSearch size={18} className="mr-3" />
         Find
         <input
           type="text"
-          className={`bg-transparent placeholder-gray-500 outline-none transition-all z-10
-            transform-gpu text-gray-700 font-medium w-0 ${
-              focus ? "pl-3 w-44" : "w-0"
-            }`}
+          className={`bg-transparent outline-none transition-all z-10 text-gray-800 dark:text-white transform-gpu font-medium w-0 ${
+            focus ? "pl-3 w-44" : "w-0"
+          }`}
           ref={innerRef}
           placeholder="Hash, title or author..."
         />

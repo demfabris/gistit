@@ -18,7 +18,7 @@ const Home: NextPage = () => {
         <button className="rounded-full bg-blue-500 text-white text-lg font-bold h-14 px-8 shadow-sm">
           Get started
         </button>
-        <div className="w-full flex border-b-2 mt-20"></div>
+        <div className="w-full flex border-b-2 border-gray-200 dark:border-gray-700 mt-20"></div>
         <ul className="w-full flex flex-col px-6 md:flex-row md:px-0 justify-between mt-12 gap-x-16 gap-y-10">
           <li className="flex flex-col">
             <h2 className="font-semibold text-xl">Practical</h2>
@@ -46,7 +46,7 @@ const Home: NextPage = () => {
           src="#"
           width="768px"
           height="481px"
-          className="my-20 bg-gray-300"
+          className="my-20 bg-gray-200 dark:bg-gray-700"
         />
         <Code language="javascript" className="rounded-lg">
           {codeString}
