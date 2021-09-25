@@ -1,5 +1,7 @@
+const mode = process.env.JIT_COMPILE
+
 module.exports = {
-  mode: 'jit',
+  mode: mode ? 'jit' : undefined,
   purge: {
     content: [
       './src/pages/**/*.{js,ts,jsx,tsx}',
@@ -9,7 +11,7 @@ module.exports = {
       safelist: ['dark']
     }
   },
-  darkMode: 'class',
+  darkMode: 'class', // or 'media' or 'class'
   theme: {
     extend: {
       width: {
