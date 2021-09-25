@@ -1,12 +1,12 @@
-import { useState } from "react";
-import { Header, Sidebar, Footer } from "components";
+import { useState } from 'react'
+import { Header, Sidebar, Footer } from 'components'
 
 interface Props {
-  children: React.ReactChild;
-  withHeaderBar: boolean;
+  children: React.ReactChild
+  withHeaderBar: boolean
 }
 export const Layout = ({ children, withHeaderBar }: Props) => {
-  const sidebarHandler = useState(false);
+  const sidebarHandler = useState(false)
 
   return (
     <section className="flex justify-center h-full">
@@ -17,5 +17,5 @@ export const Layout = ({ children, withHeaderBar }: Props) => {
         <Footer />
       </div>
     </section>
-  );
-};
+  )
+}

@@ -1,19 +1,19 @@
-import { useColorMode } from "hooks";
-import { Dispatch, Fragment, SetStateAction, useRef, useState } from "react";
+import { useColorMode } from 'hooks'
+import { Dispatch, Fragment, SetStateAction, useRef, useState } from 'react'
 import {
   VscMenu,
   VscGithub,
   VscSearch,
   VscColorMode,
-  VscLibrary,
-} from "react-icons/vsc";
+  VscLibrary
+} from 'react-icons/vsc'
 
 interface HeaderProps {
-  withHeaderBar: boolean;
-  sidebarHandler: [boolean, Dispatch<SetStateAction<boolean>>];
+  withHeaderBar: boolean
+  sidebarHandler: [boolean, Dispatch<SetStateAction<boolean>>]
 }
 export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
-  const [, setSidebar] = sidebarHandler;
+  const [, setSidebar] = sidebarHandler
 
   return withHeaderBar ? (
     <header className="mb-24 flex justify-center w-full">
@@ -25,27 +25,27 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
     </header>
   ) : (
     <Fragment />
-  );
-};
+  )
+}
 
 const Logo = () => {
   return (
     <h1 className="font-bold text-xl text-fg h-full flex items-center justify-center mr-2">
       Gistit<b className="text-blue-500">.</b>
     </h1>
-  );
-};
+  )
+}
 
 const Hamburguer = ({ ...rest }) => {
   return (
     <button className="md:hidden" {...rest}>
       <VscMenu size={24} className="text-gray-800 dark:text-white" />
     </button>
-  );
-};
+  )
+}
 
 const Navigation = () => {
-  const toggle = useColorMode();
+  const toggle = useColorMode()
   return (
     <nav className="hidden justify-end items-center md:flex">
       <Search />
@@ -65,20 +65,20 @@ const Navigation = () => {
         callback={toggle!!}
       />
     </nav>
-  );
-};
+  )
+}
 
 interface NavigationButtonProps {
-  text: string;
-  icon: React.ReactChild;
-  href?: string;
-  callback?: () => void | null;
+  text: string
+  icon: React.ReactChild
+  href?: string
+  callback?: () => void | null
 }
 const NavigationButton = ({
   text,
   icon,
   href,
-  callback,
+  callback
 }: NavigationButtonProps) => {
   return (
     <div
@@ -95,20 +95,20 @@ const NavigationButton = ({
         {text}
       </a>
     </div>
-  );
-};
+  )
+}
 
 const Search = () => {
-  const [focus, setFocus] = useState(false);
-  const innerRef = useRef<HTMLInputElement>(null!);
+  const [focus, setFocus] = useState(false)
+  const innerRef = useRef<HTMLInputElement>(null!)
 
   function handleOpen() {
-    setFocus(true);
-    innerRef.current.focus();
+    setFocus(true)
+    innerRef.current.focus()
   }
 
   function handleClose() {
-    setFocus(false);
+    setFocus(false)
   }
 
   return (
@@ -124,12 +124,12 @@ const Search = () => {
         <input
           type="text"
           className={`bg-transparent outline-none transition-all z-10 text-gray-800 dark:text-white transform-gpu font-medium w-0 ${
-            focus ? "pl-3 w-44" : "w-0"
+            focus ? 'pl-3 w-44' : 'w-0'
           }`}
           ref={innerRef}
           placeholder="Hash, title or author..."
         />
       </span>
     </div>
-  );
-};
+  )
+}

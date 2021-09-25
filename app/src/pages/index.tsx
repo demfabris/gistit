@@ -1,9 +1,9 @@
-import type { NextPage } from "next";
-import { Layout } from "components";
-import Code from "react-syntax-highlighter";
+import type { NextPage } from 'next'
+import { Layout } from 'components'
+import Code from 'react-syntax-highlighter'
 
 const Home: NextPage = () => {
-  const codeString = 'const aux = "hello world"';
+  const codeString = 'const aux = "hello world"'
   return (
     <Layout withHeaderBar>
       <>
@@ -53,7 +53,7 @@ const Home: NextPage = () => {
         </Code>
       </>
     </Layout>
-  );
-};
+  )
+}
 
-export default Home;
+export default Home

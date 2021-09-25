@@ -1,5 +1,9 @@
 {
-  "extends": ["next/core-web-vitals", "plugin:jest/recommended"],
+  "extends": [
+    "next/core-web-vitals",
+    "plugin:jest/recommended",
+    "plugin:prettier/recommended"
+  ],
   "env": {
     "jest/globals": true
   }

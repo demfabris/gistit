@@ -1,24 +1,24 @@
 module.exports = {
-  mode: "jit",
+  mode: 'jit',
   purge: {
     content: [
-      "./src/pages/**/*.{js,ts,jsx,tsx}",
-      "./src/components/**/*.{js,ts,jsx,tsx}",
+      './src/pages/**/*.{js,ts,jsx,tsx}',
+      './src/components/**/*.{js,ts,jsx,tsx}'
     ],
     options: {
-      safelist: ["dark"],
-    },
+      safelist: ['dark']
+    }
   },
-  darkMode: "class", // or 'media' or 'class'
+  darkMode: 'class', // or 'media' or 'class'
   theme: {
-    extend: {},
+    extend: {}
   },
   variants: {
     extend: {
-      borderWidth: ["last"],
-      backgroundColor: ["dark"],
-      textColor: ["dark"],
-    },
+      borderWidth: ['last'],
+      backgroundColor: ['dark'],
+      textColor: ['dark']
+    }
   },
-  plugins: [],
-};
+  plugins: []
+}
