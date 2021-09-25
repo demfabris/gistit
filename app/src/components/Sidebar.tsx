@@ -1,3 +1,4 @@
+import { useColorMode } from "common/ColorMode";
 import { Dispatch, SetStateAction, useState } from "react";
 import {
   VscChromeClose,
@@ -15,16 +16,17 @@ interface Props {
 }
 export const Sidebar = ({ sidebarHandler }: Props) => {
   const [state, setState] = sidebarHandler;
+  const toggle = useColorMode();
 
   return (
     <>
       <div
-        className={`fixed flex right-0 top-0 w-full h-full z-10 bg-black transition-all ${
+        className={`fixed flex right-0 top-0 w-full bg-black h-full z-10 transition-all ${
           state ? "opacity-30" : "pointer-events-none opacity-0"
         }`}
       />
-      <aside
-        className={`fixed right-0 top-0 w-4/6 bg-white h-full shadow-2xl z-20 transition transform ${
+      <div
+        className={`fixed right-0 top-0 w-4/6 h-full shadow-2xl bg-white dark:bg-gray-900 z-20 transition transform ${
           state ? "" : "translate-x-full"
         }`}
       >
@@ -35,35 +37,43 @@ export const Sidebar = ({ sidebarHandler }: Props) => {
           <VscChromeClose size={24} />
         </button>
         <nav className="pt-24 w-full">
-          <Link text="Search" href="/search" icon={<VscSearch size={20} />} />
-          <LinkDropDown text="Documentation" icon={<VscLibrary size={20} />} />
-          <Link
-            text="Github"
-            href="https://github.com/fabricio7p"
-            icon={<VscGithub size={20} />}
+          <Navigation
+            text="Search"
+            href="/search"
+            icon={<VscSearch size={20} />}
           />
-          <Link
-            text="Mode"
+          <NavigationDropDown
+            text="Documentation"
+            icon={<VscLibrary size={20} />}
+          />
+          <Navigation
+            text="Github"
+            icon={<VscGithub size={20} />}
             href="https://github.com/fabricio7p"
+          />
+          <Navigation
+            text="Mode"
             icon={<VscColorMode size={20} />}
+            callback={toggle!!}
           />
         </nav>
-      </aside>
+      </div>
     </>
   );
 };
 
-interface LinkProps {
+interface NavigationProps {
   text: String;
   icon: React.ReactElement;
-  href: string;
+  href?: string;
+  callback?: () => void;
 }
-const Link = ({ text, icon, href }: LinkProps) => {
+const Navigation = ({ text, icon, href, callback }: NavigationProps) => {
   return (
-    <div>
+    <div onClick={() => callback?.call(globalThis)}>
       <a
         href={href}
-        className="h-16 cursor-pointer pl-8 text-sm font-semibold text-gray-700 flex items-center border-l-4 border-transparent
+        className="h-16 cursor-pointer pl-8 text-sm font-semibold flex items-center border-l-4 border-transparent
         hover:border-blue-500"
       >
         <i className="pr-4">{icon}</i>
@@ -73,44 +83,48 @@ const Link = ({ text, icon, href }: LinkProps) => {
   );
 };
 
-interface LinkDropDownProps {
+interface NavigationDropDownProps {
   text: string;
   icon: React.ReactElement;
 }
-const LinkDropDown = ({ text, icon }: LinkDropDownProps) => {
+const NavigationDropDown = ({ text, icon }: NavigationDropDownProps) => {
   const [drop, setDrop] = useState(false);
 
   return (
     <div className="flex flex-col">
       <div
         onClick={() => setDrop((state) => !state)}
-        className={`cursor-pointer pl-8 text-sm h-16 flex items-center font-semibold text-gray-700 border-l-4 border-transparent
+        className={`cursor-pointer pl-8 text-sm h-16 flex items-center font-semibold border-l-4 border-transparent
           hover:border-blue-500 ${drop ? "border-blue-500" : ""}`}
       >
         <i className="pr-4">{icon}</i>
         {text}
       </div>
       <ul className={`${drop ? "flex flex-col h-full" : "hidden"}`}>
-        <SubLink
+        <SubNavigation
           text="Installation"
           href="#"
           icon={<VscDesktopDownload size={18} />}
         />
-        <SubLink text="Features" href="#" icon={<VscLightbulb size={18} />} />
-        <SubLink text="CLI" href="#" icon={<VscTerminal size={18} />} />
+        <SubNavigation
+          text="Features"
+          href="#"
+          icon={<VscLightbulb size={18} />}
+        />
+        <SubNavigation text="CLI" href="#" icon={<VscTerminal size={18} />} />
       </ul>
     </div>
   );
 };
 
-interface SubLinkProps {
+interface SubNavigationProps {
   text: string;
   href: string;
   icon?: React.ReactElement;
 }
-const SubLink = ({ text, href, icon }: SubLinkProps) => {
+const SubNavigation = ({ text, href, icon }: SubNavigationProps) => {
   return (
-    <li className="cursor-pointer flex font-semibold items-center pl-16 text-gray-700 w-full h-12 text-xs border-blue-200 border-l-4 hover:border-blue-500">
+    <li className="cursor-pointer flex font-semibold items-center pl-16 w-full h-12 text-xs border-blue-200 border-l-4 hover:border-blue-500">
       <a href={href} className="flex items-center">
         <i className="pr-4">{icon}</i>
         {text}

@@ -1,16 +1,17 @@
 import type { NextPage } from "next";
 import { Layout } from "components";
-import Image from "next/image";
+import Code from "react-syntax-highlighter";
 
 const Home: NextPage = () => {
+  const codeString = 'const aux = "hello world"';
   return (
     <Layout withHeaderBar>
       <>
         {/* <Image src="/logo.svg" alt="logo" width="300px" height="150px" /> */}
-        <p className="text-7xl font-black text-gray-800">
+        <p className="text-7xl font-black">
           Gistit<b className="text-blue-500">.</b>
         </p>
-        <span className="text-xl font-thin text-center mt-4 mb-12 text-gray-700">
+        <span className="text-xl font-thin text-center mt-4 mb-12">
           Quick and easy <b className="font-bold">anonymous</b> code snippet
           sharing.
         </span>
@@ -43,10 +44,13 @@ const Home: NextPage = () => {
         </ul>
         <video
           src="#"
-          width="500px"
-          height="400px"
-          className="mt-20 bg-gray-300"
+          width="768px"
+          height="481px"
+          className="my-20 bg-gray-300"
         />
+        <Code language="javascript" className="rounded-lg">
+          {codeString}
+        </Code>
       </>
     </Layout>
   );

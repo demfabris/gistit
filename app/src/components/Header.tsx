@@ -1,5 +1,12 @@
+import { useColorMode } from "common/ColorMode";
 import { Dispatch, Fragment, SetStateAction, useRef, useState } from "react";
-import { VscMenu, VscGithub, VscSearch } from "react-icons/vsc";
+import {
+  VscMenu,
+  VscGithub,
+  VscSearch,
+  VscColorMode,
+  VscLibrary,
+} from "react-icons/vsc";
 
 interface HeaderProps {
   withHeaderBar: boolean;
@@ -12,7 +19,7 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
     <header className="mb-24 flex justify-center w-full">
       <div className="w-full h-24 flex items-center justify-between">
         <Logo />
-        <Links />
+        <Navigation />
         <Hamburguer onClick={() => setSidebar((state) => !state)} />
       </div>
     </header>
@@ -23,10 +30,7 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
 
 const Logo = () => {
   return (
-    <h1
-      className="font-bold text-xl text-fg h-full flex items-center justify-center mr-8
-      text-gray-700"
-    >
+    <h1 className="font-bold text-xl text-fg h-full flex items-center justify-center mr-2">
       Gistit<b className="text-blue-500">.</b>
     </h1>
   );
@@ -40,34 +44,57 @@ const Hamburguer = ({ ...rest }) => {
   );
 };
 
-const Links = () => {
+const Navigation = () => {
+  const toggle = useColorMode();
   return (
-    <ul className="hidden justify-end items-center md:flex">
+    <nav className="hidden justify-end items-center md:flex">
       <Search />
-      <li
-        className="text-sm px-3 md:px-6 flex justify-center h-8 items-center font-medium
+      <NavigationButton
+        text="Github"
+        icon={<VscGithub size={18} className="mr-2" />}
+        href="www.github.com/fabricio7p/gistit.git"
+      />
+      <NavigationButton
+        text="Docs"
+        icon={<VscLibrary size={18} className="mr-2" />}
+        href="/docs"
+      />
+      <NavigationButton
+        text="Color Mode"
+        icon={<VscColorMode size={18} className="mr-2" />}
+        callback={toggle!!}
+      />
+    </nav>
+  );
+};
+
+interface NavigationButtonProps {
+  text: string;
+  icon: React.ReactChild;
+  href?: string;
+  callback?: () => void | null;
+}
+const NavigationButton = ({
+  text,
+  icon,
+  href,
+  callback,
+}: NavigationButtonProps) => {
+  return (
+    <div
+      onClick={() => callback?.call(globalThis)}
+      className="text-sm px-3 md:px-6 flex justify-center h-8 items-center font-medium
         border-2 border-transparent"
-      >
-        <a
-          className="flex items-center h-full cursor-pointer border-b-2 border-transparent 
+    >
+      <a
+        href={href}
+        className="flex items-center h-full cursor-pointer border-b-2 border-transparent 
           hover:border-blue-500"
-        >
-          <VscGithub size={18} className="mr-2" />
-          Github
-        </a>
-      </li>
-      <li
-        className="text-sm pl-3 md:pl-6 flex justify-center h-8 items-center font-medium 
-        border-2 border-transparent"
       >
-        <a
-          className="flex items-center h-full cursor-pointer border-b-2 border-transparent 
-          hover:border-blue-500"
-        >
-          Documentation
-        </a>
-      </li>
-    </ul>
+        {icon}
+        {text}
+      </a>
+    </div>
   );
 };
 
@@ -85,7 +112,7 @@ const Search = () => {
   }
 
   return (
-    <li className="px-3">
+    <div className="px-3">
       <span
         onFocus={handleOpen}
         onBlur={handleClose}
@@ -94,17 +121,17 @@ const Search = () => {
         cursor-pointer text-sm text-blue-500 font-bold"
       >
         <VscSearch size={18} className="mr-3" />
-        Search
+        Find
         <input
           type="text"
           className={`bg-transparent placeholder-gray-500 outline-none transition-all z-10
             transform-gpu text-gray-700 font-medium w-0 ${
-              focus ? "pl-3 w-56" : "w-0"
+              focus ? "pl-3 w-44" : "w-0"
             }`}
           ref={innerRef}
           placeholder="Hash, title or author..."
         />
       </span>
-    </li>
+    </div>
   );
 };

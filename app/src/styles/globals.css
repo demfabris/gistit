@@ -4,6 +4,16 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&display=swap");
 
+@layer base {
+  body {
+    @apply bg-gray-50
+    dark:bg-gray-900
+    text-gray-900
+    dark:text-gray-50
+    transition-colors;
+  }
+}
+
 html,
 body,
 #__next {
