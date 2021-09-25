@@ -1,4 +1,4 @@
-import { useColorMode } from "common/ColorMode";
+import { useColorMode } from "hooks";
 import { Dispatch, SetStateAction, useState } from "react";
 import {
   VscChromeClose,

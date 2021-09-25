@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { Header } from "components/Header";
-import { Sidebar } from "components/Sidebar";
-import { Footer } from "./Footer";
+import { Header, Sidebar, Footer } from "components";
 
 interface Props {
   children: React.ReactChild;
