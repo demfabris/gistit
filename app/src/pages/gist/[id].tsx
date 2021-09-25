@@ -1,11 +1,11 @@
-import { Layout } from "components";
-import { useRouter } from "next/router";
-import Code from "react-syntax-highlighter";
+import { Layout } from 'components'
+import { useRouter } from 'next/router'
+import Code from 'react-syntax-highlighter'
 
 const Gist = () => {
-  const router = useRouter();
-  const { id } = router.query;
-  const gistContent = "const appearGist = ()=>{ 'here is the gist'}";
+  const router = useRouter()
+  const { id } = router.query
+  const gistContent = "const appearGist = ()=>{ 'here is the gist'}"
 
   return (
     <Layout withHeaderBar>
@@ -16,7 +16,7 @@ const Gist = () => {
         </Code>
       </div>
     </Layout>
-  );
-};
+  )
+}
 
-export default Gist;
+export default Gist
