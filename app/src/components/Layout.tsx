@@ -10,7 +10,7 @@ export const Layout = ({ children, withHeaderBar }: Props) => {
 
   return (
     <section className="flex justify-center h-full">
-      <div className="flex flex-col items-center mx-6 justify-center w-layout">
+      <div className="flex flex-col items-center justify-center mx-6 w-layout">
         <Header withHeaderBar={withHeaderBar} sidebarHandler={sidebarHandler} />
         <Sidebar sidebarHandler={sidebarHandler} />
         {children}

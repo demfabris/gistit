@@ -16,8 +16,8 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
   const [, setSidebar] = sidebarHandler
 
   return withHeaderBar ? (
-    <header className="mb-24 flex justify-center w-full">
-      <div className="w-full h-24 flex items-center justify-between">
+    <header className="flex justify-center w-full mb-24 md:mb-36">
+      <div className="flex items-center justify-between w-full h-24">
         <Logo />
         <Navigation />
         <Hamburguer onClick={() => setSidebar((state) => !state)} />
@@ -30,7 +30,7 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
 
 const Logo = () => {
   return (
-    <h1 className="font-bold text-xl text-fg h-full flex items-center justify-center mr-2">
+    <h1 className="flex items-center justify-center h-full mr-2 text-xl font-bold text-fg">
       Gistit<b className="text-blue-500">.</b>
     </h1>
   )
@@ -47,7 +47,7 @@ const Hamburguer = ({ ...rest }) => {
 const Navigation = () => {
   const toggle = useColorMode()
   return (
-    <nav className="hidden justify-end items-center md:flex">
+    <nav className="items-center justify-end hidden md:flex">
       <Search />
       <NavigationButton
         text="Github"
@@ -83,13 +83,11 @@ const NavigationButton = ({
   return (
     <div
       onClick={() => callback?.call(globalThis)}
-      className="text-sm px-2 md:px-4 flex justify-center h-8 items-center font-medium
-        border-2 border-transparent"
+      className="flex items-center justify-center h-8 px-2 text-sm font-medium border-2 border-transparent md:px-4"
     >
       <a
         href={href}
-        className="flex items-center h-full cursor-pointer border-b-2 border-transparent 
-          hover:border-blue-500"
+        className="flex items-center h-full border-b-2 border-transparent cursor-pointer hover:border-blue-500"
       >
         {icon}
         {text}
@@ -117,7 +115,7 @@ const Search = () => {
         onFocus={handleOpen}
         onBlur={handleClose}
         tabIndex={0}
-        className="flex items-center h-10 border-2 rounded-full border-blue-500 px-6 cursor-pointer text-sm text-blue-500 font-bold"
+        className="flex items-center h-10 px-6 text-sm font-bold text-blue-500 border-2 border-blue-500 rounded-full cursor-pointer"
       >
         <VscSearch size={18} className="mr-3" />
         Find
