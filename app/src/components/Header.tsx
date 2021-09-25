@@ -52,7 +52,7 @@ const Navigation = () => {
       <NavigationButton
         text="Github"
         icon={<VscGithub size={18} className="mr-2" />}
-        href="www.github.com/fabricio7p/gistit.git"
+        href="https://www.github.com/fabricio7p/gistit.git"
       />
       <NavigationButton
         text="Docs"
