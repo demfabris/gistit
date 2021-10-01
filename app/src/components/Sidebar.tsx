@@ -26,7 +26,7 @@ export const Sidebar = ({ sidebarHandler }: Props) => {
         }`}
       />
       <div
-        className={`fixed right-0 top-0 w-60 h-full border-l-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-20 transition transform ${
+        className={`fixed right-0 top-0 w-64 h-full border-l-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-20 transition transform ${
           state ? '' : 'translate-x-full'
         }`}
       >
