@@ -1,6 +1,7 @@
 import type { NextPage } from 'next'
 import { Heading, Layout, SubHeading, Code } from 'components'
 import { DocLink, DocText } from 'components/Docs'
+import { VscRocket } from 'react-icons/vsc'
 
 const Home: NextPage = () => {
   return (
@@ -13,8 +14,11 @@ const Home: NextPage = () => {
           Quick and easy <b className="font-bold">anonymous</b> code snippet
           sharing.
         </span>
-        <button className="px-8 text-lg font-bold text-white bg-blue-500 rounded-full h-14 shadow-sm">
+        <button className="flex flex-row items-center px-8 text-lg font-medium text-white bg-blue-500 rounded-full h-14 shadow-sm">
           Get started
+          <i>
+            <VscRocket size="20" className="ml-3" />
+          </i>
         </button>
         <div className="flex w-full mt-20 border-b-2 border-gray-200 dark:border-gray-700"></div>
         <ul className="flex flex-col justify-between w-full px-6 mt-16 md:flex-row md:px-0 gap-x-14 gap-y-10">

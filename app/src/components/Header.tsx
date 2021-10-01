@@ -16,8 +16,8 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
   const [, setSidebar] = sidebarHandler
 
   return withHeaderBar ? (
-    <header className="flex justify-center w-full mb-24 md:mb-36">
-      <div className="flex items-center justify-between w-full h-24">
+    <header className="flex justify-center w-full px-6 mb-24 border-b-2 border-gray-200 dark:border-gray-700 md:mb-48">
+      <div className="flex items-center justify-between w-full h-20">
         <Logo />
         <Navigation />
         <Hamburguer onClick={() => setSidebar((state) => !state)} />
@@ -83,7 +83,7 @@ const NavigationButton = ({
   return (
     <div
       onClick={() => callback?.call(globalThis)}
-      className="flex items-center justify-center h-8 px-2 text-sm font-medium border-2 border-transparent md:px-4"
+      className="flex items-center justify-center h-10 px-2 text-sm font-medium border-2 border-transparent md:px-4"
     >
       <a
         href={href}
@@ -115,10 +115,13 @@ const Search = () => {
         onFocus={handleOpen}
         onBlur={handleClose}
         tabIndex={0}
-        className="flex items-center h-10 px-6 text-sm font-bold text-blue-500 border-2 border-blue-500 rounded-full cursor-pointer"
+        className={`flex items-center h-10 px-6 text-sm border-2 border-gray-200 dark:border-gray-700 rounded-full cursor-pointer ${
+          focus &&
+          'border-blue-500 dark:border-blue-500 text-blue-500 font-bold'
+        }`}
       >
-        <VscSearch size={18} className="mr-3" />
-        Find
+        <VscSearch size={18} className="mr-4" />
+        Find snippet
         <input
           type="text"
           className={`bg-transparent outline-none transition-all z-10 text-gray-800 dark:text-white transform-gpu font-medium w-0 ${

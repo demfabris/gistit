@@ -9,9 +9,9 @@ export const Layout = ({ children, withHeaderBar }: Props) => {
   const sidebarHandler = useState(false)
 
   return (
-    <section className="flex justify-center h-full">
-      <div className="flex flex-col items-center justify-center mx-6 w-layout">
-        <Header withHeaderBar={withHeaderBar} sidebarHandler={sidebarHandler} />
+    <section className="flex flex-col items-center justify-center h-full">
+      <Header withHeaderBar={withHeaderBar} sidebarHandler={sidebarHandler} />
+      <div className="flex flex-col items-center w-full px-6 md:px-0 md:w-layout">
         <Sidebar sidebarHandler={sidebarHandler} />
         {children}
         <Footer />
