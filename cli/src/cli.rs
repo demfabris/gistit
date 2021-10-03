@@ -43,9 +43,10 @@ pub struct SendArgs {
     #[argh(
         option,
         short = 't',
-        description = "choose a colorscheme. 'gistit -t' for available colorschemes"
+        description = "choose a colorscheme. 'gistit -t' for available colorschemes",
+        default = "String::from(\"dracula\")"
     )]
-    pub theme: Option<String>,
+    pub theme: String,
     /// store output hash in clipboard. (on successful upload)
     #[argh(switch, short = 'c')]
     pub clipboard: bool,
