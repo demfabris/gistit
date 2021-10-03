@@ -4,12 +4,12 @@ categories = ["command-line-utilities", "text-processing"]
 description = "Cli application for Gistit"
 edition = "2018"
 keywords = ["code", "snippets", "share", "hash"]
+license = "../LICENSE"
 name = "gistit"
 readme = "README.md"
 repository = "https://github.com/gistit.git"
 version = "0.1.0"
-license = "../LICENSE"
 
 [dependencies]
 argh = "0.1.6"
-# tokio = { version = "1", features = ["rt", "net", "rt-multi-thread", "macros"] }
+thiserror = "1"

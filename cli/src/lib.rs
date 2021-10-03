@@ -18,3 +18,16 @@
 )]
 
 pub mod cli;
+pub mod send;
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Failed to read file")]
+    Read(#[from] std::io::Error),
+    #[error("Failed to parse command arguments")]
+    Argument,
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
