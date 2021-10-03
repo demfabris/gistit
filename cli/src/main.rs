@@ -1,3 +1,5 @@
+use gistit::cli::MainArgs;
+
 fn main() {
-    println!("Hello, world!");
+    let args: MainArgs = argh::from_env();
 }
