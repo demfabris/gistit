@@ -13,13 +13,13 @@ pub struct MainArgs {
     pub colorschemes: bool,
     /// action
     #[argh(subcommand)]
-    pub action: SubCommands,
+    pub action: Command,
 }
 /// Subcommands variations
 #[non_exhaustive]
 #[derive(argh::FromArgs, PartialEq, Debug)]
 #[argh(subcommand)]
-pub enum SubCommands {
+pub enum Command {
     Send(SendArgs),
     Fetch(FetchArgs),
 }
