@@ -1,0 +1,339 @@
+//! The file module
+
+use std::ffi::{OsStr, OsString};
+use std::path::Path;
+
+use crate::{Error, Result};
+use phf::{phf_map, Map};
+use tokio::fs::File;
+
+#[cfg(doc)]
+use std::io::ErrorKind;
+
+/// Max file size in bytes
+const MAX_FILE_SIZE: u64 = 200_000;
+/// Min file size in bytes
+const MIN_FILE_SIZE: u64 = 20;
+#[doc(hidden)]
+const UNSUPPORTED_FILE_SIZE: &str = "file size is not in allowed range. MIN = 20bytes MAX = 200kb";
+#[doc(hidden)]
+const UNSUPPORTED_FILE_TYPE: &str = "input is not a file";
+#[doc(hidden)]
+const UNSUPPORTED_FILE_HAS_EXTENSION: &str = "provided file must have an extension";
+#[doc(hidden)]
+const UNSUPPORTED_FILE_EXTENSION: &str = "file extension not currently supported";
+
+/// Supported file extensions
+/// This is a compile time built hashmap to check incomming file extensions against.
+/// Follows the extensions supported by currently UI syntax highlighting lib:
+/// [`react-syntax-highlighter`](https://gist.github.com/ppisarczyk/43962d06686722d26d176fad46879d41)
+//TODO: fill this https://gist.github.com/ppisarczyk/43962d06686722d26d176fad46879d41
+static SUPPORTED_FILE_EXTENSIONS: Map<&'static str, &'static str> = phf_map! {
+    "abap" => "abap",
+    "as" => "actionscript",
+    "ada" => "ada",
+    "adb" => "ada",
+    "ads" => "ada",
+    "agda" => "agda",
+    "als" => "al",
+    "g4" => "antlr4",
+    "apacheconf" => "apacheconf",
+    "vhost" => "apacheconf",
+    "apl" => "apl",
+    "dyalog" => "apl",
+    "applescript" => "applescript",
+    "scpt" => "applescript",
+    "ino" => "arduino",
+    "asciidoc" => "asciidoc",
+    "adoc" => "asciidoc",
+    "asc" => "asciidoc",
+    "asm" => "asm6502",
+    "a51" => "asm6502",
+    "inc" => "asm6502",
+    "nasm" => "asm6502",
+    "asp" => "aspnet",
+    "asax" => "aspnet",
+    "ascx" => "aspnet",
+    "ashx" => "aspnet",
+    "asmx" => "aspnet",
+    "aspx" => "aspnet",
+    "axd" => "aspnet",
+    "md" => "markdown",
+    "ts" => "typescript",
+    "rs" => "rust",
+    "toml" => "toml",
+    // "" => "autohotkey",
+    // "" => "autoit",
+    // "" => "bash",
+    // "" => "basic",
+    // "" => "batch",
+    // "" => "bbcode",
+    // "" => "birb",
+    // "" => "bison",
+    // "" => "bnf",
+    // "" => "brainfuck",
+    // "" => "brightscript",
+    // "" => "bro",
+    // "" => "bsl",
+    // "" => "c",
+    // "" => "cil",
+    // "" => "clike",
+    // "" => "clojure",
+    // "" => "cmake",
+    // "" => "coffeescript",
+    // "" => "concurnas",
+    // "" => "cpp",
+    // "" => "crystal",
+    // "" => "csharp",
+    // "" => "csp",
+    // "" => "cssExtras",
+    // "" => "css",
+    // "" => "cypher",
+    // "" => "d",
+    // "" => "dart",
+    // "" => "dax",
+    // "" => "dhall",
+    // "" => "diff",
+    // "" => "django",
+    // "" => "dnsZoneFile",
+    // "" => "docker",
+    // "" => "ebnf",
+    // "" => "editorconfig",
+    // "" => "eiffel",
+    // "" => "ejs",
+    // "" => "elixir",
+    // "" => "elm",
+    // "" => "erb",
+    // "" => "erlang",
+    // "" => "etlua",
+    // "" => "excelFormula",
+    // "" => "factor",
+    // "" => "firestoreSecurityRules",
+    // "" => "flow",
+    // "" => "fortran",
+    // "" => "fsharp",
+    // "" => "ftl",
+    // "" => "gcode",
+    // "" => "gdscript",
+    // "" => "gedcom",
+    // "" => "gherkin",
+    // "" => "git",
+    // "" => "glsl",
+    // "" => "gml",
+    // "" => "go",
+    // "" => "graphql",
+    // "" => "groovy",
+    // "" => "haml",
+    // "" => "handlebars",
+    // "" => "haskell",
+    // "" => "haxe",
+    // "" => "hcl",
+    // "" => "hlsl",
+    // "" => "hpkp",
+    // "" => "hsts",
+    // "" => "http",
+    // "" => "ichigojam",
+    // "" => "icon",
+    // "" => "iecst",
+    // "" => "ignore",
+    // "" => "inform7",
+    // "" => "ini",
+    // "" => "io",
+    // "" => "j",
+    // "" => "java",
+    // "" => "javadoc",
+    // "" => "javadoclike",
+    // "" => "javascript",
+    // "" => "javastacktrace",
+    // "" => "jolie",
+    // "" => "jq",
+    // "" => "jsExtras",
+    // "" => "jsTemplates",
+    // "" => "jsdoc",
+    // "" => "json",
+    // "" => "json5",
+    // "" => "jsonp",
+    // "" => "jsstacktrace",
+    // "" => "jsx",
+    // "" => "julia",
+    // "" => "keyman",
+    // "" => "kotlin",
+    // "" => "latex",
+    // "" => "latte",
+    // "" => "less",
+    // "" => "lilypond",
+    // "" => "liquid",
+    // "" => "lisp",
+    // "" => "livescript",
+    // "" => "llvm",
+    // "" => "lolcode",
+    // "" => "lua",
+    // "" => "makefile",
+    // "" => "markupTemplating",
+    // "" => "markup",
+    // "" => "matlab",
+    // "" => "mel",
+    // "" => "mizar",
+    // "" => "mongodb",
+    // "" => "monkey",
+    // "" => "moonscript",
+    // "" => "n1ql",
+    // "" => "n4js",
+    // "" => "nand2tetrisHdl",
+    // "" => "naniscript",
+    // "" => "nasm",
+    // "" => "neon",
+    // "" => "nginx",
+    // "" => "nim",
+    // "" => "nix",
+    // "" => "nsis",
+    // "" => "objectivec",
+    // "" => "ocaml",
+    // "" => "opencl",
+    // "" => "oz",
+    // "" => "parigp",
+    // "" => "parser",
+    // "" => "pascal",
+    // "" => "pascaligo",
+    // "" => "pcaxis",
+    // "" => "peoplecode",
+    // "" => "perl",
+    // "" => "phpExtras",
+    // "" => "php",
+    // "" => "phpdoc",
+    // "" => "plsql",
+    // "" => "powerquery",
+    // "" => "powershell",
+    // "" => "processing",
+    // "" => "prolog",
+    // "" => "properties",
+    // "" => "protobuf",
+    // "" => "pug",
+    // "" => "puppet",
+    // "" => "pure",
+    // "" => "purebasic",
+    // "" => "purescript",
+    // "" => "python",
+    // "" => "q",
+    // "" => "qml",
+    // "" => "qore",
+    // "" => "r",
+    // "" => "racket",
+    // "" => "reason",
+    // "" => "regex",
+    // "" => "renpy",
+    // "" => "rest",
+    // "" => "rip",
+    // "" => "roboconf",
+    // "" => "robotframework",
+    // "" => "ruby",
+    // "" => "sas",
+    // "" => "sass",
+    // "" => "scala",
+    // "" => "scheme",
+    // "" => "scss",
+    // "" => "shellSession",
+    // "" => "smali",
+    // "" => "smalltalk",
+    // "" => "smarty",
+    // "" => "sml",
+    // "" => "solidity",
+    // "" => "solutionFile",
+    // "" => "soy",
+    // "" => "sparql",
+    // "" => "splunkSpl",
+    // "" => "sqf",
+    // "" => "sql",
+    // "" => "stan",
+    // "" => "stylus",
+    // "" => "swift",
+    // "" => "t4Cs",
+    // "" => "t4Templating",
+    // "" => "t4Vb",
+    // "" => "tap",
+    // "" => "tcl",
+    // "" => "textile",
+    // "" => "tsx",
+    // "" => "tt2",
+    // "" => "turtle",
+    // "" => "twig",
+    // "" => "typoscript",
+    // "" => "unrealscript",
+    // "" => "vala",
+    // "" => "vbnet",
+    // "" => "velocity",
+    // "" => "verilog",
+    // "" => "vhdl",
+    // "" => "vim",
+    // "" => "visualBasic",
+    // "" => "warpscript",
+    // "" => "wasm",
+    // "" => "wiki",
+    // "" => "xeora",
+    // "" => "xmlDoc",
+    // "" => "xojo",
+    // "" => "xquery",
+    // "" => "yaml",
+    // "" => "yang",
+    // "" => "zig",
+};
+/// Open a file from provided `OsString`
+///
+/// # Errors
+///
+/// [`ErrorKind`]
+pub async fn from_path(path: impl AsRef<OsStr> + Sync + Send) -> Result<File> {
+    Ok(File::open(path.as_ref()).await?)
+}
+/// Checks the file metadata for type and size
+///
+/// # Errors
+///
+/// [`UnsuportedFile`]
+pub async fn metadata(file: &File) -> Result<()> {
+    let attr = file.metadata().await?;
+    let size_allowed = (MIN_FILE_SIZE..=MAX_FILE_SIZE).contains(&attr.len());
+    let type_allowed = attr.is_file();
+    if !size_allowed {
+        return Err(Error::UnsuportedFile {
+            message: UNSUPPORTED_FILE_SIZE.to_owned(),
+        });
+    } else if !type_allowed {
+        return Err(Error::UnsuportedFile {
+            message: UNSUPPORTED_FILE_TYPE.to_owned(),
+        });
+    }
+    Ok(())
+}
+/// Checks the file extension against [`SUPPORTED_FILE_EXTENSIONS`]
+///
+/// # Errors
+///
+/// [`UnsuportedFile`]
+pub async fn extension(path: impl AsRef<OsStr> + Sync + Send) -> Result<()> {
+    let ext = Path::new(path.as_ref())
+        .extension()
+        .and_then(OsStr::to_str)
+        .ok_or(Error::UnsuportedFile {
+            message: UNSUPPORTED_FILE_HAS_EXTENSION.to_owned(),
+        })?;
+    if SUPPORTED_FILE_EXTENSIONS.contains_key(ext) {
+        log::trace!("File ext: {}", ext);
+        Ok(())
+    } else {
+        Err(Error::UnsuportedFile {
+            message: UNSUPPORTED_FILE_EXTENSION.to_owned(),
+        })
+    }
+}
+/// Performs all the checks needed for a file to be sent
+///
+/// # Errors
+///
+/// [`UnsuportedFile`]
+/// [`ErrorKind`]
+pub async fn full_check(input: &OsString) -> Result<()> {
+    let file = from_path(input).await?;
+    let _ = tokio::try_join!(metadata(&file), extension(input))?;
+    Ok(())
+}
