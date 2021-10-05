@@ -18,12 +18,15 @@
 )]
 
 pub mod cli;
+pub mod dispatch;
 pub mod send;
 
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Unsuported file format")]
+    UnsuportedFile { message: String },
     #[error("Failed to read file")]
     Read(#[from] std::io::Error),
     #[error("Failed to parse command arguments")]
