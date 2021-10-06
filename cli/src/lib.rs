@@ -25,12 +25,14 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Unsuported file format")]
+    #[error("unsuported file format")]
     UnsuportedFile { message: String },
-    #[error("Failed to read file")]
+    #[error("failed to read file")]
     Read(#[from] std::io::Error),
-    #[error("Failed to parse command arguments")]
+    #[error("failed to parse command arguments")]
     Argument,
+    #[error("invalid addons setup")]
+    InvalidAddons { message: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

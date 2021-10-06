@@ -17,6 +17,7 @@ lazy_static = "1.4.0"
 log = "0.4.14"
 phf = { version = "0.10", features = ["macros"] }
 thiserror = "1"
+ngrammatic = "0.3.2"
 
 [dependencies.tokio]
 features = ["macros", "fs", "net", "rt", "rt-multi-thread"]
