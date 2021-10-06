@@ -27,6 +27,9 @@ pub enum Command {
 #[derive(argh::FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "send")]
 pub struct SendArgs {
+    // /// the files.
+    // #[argh(option, short = 'x')]
+    // pub files: Vec<OsString>,
     /// the file. currently one supported
     #[argh(option, short = 'f')]
     pub file: OsString,
@@ -51,8 +54,8 @@ pub struct SendArgs {
     #[argh(switch, short = 'c')]
     pub clipboard: bool,
     /// custom lifetime in seconds. DEFAULT = 3600, MAX = 3600
-    #[argh(option, short = 'l')]
-    pub lifetime: Option<u16>,
+    #[argh(option, short = 'l', default = "3600")]
+    pub lifetime: u16,
 }
 /// Fetch a gistit
 #[derive(argh::FromArgs, PartialEq, Debug)]

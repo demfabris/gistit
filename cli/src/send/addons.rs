@@ -8,6 +8,8 @@ use crate::{Error, Result};
 const ALLOWED_DESCRIPTION_LEN: usize = 100;
 /// Allowed author info character length
 const ALLOWED_AUTHOR_LEN: usize = 50;
+/// Allowed lifetime range
+const ALLOWED_LIFETIME_RANGE: std::ops::RangeInclusive<u16> = 300..=3600;
 
 /// A [`phf::Set`] with all the supported colorschemes
 static SUPPORTED_COLORSCHEMES: Set<&'static str> = phf_set![
@@ -63,6 +65,7 @@ pub struct Addons<'a> {
     author: Option<&'a str>,
     description: Option<&'a str>,
     colorscheme: &'a str,
+    lifetime: u16,
 }
 impl<'a> From<&'a super::Action> for Addons<'a> {
     fn from(action: &'a super::Action) -> Self {
@@ -70,6 +73,7 @@ impl<'a> From<&'a super::Action> for Addons<'a> {
             author: action.author.as_deref(),
             description: action.description.as_deref(),
             colorscheme: action.theme.as_ref(),
+            lifetime: action.lifetime,
         }
     }
 }
@@ -94,6 +98,12 @@ pub trait Check {
     /// Fails with [`InvalidAddons`] if colorscheme isn't named properly.
     /// Prompts the user with a suggestion if it fuzzy matches agains't a probability.
     async fn colorscheme(&self) -> Result<()>;
+    /// Check provided lifetime limit range
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`InvalidAddons`] if the provided number is outside allowed range.
+    async fn lifetime(&self) -> Result<()>;
 }
 #[async_trait::async_trait]
 impl Check for Addons<'_> {
@@ -135,6 +145,15 @@ impl Check for Addons<'_> {
             }
         }
     }
+    async fn lifetime(&self) -> Result<()> {
+        if ALLOWED_LIFETIME_RANGE.contains(&self.lifetime) {
+            Ok(())
+        } else {
+            Err(Error::InvalidAddons {
+                message: INVALID_LIFETIME_RANGE.to_owned(),
+            })
+        }
+    }
 }
 #[doc(hidden)]
 const INVALID_DESCRIPTION_CHAR_LENGTH: &str =
@@ -144,3 +163,5 @@ const INVALID_AUTHOR_CHAR_LENGTH: &str = "invalid author character length. MAX =
 #[doc(hidden)]
 const INVALID_COLORSCHEME_NAME: &str =
     "invalid colorscheme. 'gistit --colors' to see avaiable ones.";
+#[doc(hidden)]
+const INVALID_LIFETIME_RANGE: &str = "invalid lifetime parameter. MIN = 60s MAX = 3600s";

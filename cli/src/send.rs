@@ -1,5 +1,4 @@
 //! The Send feature
-#![allow(dead_code)]
 
 use std::{convert::TryFrom, ffi::OsString};
 
@@ -20,18 +19,18 @@ pub struct Action {
     description: Option<String>,
     /// The author information.
     author: Option<String>,
-    /// The password to encrypt.
-    secret: Option<String>,
     /// The colorscheme to be displayed.
     theme: String,
+    /// The custom lifetime of a Gistit snippet.
+    lifetime: u16,
+    /// The password to encrypt.
+    secret: Option<String>,
     /// Whether or not to copy successfully sent gistit hash to clipboard.
     clipboard: bool,
-    /// The custom lifetime of a Gistit snippet.
-    lifetime: Option<u16>,
     /// Common param to dry run
     #[doc(hidden)]
     dry_run: bool,
-    /// Common param to exit for some reason
+    /// Param to exit for some reason
     #[doc(hidden)]
     early_exit: bool,
 }
@@ -66,6 +65,7 @@ impl Dispatch for Action {
             <Addons as addons::Check>::description(&addons),
             <Addons as addons::Check>::author(&addons),
             <Addons as addons::Check>::colorscheme(&addons),
+            <Addons as addons::Check>::lifetime(&addons),
             <File as file::Check>::metadata(&file),
             <File as file::Check>::extension(&file),
         )?;
