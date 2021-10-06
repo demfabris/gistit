@@ -5,7 +5,11 @@ use std::{convert::TryFrom, ffi::OsString};
 
 use crate::cli::{Command, MainArgs};
 use crate::dispatch::Dispatch;
+use crate::{Error, Result};
+use addons::Addons;
+use file::File;
 
+pub mod addons;
 pub mod file;
 
 /// The Send action runtime parameters
@@ -33,8 +37,8 @@ pub struct Action {
 }
 /// Parse [`MainArgs`] into the Send action or error out
 impl TryFrom<&MainArgs> for Action {
-    type Error = crate::Error;
-    fn try_from(top_args: &MainArgs) -> Result<Self, Self::Error> {
+    type Error = Error;
+    fn try_from(top_args: &MainArgs) -> std::result::Result<Self, Self::Error> {
         if let Command::Send(ref args) = top_args.action {
             Ok(Self {
                 file: args.file.clone(),
@@ -55,11 +59,19 @@ impl TryFrom<&MainArgs> for Action {
 /// The dispatch implementation for Send action
 #[async_trait::async_trait]
 impl Dispatch for Action {
-    async fn prepare(&self) -> crate::Result<()> {
-        let _ = file::full_check(&self.file).await?;
+    async fn prepare(&self) -> Result<()> {
+        let addons = Addons::from(self);
+        let file = File::from_action(self).await?;
+        let _ = tokio::try_join!(
+            <Addons as addons::Check>::description(&addons),
+            <Addons as addons::Check>::author(&addons),
+            <Addons as addons::Check>::colorscheme(&addons),
+            <File as file::Check>::metadata(&file),
+            <File as file::Check>::extension(&file),
+        )?;
         Ok(())
     }
-    async fn dispatch(&self) -> crate::Result<()> {
+    async fn dispatch(&self) -> Result<()> {
         Ok(())
     }
 }

@@ -5,7 +5,6 @@ use std::path::Path;
 
 use crate::{Error, Result};
 use phf::{phf_map, Map};
-use tokio::fs::File;
 
 #[cfg(doc)]
 use std::io::ErrorKind;
@@ -14,14 +13,6 @@ use std::io::ErrorKind;
 const MAX_FILE_SIZE: u64 = 200_000;
 /// Min file size in bytes
 const MIN_FILE_SIZE: u64 = 20;
-#[doc(hidden)]
-const UNSUPPORTED_FILE_SIZE: &str = "file size is not in allowed range. MIN = 20bytes MAX = 200kb";
-#[doc(hidden)]
-const UNSUPPORTED_FILE_TYPE: &str = "input is not a file";
-#[doc(hidden)]
-const UNSUPPORTED_FILE_HAS_EXTENSION: &str = "provided file must have an extension";
-#[doc(hidden)]
-const UNSUPPORTED_FILE_EXTENSION: &str = "file extension not currently supported";
 
 /// Supported file extensions
 /// This is a compile time built hashmap to check incomming file extensions against.
@@ -277,63 +268,80 @@ static SUPPORTED_FILE_EXTENSIONS: Map<&'static str, &'static str> = phf_map! {
     // "" => "yang",
     // "" => "zig",
 };
-/// Open a file from provided `OsString`
-///
-/// # Errors
-///
-/// [`ErrorKind`]
-pub async fn from_path(path: impl AsRef<OsStr> + Sync + Send) -> Result<File> {
-    Ok(File::open(path.as_ref()).await?)
+/// The file structure that holds data to be checked/dispatched.
+pub struct File {
+    path: OsString,
+    inner: tokio::fs::File,
 }
-/// Checks the file metadata for type and size
-///
-/// # Errors
-///
-/// [`UnsuportedFile`]
-pub async fn metadata(file: &File) -> Result<()> {
-    let attr = file.metadata().await?;
-    let size_allowed = (MIN_FILE_SIZE..=MAX_FILE_SIZE).contains(&attr.len());
-    let type_allowed = attr.is_file();
-    if !size_allowed {
-        return Err(Error::UnsuportedFile {
-            message: UNSUPPORTED_FILE_SIZE.to_owned(),
-        });
-    } else if !type_allowed {
-        return Err(Error::UnsuportedFile {
-            message: UNSUPPORTED_FILE_TYPE.to_owned(),
-        });
-    }
-    Ok(())
-}
-/// Checks the file extension against [`SUPPORTED_FILE_EXTENSIONS`]
-///
-/// # Errors
-///
-/// [`UnsuportedFile`]
-pub async fn extension(path: impl AsRef<OsStr> + Sync + Send) -> Result<()> {
-    let ext = Path::new(path.as_ref())
-        .extension()
-        .and_then(OsStr::to_str)
-        .ok_or(Error::UnsuportedFile {
-            message: UNSUPPORTED_FILE_HAS_EXTENSION.to_owned(),
-        })?;
-    if SUPPORTED_FILE_EXTENSIONS.contains_key(ext) {
-        log::trace!("File ext: {}", ext);
-        Ok(())
-    } else {
-        Err(Error::UnsuportedFile {
-            message: UNSUPPORTED_FILE_EXTENSION.to_owned(),
+impl File {
+    /// Constructs a [`File`] from a reference to [`super::Action`]
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
+    pub async fn from_action(action: &super::Action) -> Result<Self> {
+        let maybe_file = tokio::fs::File::open(action.file.clone()).await?;
+        Ok(Self {
+            path: action.file.clone(),
+            inner: maybe_file,
         })
     }
 }
-/// Performs all the checks needed for a file to be sent
-///
-/// # Errors
-///
-/// [`UnsuportedFile`]
-/// [`ErrorKind`]
-pub async fn full_check(input: &OsString) -> Result<()> {
-    let file = from_path(input).await?;
-    let _ = tokio::try_join!(metadata(&file), extension(input))?;
-    Ok(())
+#[async_trait::async_trait]
+pub trait Check {
+    /// Checks the file metadata for type and size
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`UnsuportedFile`] if size and type isn't allowed.
+    async fn metadata(&self) -> Result<()>;
+    /// Checks the file extension against [`SUPPORTED_FILE_EXTENSIONS`]
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`UnsuportedFile`] if file extension isn't supported.
+    async fn extension(&self) -> Result<()>;
 }
+#[async_trait::async_trait]
+impl Check for File {
+    async fn metadata(&self) -> Result<()> {
+        let attr = self.inner.metadata().await?;
+        let size_allowed = (MIN_FILE_SIZE..=MAX_FILE_SIZE).contains(&attr.len());
+        let type_allowed = attr.is_file();
+        if !size_allowed {
+            return Err(Error::UnsuportedFile {
+                message: UNSUPPORTED_FILE_SIZE.to_owned(),
+            });
+        } else if !type_allowed {
+            return Err(Error::UnsuportedFile {
+                message: UNSUPPORTED_FILE_TYPE.to_owned(),
+            });
+        }
+        Ok(())
+    }
+    async fn extension(&self) -> Result<()> {
+        let ext = Path::new(self.path.as_os_str())
+            .extension()
+            .and_then(OsStr::to_str)
+            .ok_or(Error::UnsuportedFile {
+                message: UNSUPPORTED_FILE_HAS_EXTENSION.to_owned(),
+            })?;
+        if SUPPORTED_FILE_EXTENSIONS.contains_key(ext) {
+            log::trace!("File ext: {}", ext);
+            Ok(())
+        } else {
+            Err(Error::UnsuportedFile {
+                message: UNSUPPORTED_FILE_EXTENSION.to_owned(),
+            })
+        }
+    }
+}
+
+#[doc(hidden)]
+const UNSUPPORTED_FILE_SIZE: &str = "file size is not in allowed range. MIN = 20bytes MAX = 200kb";
+#[doc(hidden)]
+const UNSUPPORTED_FILE_TYPE: &str = "input is not a file";
+#[doc(hidden)]
+const UNSUPPORTED_FILE_HAS_EXTENSION: &str = "provided file must have an extension";
+#[doc(hidden)]
+const UNSUPPORTED_FILE_EXTENSION: &str = "file extension not currently supported";
