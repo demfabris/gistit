@@ -11,6 +11,7 @@ repository = "https://github.com/gistit.git"
 version = "0.1.0"
 
 [dependencies]
+env_logger = "0.9.0"
 argh = "0.1.6"
 async-trait = "0.1.51"
 lazy_static = "1.4.0"
@@ -18,7 +19,9 @@ log = "0.4.14"
 phf = { version = "0.10", features = ["macros"] }
 thiserror = "1"
 ngrammatic = "0.3.2"
+rust-crypto = "0.2.36"
+rand = "0.8.4"
 
 [dependencies.tokio]
-features = ["macros", "fs", "net", "rt", "rt-multi-thread"]
+features = ["macros", "fs", "net", "rt", "rt-multi-thread", "sync"]
 version = "1.12.0"

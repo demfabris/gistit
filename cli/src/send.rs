@@ -4,7 +4,9 @@ use std::{convert::TryFrom, ffi::OsString};
 
 use crate::cli::{Command, MainArgs};
 use crate::dispatch::Dispatch;
+use crate::encrypt::Secret;
 use crate::{Error, Result};
+
 use addons::Addons;
 use file::File;
 
@@ -34,6 +36,12 @@ pub struct Action {
     #[doc(hidden)]
     early_exit: bool,
 }
+/// The parsed/checked data that should be dispatched
+pub(crate) struct Payload {
+    file: File,
+    addons: addons::Addons,
+    secret: crate::encrypt::Secret,
+}
 /// Parse [`MainArgs`] into the Send action or error out
 impl TryFrom<&MainArgs> for Action {
     type Error = Error;
@@ -59,16 +67,23 @@ impl TryFrom<&MainArgs> for Action {
 #[async_trait::async_trait]
 impl Dispatch for Action {
     async fn prepare(&self) -> Result<()> {
+        // Check minimum required data
         let addons = Addons::from(self);
         let file = File::from_action(self).await?;
-        let _ = tokio::try_join!(
+        let _ = tokio::try_join! {
             <Addons as addons::Check>::description(&addons),
             <Addons as addons::Check>::author(&addons),
             <Addons as addons::Check>::colorscheme(&addons),
             <Addons as addons::Check>::lifetime(&addons),
+
             <File as file::Check>::metadata(&file),
             <File as file::Check>::extension(&file),
-        )?;
+        }?;
+        // Check optional data
+        if let Some(ref secret) = self.secret {
+            let secret = Secret::from_raw(secret)?;
+            <Secret as crate::encrypt::Check>::length(&secret).await?;
+        }
         Ok(())
     }
     async fn dispatch(&self) -> Result<()> {

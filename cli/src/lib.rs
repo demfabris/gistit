@@ -19,6 +19,7 @@
 
 pub mod cli;
 pub mod dispatch;
+pub mod encrypt;
 pub mod send;
 
 use thiserror::Error;
@@ -33,6 +34,10 @@ pub enum Error {
     Argument,
     #[error("invalid addons setup")]
     InvalidAddons { message: String },
+    #[error("invalid secret")]
+    Encryption(String),
+    #[error("hashing failed")]
+    Hashing(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

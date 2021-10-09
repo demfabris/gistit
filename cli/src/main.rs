@@ -6,6 +6,7 @@ use gistit::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    env_logger::init();
     let args: MainArgs = argh::from_env();
     dbg!("{}", &args);
     let action = gistit::send::Action::try_from(&args)?;
