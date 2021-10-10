@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use std::{convert::TryFrom, ffi::OsString};
 
 use crate::cli::{Command, MainArgs};
+use crate::clipboard::Clipboard;
 use crate::dispatch::Dispatch;
 use crate::encrypt::Secret;
 use crate::{Error, Result};
@@ -35,7 +36,7 @@ pub struct Action {
     dry_run: bool,
     /// Param to exit for some reason
     #[doc(hidden)]
-    early_exit: bool,
+    _early_exit: bool,
 }
 
 impl TryFrom<&MainArgs> for Action {
@@ -53,7 +54,7 @@ impl TryFrom<&MainArgs> for Action {
                 clipboard: args.clipboard,
                 lifespan: args.lifespan,
                 dry_run: top_args.dry_run,
-                early_exit: top_args.colorschemes,
+                _early_exit: top_args.colorschemes,
             })
         } else {
             Err(Self::Error::Argument)
@@ -67,6 +68,7 @@ pub struct Payload {
     file: File,
     addons: Addons,
     secret: Option<Secret>,
+    clipboard_ctx: Option<Clipboard>,
 }
 
 /// The dispatch implementation for Send action
@@ -93,13 +95,22 @@ impl Dispatch for Action {
             .with_optional(self.description.clone(), self.author.clone())
             .check_consume()
             .await?;
+        let maybe_clipboard_ctx = if self.clipboard {
+            Clipboard::try_new()
+        } else {
+            None
+        };
         Ok(Self::Payload {
             file,
             addons,
             secret: maybe_secret,
+            clipboard_ctx: maybe_clipboard_ctx,
         })
     }
     async fn dispatch(&self, payload: Self::Payload) -> Result<()> {
+        if self.dry_run {
+            return Ok(());
+        }
         log::debug!("{:?}", payload);
         Ok(())
     }

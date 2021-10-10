@@ -21,6 +21,7 @@ thiserror = "1"
 ngrammatic = "0.3.2"
 rust-crypto = "0.2.36"
 rand = "0.8.4"
+cli-clipboard = "0.2.0"
 
 [dependencies.tokio]
 features = ["macros", "fs", "net", "rt", "rt-multi-thread", "sync"]

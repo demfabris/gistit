@@ -18,13 +18,12 @@
 )]
 
 pub mod cli;
+pub mod clipboard;
 pub mod dispatch;
 pub mod encrypt;
 pub mod send;
 
-use thiserror::Error;
-
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("unsuported file format")]
     UnsuportedFile { message: String },
@@ -38,6 +37,8 @@ pub enum Error {
     Encryption(String),
     #[error("hashing failed")]
     Hashing(String),
+    #[error("clipboard error")]
+    Clipboard(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
