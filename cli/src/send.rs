@@ -1,4 +1,5 @@
 //! The Send feature
+use async_trait::async_trait;
 
 use std::{convert::TryFrom, ffi::OsString};
 
@@ -36,6 +37,7 @@ pub struct Action {
     #[doc(hidden)]
     early_exit: bool,
 }
+
 impl TryFrom<&MainArgs> for Action {
     type Error = Error;
 
@@ -60,34 +62,45 @@ impl TryFrom<&MainArgs> for Action {
 }
 
 /// The parsed/checked data that should be dispatched
-pub(crate) struct Payload {
+#[derive(Debug)]
+pub struct Payload {
     file: File,
-    addons: addons::Addons,
-    secret: crate::encrypt::Secret,
+    addons: Addons,
+    secret: Option<Secret>,
 }
 
 /// The dispatch implementation for Send action
-#[async_trait::async_trait]
+#[async_trait]
 impl Dispatch for Action {
-    async fn prepare(&self) -> Result<()> {
-        // Check file input
-        let _file = File::from_path(self.file.clone())
+    type Payload = Payload;
+
+    /// Build each top level entity and run inner checks concurrently to assert valid input and
+    /// output data.
+    ///
+    /// If all checks runs successfully, assemble the payload structure to later be dispatched
+    /// by [`Dispatch::dispatch`]
+    async fn prepare(&self) -> Result<Self::Payload> {
+        let file = File::from_path(self.file.clone())
             .await?
             .check_consume()
             .await?;
-        // Check secret input
-        if let Some(ref secret) = self.secret {
-            let _secret = Secret::from_raw(secret)?.check_consume().await?;
-        }
-        // Check addons inputs
-        let _addons = Addons::new(&self.theme, self.lifespan)
+        let maybe_secret = if let Some(ref secret) = self.secret {
+            Some(Secret::from_raw(secret)?.check_consume().await?)
+        } else {
+            None
+        };
+        let addons = Addons::new(&self.theme, self.lifespan)
             .with_optional(self.description.clone(), self.author.clone())
             .check_consume()
             .await?;
-
-        Ok(())
+        Ok(Self::Payload {
+            file,
+            addons,
+            secret: maybe_secret,
+        })
     }
-    async fn dispatch(&self) -> Result<()> {
+    async fn dispatch(&self, payload: Self::Payload) -> Result<()> {
+        log::debug!("{:?}", payload);
         Ok(())
     }
 }
