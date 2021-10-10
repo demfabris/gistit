@@ -23,8 +23,8 @@ pub struct Action {
     author: Option<String>,
     /// The colorscheme to be displayed.
     theme: String,
-    /// The custom lifetime of a Gistit snippet.
-    lifetime: u16,
+    /// The custom lifespan of a Gistit snippet.
+    lifespan: u16,
     /// The password to encrypt.
     secret: Option<String>,
     /// Whether or not to copy successfully sent gistit hash to clipboard.
@@ -36,15 +36,10 @@ pub struct Action {
     #[doc(hidden)]
     early_exit: bool,
 }
-/// The parsed/checked data that should be dispatched
-pub(crate) struct Payload {
-    file: File,
-    addons: addons::Addons,
-    secret: crate::encrypt::Secret,
-}
-/// Parse [`MainArgs`] into the Send action or error out
 impl TryFrom<&MainArgs> for Action {
     type Error = Error;
+
+    /// Parse [`MainArgs`] into the Send action or error out
     fn try_from(top_args: &MainArgs) -> std::result::Result<Self, Self::Error> {
         if let Command::Send(ref args) = top_args.action {
             Ok(Self {
@@ -54,7 +49,7 @@ impl TryFrom<&MainArgs> for Action {
                 secret: args.secret.as_ref().cloned(),
                 theme: args.theme.clone(),
                 clipboard: args.clipboard,
-                lifetime: args.lifetime,
+                lifespan: args.lifespan,
                 dry_run: top_args.dry_run,
                 early_exit: top_args.colorschemes,
             })
@@ -63,27 +58,33 @@ impl TryFrom<&MainArgs> for Action {
         }
     }
 }
+
+/// The parsed/checked data that should be dispatched
+pub(crate) struct Payload {
+    file: File,
+    addons: addons::Addons,
+    secret: crate::encrypt::Secret,
+}
+
 /// The dispatch implementation for Send action
 #[async_trait::async_trait]
 impl Dispatch for Action {
     async fn prepare(&self) -> Result<()> {
-        // Check minimum required data
-        let addons = Addons::from(self);
-        let file = File::from_action(self).await?;
-        let _ = tokio::try_join! {
-            <Addons as addons::Check>::description(&addons),
-            <Addons as addons::Check>::author(&addons),
-            <Addons as addons::Check>::colorscheme(&addons),
-            <Addons as addons::Check>::lifetime(&addons),
-
-            <File as file::Check>::metadata(&file),
-            <File as file::Check>::extension(&file),
-        }?;
-        // Check optional data
+        // Check file input
+        let _file = File::from_path(self.file.clone())
+            .await?
+            .check_consume()
+            .await?;
+        // Check secret input
         if let Some(ref secret) = self.secret {
-            let secret = Secret::from_raw(secret)?;
-            <Secret as crate::encrypt::Check>::length(&secret).await?;
+            let _secret = Secret::from_raw(secret)?.check_consume().await?;
         }
+        // Check addons inputs
+        let _addons = Addons::new(&self.theme, self.lifespan)
+            .with_optional(self.description.clone(), self.author.clone())
+            .check_consume()
+            .await?;
+
         Ok(())
     }
     async fn dispatch(&self) -> Result<()> {

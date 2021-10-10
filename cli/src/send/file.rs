@@ -1,10 +1,11 @@
 //! The file module
 
+use async_trait::async_trait;
+use phf::{phf_map, Map};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use crate::{Error, Result};
-use phf::{phf_map, Map};
 
 #[cfg(doc)]
 use std::io::ErrorKind;
@@ -19,7 +20,7 @@ const MIN_FILE_SIZE: u64 = 20;
 /// Follows the extensions supported by currently UI syntax highlighting lib:
 /// [`react-syntax-highlighter`](https://gist.github.com/ppisarczyk/43962d06686722d26d176fad46879d41)
 //TODO: fill this https://gist.github.com/ppisarczyk/43962d06686722d26d176fad46879d41
-static SUPPORTED_FILE_EXTENSIONS: Map<&'static str, &'static str> = phf_map! {
+const SUPPORTED_FILE_EXTENSIONS: Map<&'static str, &'static str> = phf_map! {
     "abap" => "abap",
     "as" => "actionscript",
     "ada" => "ada",
@@ -268,33 +269,52 @@ static SUPPORTED_FILE_EXTENSIONS: Map<&'static str, &'static str> = phf_map! {
     // "" => "yang",
     // "" => "zig",
 };
+
 /// The file structure that holds data to be checked/dispatched.
-pub struct File {
-    path: OsString,
+#[derive(Debug)]
+pub(super) struct File {
     inner: tokio::fs::File,
+    path: OsString,
 }
+
 impl File {
     /// Constructs a [`File`] from a reference to [`super::Action`]
     ///
     /// # Errors
     ///
     /// Fails with [`std::io::Error`]
-    pub async fn from_action(action: &super::Action) -> Result<Self> {
-        let maybe_file = tokio::fs::File::open(action.file.clone()).await?;
+    pub async fn from_path(path: impl AsRef<OsStr> + Sync + Send) -> Result<Self> {
+        let path_ref = path.as_ref();
+        let maybe_file = tokio::fs::File::open(path_ref).await?;
         Ok(Self {
-            path: action.file.clone(),
             inner: maybe_file,
+            path: path_ref.to_os_string(),
         })
     }
+
+    /// Perform needed checks concurrently, consumes `Self` and return.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`UnsuportedFile`]
+    pub async fn check_consume(self) -> Result<Self> {
+        let _ = tokio::try_join! {
+            <Self as Check>::metadata(&self),
+            <Self as Check>::extension(&self)
+        }?;
+        Ok(self)
+    }
 }
-#[async_trait::async_trait]
-pub trait Check {
+
+#[async_trait]
+trait Check {
     /// Checks the file metadata for type and size
     ///
     /// # Errors
     ///
     /// Fails with [`UnsuportedFile`] if size and type isn't allowed.
     async fn metadata(&self) -> Result<()>;
+
     /// Checks the file extension against [`SUPPORTED_FILE_EXTENSIONS`]
     ///
     /// # Errors
@@ -302,12 +322,14 @@ pub trait Check {
     /// Fails with [`UnsuportedFile`] if file extension isn't supported.
     async fn extension(&self) -> Result<()>;
 }
-#[async_trait::async_trait]
+
+#[async_trait]
 impl Check for File {
     async fn metadata(&self) -> Result<()> {
         let attr = self.inner.metadata().await?;
         let size_allowed = (MIN_FILE_SIZE..=MAX_FILE_SIZE).contains(&attr.len());
         let type_allowed = attr.is_file();
+
         if !size_allowed {
             return Err(Error::UnsuportedFile {
                 message: UNSUPPORTED_FILE_SIZE.to_owned(),
@@ -326,6 +348,7 @@ impl Check for File {
             .ok_or(Error::UnsuportedFile {
                 message: UNSUPPORTED_FILE_HAS_EXTENSION.to_owned(),
             })?;
+
         if SUPPORTED_FILE_EXTENSIONS.contains_key(ext) {
             log::trace!("File ext: {}", ext);
             Ok(())
@@ -339,9 +362,12 @@ impl Check for File {
 
 #[doc(hidden)]
 const UNSUPPORTED_FILE_SIZE: &str = "file size is not in allowed range. MIN = 20bytes MAX = 200kb";
+
 #[doc(hidden)]
 const UNSUPPORTED_FILE_TYPE: &str = "input is not a file";
+
 #[doc(hidden)]
 const UNSUPPORTED_FILE_HAS_EXTENSION: &str = "provided file must have an extension";
+
 #[doc(hidden)]
 const UNSUPPORTED_FILE_EXTENSION: &str = "file extension not currently supported";

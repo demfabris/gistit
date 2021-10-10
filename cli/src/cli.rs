@@ -53,9 +53,9 @@ pub struct SendArgs {
     /// store output hash in clipboard. (on successful upload)
     #[argh(switch, short = 'c')]
     pub clipboard: bool,
-    /// custom lifetime in seconds. DEFAULT = 3600, MAX = 3600
+    /// custom lifespan in seconds. DEFAULT = 3600, MAX = 3600
     #[argh(option, short = 'l', default = "3600")]
-    pub lifetime: u16,
+    pub lifespan: u16,
 }
 /// Fetch a gistit
 #[derive(argh::FromArgs, PartialEq, Debug)]

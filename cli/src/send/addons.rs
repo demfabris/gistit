@@ -1,18 +1,22 @@
 //! Addons module
+use async_trait::async_trait;
+use lazy_static::lazy_static;
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use phf::{phf_set, Set};
 
+use std::ops::RangeInclusive;
+
 use crate::{Error, Result};
 
-/// Allowed description character length
-const ALLOWED_DESCRIPTION_LEN: usize = 100;
-/// Allowed author info character length
-const ALLOWED_AUTHOR_LEN: usize = 50;
-/// Allowed lifetime range
-const ALLOWED_LIFETIME_RANGE: std::ops::RangeInclusive<u16> = 300..=3600;
+/// Allowed description length
+const ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE: RangeInclusive<usize> = 0..=100;
+/// Allowed author info length
+const ALLOWED_AUTHOR_CHAR_LENGTH_RANGE: RangeInclusive<usize> = 0..=50;
+/// Allowed lifespan range
+const ALLOWED_LIFESPAN_VALUE_RANGE: RangeInclusive<u16> = 300..=3600;
 
 /// A [`phf::Set`] with all the supported colorschemes
-static SUPPORTED_COLORSCHEMES: Set<&'static str> = phf_set![
+const SUPPORTED_COLORSCHEMES: Set<&'static str> = phf_set![
     "coy",
     "dark",
     "funky",
@@ -49,8 +53,9 @@ static SUPPORTED_COLORSCHEMES: Set<&'static str> = phf_set![
     "vscDarkPlus",
     "xonokai",
 ];
-lazy_static::lazy_static! {
-    /// [`ngrammatic::Corpus`] constructed against [`SUPPORTED_COLORSCHEMES`] set
+
+lazy_static! {
+    /// A [`ngrammatic::Corpus`] constructed against [`SUPPORTED_COLORSCHEMES`] set
     /// to fuzzy match user colorscheme incorrect attempts.
     static ref FUZZY_MATCH: Corpus = SUPPORTED_COLORSCHEMES.iter().fold(
         CorpusBuilder::new().arity(2).pad_full(Pad::Auto).finish(),
@@ -60,37 +65,55 @@ lazy_static::lazy_static! {
         },
     );
 }
+
 /// The addons struct that holds data to be checked/dispatched
-pub struct Addons<'a> {
-    author: Option<&'a str>,
-    description: Option<&'a str>,
-    colorscheme: &'a str,
-    lifetime: u16,
+#[derive(Clone, Default, Debug)]
+pub(super) struct Addons {
+    author: Option<String>,
+    description: Option<String>,
+    colorscheme: String,
+    lifespan: u16,
 }
-impl<'a> From<&'a super::Action> for Addons<'a> {
-    fn from(action: &'a super::Action) -> Self {
+
+impl Addons {
+    /// Create a new [`Addons`] instance with colorscheme and lifespan specified.
+    /// These fields are expected since they derive default values in the arguments parsing stage.
+    pub fn new(colorscheme: &str, lifespan: u16) -> Self {
         Self {
-            author: action.author.as_deref(),
-            description: action.description.as_deref(),
-            colorscheme: action.theme.as_ref(),
-            lifetime: action.lifetime,
+            colorscheme: colorscheme.to_owned(),
+            lifespan,
+            ..Self::default()
         }
     }
+
+    /// Append optional description and author information.
+    #[allow(clippy::missing_const_for_fn)] // False positive
+    pub fn with_optional(self, description: Option<String>, author: Option<String>) -> Self {
+        Self {
+            author,
+            description,
+            ..self
+        }
+    }
+
+    /// Perform all the needed checks to the addons fields concurrently.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`InvalidAddons`] error
+    pub async fn check_consume(self) -> Result<Self> {
+        let _ = tokio::try_join! {
+            <Self as Check>::lifespan(&self),
+            <Self as Check>::colorscheme(&self),
+            <Self as Check>::description(&self),
+            <Self as Check>::author(&self),
+        }?;
+        Ok(self)
+    }
 }
-#[async_trait::async_trait]
-pub trait Check {
-    /// Check description character length (if any)
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`InvalidAddons`] if description is over allowed length
-    async fn description(&self) -> Result<()>;
-    /// Check author character length (if any)
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`InvalidAddons`] if author name is over allowed length
-    async fn author(&self) -> Result<()>;
+
+#[async_trait]
+trait Check {
     /// Check provided colorscheme name against supported ones
     ///
     /// # Errors
@@ -98,42 +121,38 @@ pub trait Check {
     /// Fails with [`InvalidAddons`] if colorscheme isn't named properly.
     /// Prompts the user with a suggestion if it fuzzy matches agains't a probability.
     async fn colorscheme(&self) -> Result<()>;
+
     /// Check provided lifetime limit range
     ///
     /// # Errors
     ///
     /// Fails with [`InvalidAddons`] if the provided number is outside allowed range.
-    async fn lifetime(&self) -> Result<()>;
+    async fn lifespan(&self) -> Result<()>;
+
+    /// Check description character length (if any)
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`InvalidAddons`] if description is over allowed length
+    async fn description(&self) -> Result<()>;
+
+    /// Check author character length (if any)
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`InvalidAddons`] if author name is over allowed length
+    async fn author(&self) -> Result<()>;
 }
-#[async_trait::async_trait]
-impl Check for Addons<'_> {
-    async fn description(&self) -> Result<()> {
-        let length = self.description.unwrap_or("").len();
-        if ALLOWED_DESCRIPTION_LEN < length {
-            Err(Error::InvalidAddons {
-                message: INVALID_DESCRIPTION_CHAR_LENGTH.to_owned(),
-            })
-        } else {
-            Ok(())
-        }
-    }
-    async fn author(&self) -> Result<()> {
-        let length = self.author.unwrap_or("").len();
-        if ALLOWED_AUTHOR_LEN < length {
-            Err(Error::InvalidAddons {
-                message: INVALID_AUTHOR_CHAR_LENGTH.to_owned(),
-            })
-        } else {
-            Ok(())
-        }
-    }
+
+#[async_trait]
+impl Check for Addons {
     async fn colorscheme(&self) -> Result<()> {
-        let contains = SUPPORTED_COLORSCHEMES.contains(self.colorscheme);
-        if contains {
+        if SUPPORTED_COLORSCHEMES.contains(&self.colorscheme) {
             Ok(())
         } else {
-            let fuzzy_matches = FUZZY_MATCH.search(self.colorscheme, 0.25);
+            let fuzzy_matches = FUZZY_MATCH.search(&self.colorscheme, 0.25);
             let maybe_match = fuzzy_matches.first();
+
             if let Some(top_match) = maybe_match {
                 Err(Error::InvalidAddons {
                     message: format!("invalid colorscheme... did you mean {}?", top_match.text),
@@ -145,23 +164,55 @@ impl Check for Addons<'_> {
             }
         }
     }
-    async fn lifetime(&self) -> Result<()> {
-        if ALLOWED_LIFETIME_RANGE.contains(&self.lifetime) {
+    async fn lifespan(&self) -> Result<()> {
+        if ALLOWED_LIFESPAN_VALUE_RANGE.contains(&self.lifespan) {
             Ok(())
         } else {
             Err(Error::InvalidAddons {
-                message: INVALID_LIFETIME_RANGE.to_owned(),
+                message: INVALID_LIFESPAN_RANGE.to_owned(),
             })
         }
     }
+    async fn description(&self) -> Result<()> {
+        self.description.as_ref().map_or_else(
+            || Ok(()),
+            |value| {
+                if ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE.contains(&value.len()) {
+                    Ok(())
+                } else {
+                    Err(Error::InvalidAddons {
+                        message: INVALID_DESCRIPTION_CHAR_LENGTH.to_owned(),
+                    })
+                }
+            },
+        )
+    }
+    async fn author(&self) -> Result<()> {
+        self.author.as_ref().map_or_else(
+            || Ok(()),
+            |value| {
+                if ALLOWED_AUTHOR_CHAR_LENGTH_RANGE.contains(&value.len()) {
+                    Ok(())
+                } else {
+                    Err(Error::InvalidAddons {
+                        message: INVALID_AUTHOR_CHAR_LENGTH.to_owned(),
+                    })
+                }
+            },
+        )
+    }
 }
+
 #[doc(hidden)]
 const INVALID_DESCRIPTION_CHAR_LENGTH: &str =
     "invalid description character length. MAX = 100 chars";
+
 #[doc(hidden)]
 const INVALID_AUTHOR_CHAR_LENGTH: &str = "invalid author character length. MAX = 50 chars";
+
 #[doc(hidden)]
 const INVALID_COLORSCHEME_NAME: &str =
     "invalid colorscheme. 'gistit --colors' to see avaiable ones.";
+
 #[doc(hidden)]
-const INVALID_LIFETIME_RANGE: &str = "invalid lifetime parameter. MIN = 60s MAX = 3600s";
+const INVALID_LIFESPAN_RANGE: &str = "invalid lifespan parameter. MIN = 60s MAX = 3600s";
