@@ -9,10 +9,12 @@ use crate::{Error, Result};
 
 /// Allowed secret character range
 const ALLOWED_SECRET_CHAR_LENGTH_RANGE: std::ops::RangeInclusive<usize> = 5..=50;
-/// Scrypt algorithm param `p` and `r` random value range
-const SCRYPT_PARAM_RANGE: std::ops::RangeInclusive<u32> = 2..=16;
+/// [see](https://blog.filippo.io/the-scrypt-parameters/)
+const SCRYPT_PARAM_P: u32 = 1;
+const SCRYPT_PARAM_R: u32 = 8;
+const SCRYPT_PARAM_LOG_N: u8 = 20;
 
-/// The structure that stores encrypted hash
+/// The secret that guards a Gistit
 #[derive(Clone, Default, Debug)]
 pub struct Secret {
     raw: String,
@@ -26,12 +28,7 @@ impl Secret {
     ///
     /// Fails with [`Encryption`] error
     pub fn from_raw(secret: &str) -> Result<Self> {
-        let mut rng = rand::thread_rng();
-        let (log_n, r, p) = (
-            2,
-            rand::Rng::gen_range(&mut rng, SCRYPT_PARAM_RANGE),
-            rand::Rng::gen_range(&mut rng, SCRYPT_PARAM_RANGE),
-        );
+        let (log_n, r, p) = (SCRYPT_PARAM_LOG_N, SCRYPT_PARAM_R, SCRYPT_PARAM_P);
         let params = ScryptParams::new(log_n, r, p);
         let scrypt_hash = scrypt_simple(secret, &params)?;
         Ok(Self {
@@ -113,6 +110,6 @@ impl Default for Hasher<Md5> {
     }
 }
 
-pub async fn symmetric_cipher_encrypt() {
+pub async fn symmetric_cipher() {
     todo!()
 }
