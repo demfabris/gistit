@@ -272,7 +272,7 @@ const SUPPORTED_FILE_EXTENSIONS: Map<&'static str, &'static str> = phf_map! {
 
 /// The file structure that holds data to be checked/dispatched.
 #[derive(Debug)]
-pub(super) struct File {
+pub struct File {
     inner: tokio::fs::File,
     path: OsString,
 }
@@ -285,11 +285,27 @@ impl File {
     /// Fails with [`std::io::Error`]
     pub async fn from_path(path: impl AsRef<OsStr> + Sync + Send) -> Result<Self> {
         let path_ref = path.as_ref();
-        let maybe_file = tokio::fs::File::open(path_ref).await?;
+        let inner = tokio::fs::File::open(path_ref).await?;
         Ok(Self {
-            inner: maybe_file,
+            inner,
             path: path_ref.to_os_string(),
         })
+    }
+
+    /// Access the file in read mode and dump contents in a buffer
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
+    pub async fn as_buf(&mut self) -> Result<Vec<u8>> {
+        let mut buffer: Vec<u8> = Vec::new();
+        let bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut self.inner, &mut buffer).await?;
+        log::debug!("read {} bytes from file", bytes_read);
+        Ok(buffer)
+    }
+
+    pub async fn as_buf_encrypt(&mut self) -> Result<Vec<u8>> {
+        todo!()
     }
 
     /// Perform needed checks concurrently, consumes `Self` and return.

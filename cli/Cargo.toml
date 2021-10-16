@@ -24,5 +24,5 @@ rand = "0.8.4"
 cli-clipboard = "0.2.0"
 
 [dependencies.tokio]
-features = ["macros", "fs", "net", "rt", "rt-multi-thread", "sync"]
+features = ["macros", "fs", "net", "rt", "rt-multi-thread", "sync", "io-util"]
 version = "1.12.0"

@@ -1,12 +1,13 @@
 //! The Send feature
-use async_trait::async_trait;
-
 use std::{convert::TryFrom, ffi::OsString};
+
+use async_trait::async_trait;
+use crypto::digest::Digest;
 
 use crate::cli::{Command, MainArgs};
 use crate::clipboard::Clipboard;
 use crate::dispatch::Dispatch;
-use crate::encrypt::Secret;
+use crate::encrypt::{Hasher, Secret};
 use crate::{Error, Result};
 
 use addons::Addons;
@@ -65,10 +66,45 @@ impl TryFrom<&MainArgs> for Action {
 /// The parsed/checked data that should be dispatched
 #[derive(Debug)]
 pub struct Payload {
-    file: File,
-    addons: Addons,
-    secret: Option<Secret>,
-    clipboard_ctx: Option<Clipboard>,
+    pub file: File,
+    pub addons: Addons,
+    pub secret: Option<Secret>,
+    pub hash: Option<String>,
+}
+
+impl Payload {
+    pub const fn new(file: File, addons: Addons) -> Self {
+        Self {
+            file,
+            addons,
+            secret: None,
+            hash: None,
+        }
+    }
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn with_secret(&mut self, secret: Secret) {
+        self.secret = Some(secret);
+    }
+    /// Hash payload fields.
+    /// Reads the inner file contents into a buffer and digest it into the hasher.
+    /// If a secret was provided it should be digested by the hasher as well.
+    ///
+    /// Returns the hashed string hex encoded
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
+    pub async fn hash(&mut self) -> Result<()> {
+        let mut hasher = Hasher::default();
+        let file_buf = self.file.as_buf().await?;
+        hasher.digest_buf(file_buf);
+        // If secret was provided, digest it as well
+        if let Some(ref secret) = self.secret {
+            hasher.digest_str(secret.get_hash());
+        }
+        self.hash = Some(hasher.consume().result_str());
+        Ok(())
+    }
 }
 
 /// The dispatch implementation for Send action
@@ -86,26 +122,21 @@ impl Dispatch for Action {
             .await?
             .check_consume()
             .await?;
-        let maybe_secret = if let Some(ref secret) = self.secret {
-            Some(Secret::from_raw(secret)?.check_consume().await?)
-        } else {
-            None
-        };
         let addons = Addons::new(&self.theme, self.lifespan)
             .with_optional(self.description.clone(), self.author.clone())
             .check_consume()
             .await?;
-        let maybe_clipboard_ctx = if self.clipboard {
-            Clipboard::try_new()
-        } else {
-            None
+        let mut payload = Self::Payload::new(file, addons);
+        // If a secret was provided, check if it's under spec
+        if let Some(ref secret_str) = self.secret {
+            let secret = Secret::from_raw(secret_str)?.check_consume().await?;
+            payload.with_secret(secret);
+        }
+        if self.clipboard {
+            Clipboard::try_new();
         };
-        Ok(Self::Payload {
-            file,
-            addons,
-            secret: maybe_secret,
-            clipboard_ctx: maybe_clipboard_ctx,
-        })
+        Payload::hash(&mut payload).await?;
+        Ok(payload)
     }
     async fn dispatch(&self, payload: Self::Payload) -> Result<()> {
         if self.dry_run {

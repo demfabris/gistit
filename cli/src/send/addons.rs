@@ -68,7 +68,7 @@ lazy_static! {
 
 /// The addons struct that holds data to be checked/dispatched
 #[derive(Clone, Default, Debug)]
-pub(super) struct Addons {
+pub struct Addons {
     author: Option<String>,
     description: Option<String>,
     colorscheme: String,
@@ -78,6 +78,7 @@ pub(super) struct Addons {
 impl Addons {
     /// Create a new [`Addons`] instance with colorscheme and lifespan specified.
     /// These fields are expected since they derive default values in the arguments parsing stage.
+    #[must_use]
     pub fn new(colorscheme: &str, lifespan: u16) -> Self {
         Self {
             colorscheme: colorscheme.to_owned(),
@@ -87,6 +88,7 @@ impl Addons {
     }
 
     /// Append optional description and author information.
+    #[must_use]
     #[allow(clippy::missing_const_for_fn)] // False positive
     pub fn with_optional(self, description: Option<String>, author: Option<String>) -> Self {
         Self {
