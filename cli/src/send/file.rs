@@ -1,19 +1,18 @@
 //! The file module
+use std::ffi::{OsStr, OsString};
+use std::ops::RangeInclusive;
+use std::path::Path;
 
 use async_trait::async_trait;
 use phf::{phf_map, Map};
-use std::ffi::{OsStr, OsString};
-use std::path::Path;
 
 use crate::{Error, Result};
 
 #[cfg(doc)]
 use std::io::ErrorKind;
 
-/// Max file size in bytes
-const MAX_FILE_SIZE: u64 = 200_000;
-/// Min file size in bytes
-const MIN_FILE_SIZE: u64 = 20;
+/// Allowed file size range in bytes
+const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=200_000;
 
 /// Supported file extensions
 /// This is a compile time built hashmap to check incomming file extensions against.
@@ -300,7 +299,7 @@ impl File {
     pub async fn as_buf(&mut self) -> Result<Vec<u8>> {
         let mut buffer: Vec<u8> = Vec::new();
         let bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut self.inner, &mut buffer).await?;
-        log::debug!("read {} bytes from file", bytes_read);
+        log::trace!("read {} bytes from file", bytes_read);
         Ok(buffer)
     }
 
@@ -343,7 +342,7 @@ trait Check {
 impl Check for File {
     async fn metadata(&self) -> Result<()> {
         let attr = self.inner.metadata().await?;
-        let size_allowed = (MIN_FILE_SIZE..=MAX_FILE_SIZE).contains(&attr.len());
+        let size_allowed = ALLOWED_FILE_SIZE_RANGE.contains(&attr.len());
         let type_allowed = attr.is_file();
 
         if !size_allowed {
