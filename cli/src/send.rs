@@ -11,7 +11,7 @@ use crate::encrypt::{HashedSecret, Hasher, Secret};
 use crate::{Error, Result};
 
 use addons::Addons;
-use file::{DataReady, File};
+use file::{FileReady, File};
 
 pub mod addons;
 pub mod file;
@@ -66,7 +66,7 @@ impl TryFrom<&MainArgs> for Action {
 /// The parsed/checked data that should be dispatched
 #[derive(Default)]
 pub struct Payload {
-    pub file: Option<Box<dyn DataReady + Send + Sync>>,
+    pub file: Option<Box<dyn FileReady + Send + Sync>>,
     pub addons: Option<Addons>,
     pub secret: Option<HashedSecret>,
     pub hash: Option<String>,
@@ -86,7 +86,7 @@ impl Payload {
     }
 
     /// Append a checked instance of [`File`] or [`EncryptedFile`]
-    pub fn with_file(&mut self, file: Box<dyn DataReady + Send + Sync>) -> &mut Self {
+    pub fn with_file(&mut self, file: Box<dyn FileReady + Send + Sync>) -> &mut Self {
         self.file = Some(file);
         self
     }

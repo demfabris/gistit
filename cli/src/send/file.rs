@@ -288,19 +288,19 @@ pub struct EncryptedFile {
 }
 
 #[async_trait]
-pub trait DataReady {
+pub trait FileReady {
     async fn to_bytes(&self) -> Result<Vec<u8>>;
 }
 
 #[async_trait]
-impl DataReady for EncryptedFile {
+impl FileReady for EncryptedFile {
     async fn to_bytes(&self) -> Result<Vec<u8>> {
         Ok(self.bytes.clone())
     }
 }
 
 #[async_trait]
-impl DataReady for File {
+impl FileReady for File {
     async fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut buffer: Vec<u8> = Vec::new();
         let mut file = self.inner.try_clone().await?;
