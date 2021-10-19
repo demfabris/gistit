@@ -28,13 +28,13 @@ pub mod send;
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("unsuported file format")]
-    UnsuportedFile { message: String },
+    UnsuportedFile(String),
     #[error("failed to read file")]
     Read(#[from] std::io::Error),
     #[error("failed to parse command arguments")]
     Argument,
     #[error("invalid addons setup")]
-    InvalidAddons { message: String },
+    InvalidAddons(String),
     #[error("invalid secret")]
     Encryption(String),
     #[error("hashing failed")]

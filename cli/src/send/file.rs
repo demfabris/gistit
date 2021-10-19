@@ -387,13 +387,9 @@ impl Check for File {
         let type_allowed = attr.is_file();
 
         if !size_allowed {
-            return Err(Error::UnsuportedFile {
-                message: UNSUPPORTED_FILE_SIZE.to_owned(),
-            });
+            return Err(Error::UnsuportedFile(UNSUPPORTED_FILE_SIZE.to_owned()));
         } else if !type_allowed {
-            return Err(Error::UnsuportedFile {
-                message: UNSUPPORTED_FILE_TYPE.to_owned(),
-            });
+            return Err(Error::UnsuportedFile(UNSUPPORTED_FILE_TYPE.to_owned()));
         }
         log::trace!("[OK]: File metadata {:?}", attr);
         Ok(())
@@ -402,29 +398,22 @@ impl Check for File {
         let ext = Path::new(self.path.as_os_str())
             .extension()
             .and_then(OsStr::to_str)
-            .ok_or(Error::UnsuportedFile {
-                message: UNSUPPORTED_FILE_HAS_EXTENSION.to_owned(),
-            })?;
+            .ok_or_else(|| Error::UnsuportedFile(UNSUPPORTED_FILE_HAS_EXTENSION.to_owned()))?;
 
         if SUPPORTED_FILE_EXTENSIONS.contains_key(ext) {
             log::trace!("[OK]: File ext: {}", ext);
             Ok(())
         } else {
-            Err(Error::UnsuportedFile {
-                message: UNSUPPORTED_FILE_EXTENSION.to_owned(),
-            })
+            Err(Error::UnsuportedFile(UNSUPPORTED_FILE_EXTENSION.to_owned()))
         }
     }
 }
 
 #[doc(hidden)]
 const UNSUPPORTED_FILE_SIZE: &str = "file size is not in allowed range. MIN = 20bytes MAX = 200kb";
-
 #[doc(hidden)]
 const UNSUPPORTED_FILE_TYPE: &str = "input is not a file";
-
 #[doc(hidden)]
 const UNSUPPORTED_FILE_HAS_EXTENSION: &str = "provided file must have an extension";
-
 #[doc(hidden)]
 const UNSUPPORTED_FILE_EXTENSION: &str = "file extension not currently supported";
