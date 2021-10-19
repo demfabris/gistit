@@ -4,8 +4,10 @@ use std::ops::RangeInclusive;
 use std::path::Path;
 
 use async_trait::async_trait;
+use crypto::mac::Mac;
 use phf::{phf_map, Map};
 
+use crate::encrypt::cryptor_simple;
 use crate::{Error, Result};
 
 #[cfg(doc)]
@@ -276,6 +278,38 @@ pub struct File {
     path: OsString,
 }
 
+/// The file after encryption
+#[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
+pub struct EncryptedFile {
+    hmac_raw: Vec<u8>,
+    bytes: Vec<u8>,
+    prev: Box<File>,
+}
+
+#[async_trait]
+pub trait DataReady {
+    async fn to_bytes(&self) -> Result<Vec<u8>>;
+}
+
+#[async_trait]
+impl DataReady for EncryptedFile {
+    async fn to_bytes(&self) -> Result<Vec<u8>> {
+        Ok(self.bytes.clone())
+    }
+}
+
+#[async_trait]
+impl DataReady for File {
+    async fn to_bytes(&self) -> Result<Vec<u8>> {
+        let mut buffer: Vec<u8> = Vec::new();
+        let mut file = self.inner.try_clone().await?;
+        let bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buffer).await?;
+        log::trace!("read {} bytes from file", bytes_read);
+        Ok(buffer)
+    }
+}
+
 impl File {
     /// Constructs a [`File`] from a reference to [`super::Action`]
     ///
@@ -291,20 +325,26 @@ impl File {
         })
     }
 
-    /// Access the file in read mode and dump contents in a buffer
+    /// Encrypts the file and return it as a byte vector
     ///
     /// # Errors
     ///
-    /// Fails with [`std::io::Error`]
-    pub async fn as_buf(&mut self) -> Result<Vec<u8>> {
-        let mut buffer: Vec<u8> = Vec::new();
-        let bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut self.inner, &mut buffer).await?;
-        log::trace!("read {} bytes from file", bytes_read);
-        Ok(buffer)
-    }
-
-    pub async fn as_buf_encrypt(&mut self) -> Result<Vec<u8>> {
-        todo!()
+    /// Fails with [`Encryption`] with the encryption process goes wrong
+    pub async fn into_encrypted(self, key: impl AsRef<str> + Sync + Send) -> Result<EncryptedFile> {
+        log::trace!("Encrypting file with key {}", key.as_ref());
+        let file_buf = self.to_bytes().await?;
+        let encrypted = cryptor_simple(key.as_ref())
+            .into_encryptor()
+            .encrypt(&file_buf)?;
+        let (hmac_raw, bytes) = (
+            encrypted.hmac_raw_default().result().code().to_owned(),
+            encrypted.as_bytes().to_owned(),
+        );
+        Ok(EncryptedFile {
+            hmac_raw,
+            bytes,
+            prev: Box::new(self),
+        })
     }
 
     /// Perform needed checks concurrently, consumes `Self` and return.
@@ -313,6 +353,7 @@ impl File {
     ///
     /// Fails with [`UnsuportedFile`]
     pub async fn check_consume(self) -> Result<Self> {
+        log::trace!("[FILE]");
         let _ = tokio::try_join! {
             <Self as Check>::metadata(&self),
             <Self as Check>::extension(&self)
@@ -354,6 +395,7 @@ impl Check for File {
                 message: UNSUPPORTED_FILE_TYPE.to_owned(),
             });
         }
+        log::trace!("[OK]: File metadata {:?}", attr);
         Ok(())
     }
     async fn extension(&self) -> Result<()> {
@@ -365,7 +407,7 @@ impl Check for File {
             })?;
 
         if SUPPORTED_FILE_EXTENSIONS.contains_key(ext) {
-            log::trace!("File ext: {}", ext);
+            log::trace!("[OK]: File ext: {}", ext);
             Ok(())
         } else {
             Err(Error::UnsuportedFile {

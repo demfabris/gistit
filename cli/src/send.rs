@@ -7,11 +7,11 @@ use crypto::digest::Digest;
 use crate::cli::{Command, MainArgs};
 use crate::clipboard::Clipboard;
 use crate::dispatch::Dispatch;
-use crate::encrypt::{Hasher, Secret};
+use crate::encrypt::{HashedSecret, Hasher, Secret};
 use crate::{Error, Result};
 
 use addons::Addons;
-use file::File;
+use file::{DataReady, File};
 
 pub mod addons;
 pub mod file;
@@ -64,27 +64,39 @@ impl TryFrom<&MainArgs> for Action {
 }
 
 /// The parsed/checked data that should be dispatched
-#[derive(Debug)]
+#[derive(Default)]
 pub struct Payload {
-    pub file: File,
-    pub addons: Addons,
-    pub secret: Option<Secret>,
+    pub file: Option<Box<dyn DataReady + Send + Sync>>,
+    pub addons: Option<Addons>,
+    pub secret: Option<HashedSecret>,
     pub hash: Option<String>,
 }
 
 impl Payload {
-    pub const fn new(file: File, addons: Addons) -> Self {
-        Self {
-            file,
-            addons,
-            secret: None,
-            hash: None,
-        }
+    /// Trivially initialize payload structure
+    #[must_use]
+    pub fn with_none() -> Self {
+        Self::default()
     }
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn with_secret(&mut self, secret: Secret) {
+
+    /// Append a checked instance of [`Addons`].
+    pub fn with_addons(&mut self, addons: Addons) -> &mut Self {
+        self.addons = Some(addons);
+        self
+    }
+
+    /// Append a checked instance of [`File`] or [`EncryptedFile`]
+    pub fn with_file(&mut self, file: Box<dyn DataReady + Send + Sync>) -> &mut Self {
+        self.file = Some(file);
+        self
+    }
+
+    /// Append a checked instance of [`HashedSecret`]
+    pub fn with_secret(&mut self, secret: HashedSecret) -> &mut Self {
         self.secret = Some(secret);
+        self
     }
+
     /// Hash payload fields.
     /// Reads the inner file contents into a buffer and digest it into the hasher.
     /// If a secret was provided it should be digested by the hasher as well.
@@ -95,14 +107,20 @@ impl Payload {
     ///
     /// Fails with [`std::io::Error`]
     pub async fn hash(&mut self) -> Result<()> {
-        let mut hasher = Hasher::default();
-        let file_buf = self.file.as_buf().await?;
-        hasher.digest_buf(file_buf);
-        // If secret was provided, digest it as well
-        if let Some(ref secret) = self.secret {
-            hasher.digest_str(secret.get_hash());
-        }
-        self.hash = Some(hasher.consume().result_str());
+        let file_buf = self
+            .file
+            .as_ref()
+            .expect("to have a file")
+            .to_bytes()
+            .await?;
+        let maybe_secret_str = self.secret.as_ref().map_or("", |s| s.to_str());
+        // Digest and collect output
+        let hash = Hasher::default()
+            .digest_buf(&file_buf)
+            .digest_str(maybe_secret_str)
+            .consume()
+            .result_str();
+        self.hash = Some(hash);
         Ok(())
     }
 }
@@ -118,31 +136,43 @@ impl Dispatch for Action {
     /// If all checks runs successfully, assemble the payload structure to later be dispatched
     /// by [`Dispatch::dispatch`]
     async fn prepare(&self) -> Result<Self::Payload> {
-        let file = File::from_path(self.file.clone())
-            .await?
-            .check_consume()
-            .await?;
+        let mut payload = Payload::with_none();
+        // Check addons first and exit faster if there's a invalid input
         let addons = Addons::new(&self.theme, self.lifespan)
             .with_optional(self.description.clone(), self.author.clone())
             .check_consume()
             .await?;
-        let mut payload = Self::Payload::new(file, addons);
-        // If a secret was provided, check if it's under spec
+        payload.with_addons(addons);
+        // Perform the file check
+        let file = File::from_path(self.file.clone())
+            .await?
+            .check_consume()
+            .await?;
+        // If secret provided, hash it and encrypt file
         if let Some(ref secret_str) = self.secret {
-            let secret = Secret::from_raw(secret_str)?.check_consume().await?;
-            payload.with_secret(secret);
+            let secret = Secret::new(secret_str)
+                .check_consume()
+                .await?
+                .into_hashed()?;
+            let encrypted_file = file.into_encrypted(secret.to_str()).await?;
+            payload
+                .with_file(Box::new(encrypted_file))
+                .with_secret(secret);
+        } else {
+            payload.with_file(Box::new(file));
         }
         if self.clipboard {
-            Clipboard::try_new();
+            let _a = Clipboard::try_new();
         };
-        Payload::hash(&mut payload).await?;
         Ok(payload)
     }
     async fn dispatch(&self, payload: Self::Payload) -> Result<()> {
         if self.dry_run {
             return Ok(());
         }
-        log::debug!("{:?}", payload);
+        let file = payload.file.unwrap().to_bytes().await?;
+        log::trace!("{:?}", file);
+
         Ok(())
     }
 }
