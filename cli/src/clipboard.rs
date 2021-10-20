@@ -1,13 +1,12 @@
 //! Clipboard module
+use std::process::Command;
 
-use async_trait::async_trait;
 use cli_clipboard::{ClipboardContext, ClipboardProvider};
 
-use crate::{Error, Result};
+use crate::Result;
 
-#[derive(Default)]
 pub struct Clipboard {
-    ctx: Option<ClipboardContext>,
+    ctx: ClipboardContext,
     value: Option<String>,
 }
 
@@ -23,47 +22,64 @@ impl Clipboard {
     /// # Errors
     ///
     /// Fails with [`Error::Clipboard`] error
-    #[must_use]
-    pub fn try_new() -> Option<Self> {
-        let ctx = match ClipboardContext::new() {
-            Ok(t) => Some(t),
-            Err(e) => {
-                log::debug!("{:?}", e);
-                // TODO: impl proper error message
-                None
-            }
-        };
-        Some(Self { ctx, value: None })
+    pub fn try_new() -> Result<Self> {
+        let ctx = ClipboardContext::new()?;
+        Ok(Self { ctx, value: None })
     }
 
     /// Perform checks, in this case they are not required. Missing clipboard feature will not
     /// halt execution
-    pub async fn check_consume(self) -> Self {
-        <Self as Check>::session().await;
+    #[must_use]
+    pub fn check_consume_sync(self) -> Self {
+        <Self as Check>::session();
         self
+    }
+
+    /// Returns a mutable reference to the inner clipboard context
+    pub fn ctx_mut(&mut self) -> &mut ClipboardContext {
+        &mut self.ctx
+    }
+
+    /// Set contents of the clipboard in context
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`Clipboard`] error
+    pub fn set(&mut self, contents: impl Into<String>) -> Result<()> {
+        self.ctx.clear()?;
+        let string = contents.into();
+        log::trace!("Attempting to set clipboard: {}", string);
+        self.ctx.set_contents(string.clone())?;
+        self.value = Some(string);
+        Ok(())
+    }
+
+    /// Get the content of what was last set into the clipboard by this program
+    pub fn inner_value(&self) -> Option<&str> {
+        self.value.as_ref().map(AsRef::as_ref)
     }
 }
 
-#[async_trait]
 trait Check {
     /// Check wether or not in a SSH session
-    async fn session();
+    fn session();
 }
 
-#[async_trait]
 impl Check for Clipboard {
-    async fn session() {
+    fn session() {
         if std::env::var("SSH_CLIENT").is_ok() || std::env::var("SSH_CONNECTION").is_ok() {
-            log::debug!("under ssh session");
+            log::debug!("SSH session detected");
 
             #[cfg(target_os = "linux")]
             {
                 if std::env::var("DISPLAY").is_err() {
                     println!("No display detected");
                 }
+                if Command::new("which").arg("xclip").output().is_err() {
+                    println!("No xclip binary detected");
+                };
+                // TODO: more env checks here
             }
         }
     }
 }
-
-const SPAWN_CLIPBOARD_CTX_ERROR: &str = "could not access clipboard";

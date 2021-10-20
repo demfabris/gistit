@@ -11,7 +11,7 @@ use crate::encrypt::{HashedSecret, Hasher, Secret};
 use crate::{Error, Result};
 
 use addons::Addons;
-use file::{FileReady, File};
+use file::{File, FileReady};
 
 pub mod addons;
 pub mod file;
@@ -97,6 +97,11 @@ impl Payload {
         self
     }
 
+    pub fn with_hash(&mut self, hash: impl Into<String>) -> &mut Self {
+        self.hash = Some(hash.into());
+        self
+    }
+
     /// Hash payload fields.
     /// Reads the inner file contents into a buffer and digest it into the hasher.
     /// If a secret was provided it should be digested by the hasher as well.
@@ -106,7 +111,7 @@ impl Payload {
     /// # Errors
     ///
     /// Fails with [`std::io::Error`]
-    pub async fn hash(&mut self) -> Result<()> {
+    pub async fn as_hash(&self) -> Result<String> {
         let file_buf = self
             .file
             .as_ref()
@@ -120,8 +125,7 @@ impl Payload {
             .digest_str(maybe_secret_str)
             .consume()
             .result_str();
-        self.hash = Some(hash);
-        Ok(())
+        Ok(hash)
     }
 }
 
@@ -161,8 +165,12 @@ impl Dispatch for Action {
         } else {
             payload.with_file(Box::new(file));
         }
+        let payload_hash = payload.as_hash().await?;
+        payload.with_hash(&payload_hash);
         if self.clipboard {
-            let _a = Clipboard::try_new();
+            Clipboard::try_new()?
+                .check_consume_sync()
+                .set(&payload_hash)?;
         };
         Ok(payload)
     }

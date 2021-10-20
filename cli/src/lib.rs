@@ -40,7 +40,7 @@ pub enum Error {
     #[error("hashing failed")]
     Hashing(String),
     #[error("clipboard error")]
-    Clipboard(String),
+    Clipboard(#[from] anyhow::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
