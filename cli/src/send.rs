@@ -168,10 +168,11 @@ impl Dispatch for Action {
         let payload_hash = payload.as_hash().await?;
         payload.with_hash(&payload_hash);
         if self.clipboard {
-            Clipboard::try_new()?
-                .check_consume_sync()
-                .set(&payload_hash)?;
-        };
+            Clipboard::new(payload_hash)
+                .try_into_selected()?
+                .into_provider()
+                .set_contents()?;
+        }
         Ok(payload)
     }
     async fn dispatch(&self, payload: Self::Payload) -> Result<()> {

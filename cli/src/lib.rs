@@ -20,10 +20,12 @@
 )]
 
 pub mod cli;
-pub mod clipboard;
 pub mod dispatch;
 pub mod encrypt;
 pub mod send;
+
+#[cfg(feature = "clipboard")]
+pub mod clipboard;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -39,8 +41,9 @@ pub enum Error {
     Encryption(String),
     #[error("hashing failed")]
     Hashing(String),
+    #[cfg(feature = "clipboard")]
     #[error("clipboard error")]
-    Clipboard(#[from] anyhow::Error),
+    Clipboard(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

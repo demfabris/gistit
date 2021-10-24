@@ -2,13 +2,17 @@
 authors = ["Fabricio <fabricio7p@protonmail.com>"]
 categories = ["command-line-utilities", "text-processing"]
 description = "Cli application for Gistit"
-edition = "2018"
+edition = "2021"
 keywords = ["code", "snippets", "share", "hash"]
 license = "../LICENSE"
 name = "gistit"
 readme = "README.md"
 repository = "https://github.com/gistit.git"
 version = "0.1.0"
+
+[features]
+default = ["clipboard"]
+clipboard = ["which", "base64"]
 
 [dependencies]
 env_logger = "0.9.0"
@@ -21,8 +25,9 @@ thiserror = "1"
 ngrammatic = "0.3.2"
 rust-crypto = "0.2.36"
 rand = "0.8.4"
-cli-clipboard = "0.2.0"
 anyhow = "1.0.44"
+which = { version = "4.2.2", optional = true }
+base64 = { version = "0.13.0", optional = true }
 
 [dependencies.tokio]
 features = ["macros", "fs", "net", "rt", "rt-multi-thread", "sync", "io-util"]
