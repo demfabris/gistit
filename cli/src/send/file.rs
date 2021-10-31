@@ -8,10 +8,8 @@ use crypto::mac::Mac;
 use phf::{phf_map, Map};
 
 use crate::encrypt::cryptor_simple;
-use crate::{Error, Result};
-
-#[cfg(doc)]
-use std::io::ErrorKind;
+use crate::errors::file::FileError;
+use crate::Result;
 
 /// Allowed file size range in bytes
 const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=200_000;
@@ -354,10 +352,9 @@ impl File {
     /// Fails with [`UnsuportedFile`]
     pub async fn check_consume(self) -> Result<Self> {
         log::trace!("[FILE]");
-        let _ = tokio::try_join! {
-            <Self as Check>::metadata(&self),
-            <Self as Check>::extension(&self)
-        }?;
+        // Do this sequentially to output more accurate errors
+        <Self as Check>::metadata(&self).await?;
+        <Self as Check>::extension(&self).await?;
         Ok(self)
     }
 }
@@ -387,9 +384,9 @@ impl Check for File {
         let type_allowed = attr.is_file();
 
         if !size_allowed {
-            return Err(Error::UnsuportedFile(UNSUPPORTED_FILE_SIZE.to_owned()));
+            return Err(FileError::UnsupportedSize(attr.len()).into());
         } else if !type_allowed {
-            return Err(Error::UnsuportedFile(UNSUPPORTED_FILE_TYPE.to_owned()));
+            return Err(FileError::UnsupportedType(self.path.to_string_lossy().to_string()).into());
         }
         log::trace!("[OK]: File metadata {:?}", attr);
         Ok(())
@@ -398,22 +395,13 @@ impl Check for File {
         let ext = Path::new(self.path.as_os_str())
             .extension()
             .and_then(OsStr::to_str)
-            .ok_or_else(|| Error::UnsuportedFile(UNSUPPORTED_FILE_HAS_EXTENSION.to_owned()))?;
+            .ok_or(FileError::MissingExtension)?;
 
         if SUPPORTED_FILE_EXTENSIONS.contains_key(ext) {
             log::trace!("[OK]: File ext: {}", ext);
             Ok(())
         } else {
-            Err(Error::UnsuportedFile(UNSUPPORTED_FILE_EXTENSION.to_owned()))
+            Err(FileError::UnsupportedExtension(ext.to_owned()).into())
         }
     }
 }
-
-#[doc(hidden)]
-const UNSUPPORTED_FILE_SIZE: &str = "file size is not in allowed range. MIN = 20bytes MAX = 200kb";
-#[doc(hidden)]
-const UNSUPPORTED_FILE_TYPE: &str = "input is not a file";
-#[doc(hidden)]
-const UNSUPPORTED_FILE_HAS_EXTENSION: &str = "provided file must have an extension";
-#[doc(hidden)]
-const UNSUPPORTED_FILE_EXTENSION: &str = "file extension not currently supported";

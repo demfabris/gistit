@@ -57,7 +57,9 @@ use std::process::{Command, Stdio};
 
 use which::which;
 
-use crate::{Error, Result};
+use crate::errors::clipboard::ClipboardError;
+use crate::errors::io::IoError;
+use crate::Result;
 
 /// The clipboard structure, holds the content string
 #[derive(Clone, Debug)]
@@ -195,7 +197,7 @@ impl Clipboard {
     /// Fails with [`Error::Clipboard`] error
     pub fn try_into_selected(self) -> Result<ClipboardSelected> {
         match select_display() {
-            DisplayKind::Unknown => Err(Error::Clipboard("Unsupported platform".to_owned())),
+            DisplayKind::Unknown => Err(ClipboardError::UnknownPlatform.into()),
             valid => Ok(ClipboardSelected {
                 display: valid,
                 content: self.content,
@@ -230,25 +232,25 @@ impl ClipboardProvider for BinClipboard {
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .spawn()
-            .map_err(|err| Error::Clipboard(err.to_string()))?;
+            .map_err(|err| ClipboardError::BinExecution(IoError::ProcessSpawn(err.to_string())))?;
 
         process
             .stdin
             .as_mut()
             .expect("to access stdin")
             .write_all(self.selected.content.as_bytes())
-            .map_err(|err| Error::Clipboard(err.to_string()))?;
+            .map_err(|err| ClipboardError::BinExecution(IoError::StdinWrite(err.to_string())))?;
 
         let status = process
             .wait()
-            .map_err(|err| Error::Clipboard(err.to_string()))?;
+            .map_err(|err| ClipboardError::BinExecution(IoError::ProcessWait(err.to_string())))?;
         if status.success() {
             Ok(())
         } else {
-            Err(Error::Clipboard(format!(
-                "{:?} exited with non zero status",
-                &self.bin,
-            )))
+            Err(ClipboardError::BinExecution(IoError::Other(
+                "process returned non zero status".to_owned(),
+            ))
+            .into())
         }
     }
 }
@@ -270,7 +272,7 @@ impl ClipboardSelected {
                 return Box::new(bin_clipboard);
             }
             Err(err) => {
-                log::trace!("{:?}", err);
+                println!("{:?}", err);
             }
         }
         Box::new(EscapeSeqClipboard { selected: self })
@@ -313,25 +315,24 @@ impl ClipboardSelected {
 
                 let (bin, program) = binaries
                     .find(|(bin, _)| bin.is_ok())
-                    .ok_or_else(|| Error::Clipboard(MISSING_X11_CLIPBOARD_BIN.to_owned()))?;
+                    .ok_or(ClipboardError::MissingX11ClipboardBin)?;
                 // Safe to unwrap since we previously checked `bin.is_ok()`
                 (bin.unwrap(), program)
             }
             DisplayKind::Wayland => {
-                let bin = which("wl-copy")
-                    .map_err(|_| Error::Clipboard(MISSING_WAYLAND_CLIPBOARD_BIN.to_owned()))?;
+                let bin =
+                    which("wl-copy").map_err(|_| ClipboardError::MissingWaylandClipboardBin)?;
                 let program = ClipboardBinProgram::WlCopy;
                 (bin, program)
             }
             DisplayKind::SshTty => {
                 //`xauth` missing most likely mean display passthrough isn't working
-                let _xauth = which("xauth")
-                    .map_err(|_| Error::Clipboard(MISSING_TTY_CLIPBOARD_BIN.to_owned()))?;
+                let _xauth = which("xauth").map_err(|_| ClipboardError::MissingTtyClipboardBin)?;
 
                 // DISPALY variable different than `localhost:...` is a bad sign as well
                 let _display = env::var("DISPLAY")
                     .map(|var| var.contains("localhost"))
-                    .map_err(|_| Error::Clipboard(MISSING_DISPLAY_SSH.to_owned()))?;
+                    .map_err(|_| ClipboardError::MissingDisplayEnvSsh)?;
 
                 let mut binaries = [
                     (which("xclip"), ClipboardBinProgram::Xclip),
@@ -342,7 +343,7 @@ impl ClipboardSelected {
 
                 let (bin, program) = binaries
                     .find(|(bin, _)| bin.is_ok())
-                    .ok_or_else(|| Error::Clipboard(MISSING_X11_CLIPBOARD_BIN.to_owned()))?;
+                    .ok_or(ClipboardError::MissingX11ClipboardBin)?;
                 // Safe to unwrap since we previously checked `bin.is_ok()`
                 (bin.unwrap(), program)
             }
@@ -375,7 +376,7 @@ impl ClipboardSelected {
             DisplayKind::MacOs => which("pbcopy")
                 .ok()
                 .map(|t| t.as_os_str().to_owned())
-                .ok_or_else(|| Error::Clipboard(MISSING_MACOS_CLIPBOARD_BIN.to_owned()))?,
+                .ok_or(ClipboardError::MissingMacosClipboardBin)?,
             DisplayKind::Unknown => panic!("clipboard feature not supported"),
         };
         let program = ClipboardBinProgram::PbCopy;
@@ -394,19 +395,3 @@ impl ClipboardSelected {
         Err(())
     }
 }
-
-#[cfg(all(target_os = "macos", target_os = "ios"))]
-const MISSING_MACOS_CLIPBOARD_BIN: &str = "Missing 'pbcopy' binaries";
-const MISSING_X11_CLIPBOARD_BIN: &str = r#"
-    Couldn't find any supported x11 clipboard binaries.
-    Consider getting 'xclip', 'xsel', or 'sselp'
-"#;
-const MISSING_WAYLAND_CLIPBOARD_BIN: &str = "Missing 'wl-clipboard' binaries";
-const MISSING_DISPLAY_SSH: &str = r#"
-    Environment variable `DISPLAY` is not set.
-    Display passthrough under SSH is most likely not working.
-"#;
-const MISSING_TTY_CLIPBOARD_BIN: &str = r#"
-    Missing 'xauth' binaries.
-    Display passthrough under SSH is most likely not working.
-"#;

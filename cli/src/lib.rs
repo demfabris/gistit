@@ -22,28 +22,11 @@
 pub mod cli;
 pub mod dispatch;
 pub mod encrypt;
+pub mod errors;
 pub mod send;
 
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("unsuported file format")]
-    UnsuportedFile(String),
-    #[error("failed to read file")]
-    Read(#[from] std::io::Error),
-    #[error("failed to parse command arguments")]
-    Argument,
-    #[error("invalid addons setup")]
-    InvalidAddons(String),
-    #[error("invalid secret")]
-    Encryption(String),
-    #[error("hashing failed")]
-    Hashing(String),
-    #[cfg(feature = "clipboard")]
-    #[error("clipboard error")]
-    Clipboard(String),
-}
-
+use errors::Error;
 pub type Result<T> = std::result::Result<T, Error>;

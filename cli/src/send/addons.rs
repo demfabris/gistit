@@ -6,12 +6,13 @@ use phf::{phf_set, Set};
 
 use std::ops::RangeInclusive;
 
-use crate::{Error, Result};
+use crate::errors::addons::AddonsError;
+use crate::Result;
 
 /// Allowed description length
-const ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE: RangeInclusive<usize> = 0..=100;
+const ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE: RangeInclusive<usize> = 10..=100;
 /// Allowed author info length
-const ALLOWED_AUTHOR_CHAR_LENGTH_RANGE: RangeInclusive<usize> = 0..=50;
+const ALLOWED_AUTHOR_CHAR_LENGTH_RANGE: RangeInclusive<usize> = 3..=30;
 /// Allowed lifespan range
 const ALLOWED_LIFESPAN_VALUE_RANGE: RangeInclusive<u16> = 300..=3600;
 
@@ -156,12 +157,9 @@ impl Check for Addons {
             let maybe_match = fuzzy_matches.first();
 
             if let Some(top_match) = maybe_match {
-                Err(Error::InvalidAddons(format!(
-                    "invalid colorscheme... did you mean {}?",
-                    top_match.text
-                )))
+                Err(AddonsError::Colorscheme(format!("Did you mean: '{}'?", top_match.text)).into())
             } else {
-                Err(Error::InvalidAddons(INVALID_COLORSCHEME_NAME.to_owned()))
+                Err(AddonsError::Colorscheme("".to_owned()).into())
             }
         }
     }
@@ -169,7 +167,7 @@ impl Check for Addons {
         if ALLOWED_LIFESPAN_VALUE_RANGE.contains(&self.lifespan) {
             Ok(())
         } else {
-            Err(Error::InvalidAddons(INVALID_LIFESPAN_RANGE.to_owned()))
+            Err(AddonsError::LifespanRange.into())
         }
     }
     async fn description(&self) -> Result<()> {
@@ -179,9 +177,7 @@ impl Check for Addons {
                 if ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE.contains(&value.len()) {
                     Ok(())
                 } else {
-                    Err(Error::InvalidAddons(
-                        INVALID_DESCRIPTION_CHAR_LENGTH.to_owned(),
-                    ))
+                    Err(AddonsError::DescriptionCharRange.into())
                 }
             },
         )
@@ -193,20 +189,9 @@ impl Check for Addons {
                 if ALLOWED_AUTHOR_CHAR_LENGTH_RANGE.contains(&value.len()) {
                     Ok(())
                 } else {
-                    Err(Error::InvalidAddons(INVALID_AUTHOR_CHAR_LENGTH.to_owned()))
+                    Err(AddonsError::AuthorCharRange.into())
                 }
             },
         )
     }
 }
-
-#[doc(hidden)]
-const INVALID_DESCRIPTION_CHAR_LENGTH: &str =
-    "invalid description character length. MAX = 100 chars";
-#[doc(hidden)]
-const INVALID_AUTHOR_CHAR_LENGTH: &str = "invalid author character length. MAX = 50 chars";
-#[doc(hidden)]
-const INVALID_COLORSCHEME_NAME: &str =
-    "invalid colorscheme. 'gistit --colors' to see avaiable ones.";
-#[doc(hidden)]
-const INVALID_LIFESPAN_RANGE: &str = "invalid lifespan parameter. MIN = 60s MAX = 3600s";

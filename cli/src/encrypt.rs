@@ -24,12 +24,9 @@ use crypto::hmac::Hmac;
 use crypto::mac::{Mac, MacResult};
 use crypto::md5::Md5;
 use crypto::scrypt::{scrypt_simple, ScryptParams};
-use crypto::symmetriccipher::SymmetricCipherError;
 
-use crate::{Error, Result};
-
-#[cfg(doc)]
-use crate::Error::Encryption;
+use crate::errors::encryption::EncryptionError;
+use crate::Result;
 
 /// Allowed secret character range
 const ALLOWED_SECRET_CHAR_LENGTH_RANGE: std::ops::RangeInclusive<usize> = 5..=50;
@@ -119,9 +116,7 @@ impl Check for Secret {
             log::trace!("[OK]: Secret length");
             Ok(())
         } else {
-            Err(Error::Encryption(
-                "invalid password length. MIN = 5 MAX = 50".to_owned(),
-            ))
+            Err(EncryptionError::SecretLength.into())
         }
     }
 }
@@ -308,7 +303,8 @@ impl<'k> Cryptor<'k, Encrypting> {
             let result = self
                 .state
                 .executor
-                .encrypt(&mut read_buf, &mut write_buf, true)?;
+                .encrypt(&mut read_buf, &mut write_buf, true)
+                .map_err(EncryptionError::CipherError)?;
             output.extend(
                 write_buf
                     .take_read_buffer()
@@ -343,7 +339,8 @@ impl<'k> Cryptor<'k, Decrypting> {
             let result = self
                 .state
                 .executor
-                .decrypt(&mut read_buf, &mut write_buf, true)?;
+                .decrypt(&mut read_buf, &mut write_buf, true)
+                .map_err(EncryptionError::CipherError)?;
             output.extend(
                 write_buf
                     .take_read_buffer()
@@ -404,11 +401,5 @@ impl<'k> Cryptor<'k, Done> {
         let expected = self.hmac_raw_default().result();
         let provided = MacResult::new(rhs.as_ref());
         expected == provided
-    }
-}
-
-impl From<SymmetricCipherError> for Error {
-    fn from(err: SymmetricCipherError) -> Self {
-        Self::Encryption(format!("{:?}", err))
     }
 }
