@@ -5,6 +5,8 @@
 #![allow(clippy::default_trait_access)]
 // This is boring
 #![allow(clippy::module_name_repetitions)]
+// Not my fault
+#![allow(clippy::multiple_crate_versions)]
 // Test env should be chill
 #![cfg_attr(
     test,
