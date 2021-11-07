@@ -10,7 +10,7 @@ async fn main() -> Result<()> {
     let matches = app().get_matches();
     let action = match matches.subcommand() {
         ("send", Some(args)) => gistit::send::Action::try_from(args)?,
-        ("fetch", args) => todo!(),
+        ("fetch", Some(args)) => gistit::fetch::Action::try_from(args)?,
         _ => todo!(),
     };
     let payload = Dispatch::prepare(&action).await?;

@@ -27,6 +27,9 @@ pub mod encrypt;
 pub mod errors;
 pub mod send;
 
+#[cfg(feature = "fetch")]
+pub mod fetch;
+
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
 

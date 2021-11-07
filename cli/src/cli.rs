@@ -105,10 +105,37 @@ This is our best efforts at persisting the hash into the system clipboard after 
             SubCommand::with_name("fetch")
                 .about("Fetch a gistit by it's hash")
                 .arg(
+                    Arg::with_name("hash")
+                        .short("h")
+                        .help("Fetch a gistit via it's hash")
+                        .required_unless("url")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("url")
+                        .short("u")
+                        .required_unless("hash")
+                        .help("Attempt to open the gistit on your default browser")
+                        .takes_value(true),
+                )
+                .arg(
                     Arg::with_name("secret")
                         .short("s")
                         .help("The secret to decrypt the fetched gistit")
                         .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("theme")
+                        .long("theme")
+                        .short("t")
+                        .default_value("atomDark")
+                        .requires("file")
+                        .takes_value(true)
+                        .help("The colorscheme to apply syntax highlighting")
+                        .long_help(
+                            "The colorscheme to apply syntax highlighting.
+Run `gistit --colorschemes` to list avaiable ones.",
+                        ),
                 )
                 .arg(Arg::with_name("no-syntax-highlighting").help("Without syntax highlighting")),
         )
