@@ -1,77 +1,115 @@
 //! Gistit command line interface
-//!
-use std::ffi::OsString;
 
-/// Share or get a gistit.
-#[derive(argh::FromArgs, PartialEq, Debug)]
-pub struct MainArgs {
-    /// dry run mode. check for platform requirements
-    #[argh(switch, short = 'r')]
-    pub dry_run: bool,
-    /// list avaiable colorschemes
-    #[argh(switch, short = 't')]
-    pub colorschemes: bool,
-    /// action
-    #[argh(subcommand)]
-    pub action: Command,
-}
-/// Subcommands variations
-#[non_exhaustive]
-#[derive(argh::FromArgs, PartialEq, Debug)]
-#[argh(subcommand)]
-pub enum Command {
-    Send(SendArgs),
-    Fetch(FetchArgs),
-}
-/// Upload a gistit to the cloud
-#[derive(argh::FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "send")]
-pub struct SendArgs {
-    // /// the files.
-    // #[argh(option, short = 'x')]
-    // pub files: Vec<OsString>,
-    /// the file. currently one supported
-    #[argh(option, short = 'f')]
-    pub file: OsString,
-    /// with a description
-    #[argh(option, short = 'd')]
-    pub description: Option<String>,
-    /// with author details
-    #[argh(option, short = 'a')]
-    pub author: Option<String>,
-    /// with password encryption
-    #[argh(option, short = 's')]
-    pub secret: Option<String>,
-    /// blank
-    #[argh(
-        option,
-        short = 't',
-        description = "choose a colorscheme. 'gistit -t' for available colorschemes",
-        default = "String::from(\"dracula\")"
-    )]
-    pub theme: String,
-    /// store output hash in clipboard. (on successful upload)
-    #[argh(switch, short = 'c')]
-    pub clipboard: bool,
-    /// custom lifespan in seconds. DEFAULT = 3600, MAX = 3600
-    #[argh(option, short = 'l', default = "3600")]
-    pub lifespan: u16,
-}
-/// Fetch a gistit
-#[derive(argh::FromArgs, PartialEq, Debug)]
-#[argh(
-    subcommand,
-    name = "fetch",
-    note = "The default filesystem save location is based on you platform..."
-)]
-pub struct FetchArgs {
-    /// provide the secret to decrypt (if any)
-    #[argh(option, short = 's')]
-    pub secret: Option<String>,
-    /// no syntax highlighting
-    #[argh(switch, short = 'o')]
-    pub no_syntax_highlighting: bool,
-    /// save a copy on local filesystem
-    #[argh(switch, short = 'v')]
-    pub save: bool,
+use clap::{crate_authors, crate_description, crate_version, App, Arg, SubCommand};
+
+/// The gistit application
+#[allow(clippy::too_many_lines)]
+#[must_use]
+pub fn app() -> App<'static, 'static> {
+    App::new("Gistit")
+        .version(crate_version!())
+        .about(crate_description!())
+        .author(crate_authors!())
+        .arg(
+            Arg::with_name("colorschemes")
+                .long("colorschemes")
+                .help("List avaiable colorschemes"),
+        )
+        .arg(
+            Arg::with_name("silent")
+                .long("silent")
+                .help("Silent mode, omit stdout")
+                .global(true),
+        )
+        .subcommand(
+            SubCommand::with_name("send")
+                .about("Send the gistit to the cloud")
+                .arg(
+                    Arg::with_name("file")
+                        .long("file")
+                        .short("f")
+                        .help("The file to be sent [required]")
+                        .required(true)
+                        .multiple(false) // currently not supported
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("description")
+                        .long("description")
+                        .short("d")
+                        .help("With a description")
+                        .takes_value(true)
+                        .requires("file"),
+                )
+                .arg(
+                    Arg::with_name("author")
+                        .long("author")
+                        .short("a")
+                        .help("With author information")
+                        .takes_value(true)
+                        .requires("file"),
+                )
+                .arg(
+                    Arg::with_name("lifespan")
+                        .long("lifespan")
+                        .short("l")
+                        .help("With a custom lifespan")
+                        .requires("file")
+                        .takes_value(true)
+                        .default_value("3600"),
+                )
+                .arg(
+                    Arg::with_name("secret")
+                        .long("secret")
+                        .short("s")
+                        .help("With password encryption")
+                        .takes_value(true)
+                        .requires("file"),
+                )
+                .arg(
+                    Arg::with_name("theme")
+                        .long("theme")
+                        .short("t")
+                        .default_value("atomDark")
+                        .requires("file")
+                        .takes_value(true)
+                        .help("The colorscheme to apply syntax highlighting")
+                        .long_help(
+                            "The colorscheme to apply syntax highlighting.
+Run `gistit --colorschemes` to list avaiable ones.",
+                        ),
+                )
+                .arg(
+                    Arg::with_name("clipboard")
+                        .long("clipboard")
+                        .short("c")
+                        .requires("file")
+                        .help("Copies the result hash to the system clipboard")
+                        .long_help(
+                            "Copies the result hash to the system clipboard.
+This program will attempt to find a suitable clipboard program in your system and use it.
+If none was found it defaults to ANSI escape sequence OSC52.
+This is our best efforts at persisting the hash into the system clipboard after the program exits.
+",
+                        ),
+                )
+                .arg(
+                    Arg::with_name("dry-run")
+                        .long("dry-run")
+                        .requires("file")
+                        .short("r")
+                        .help("Executes gistit-send in 'dry run' mode"),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("fetch")
+                .about("Fetch a gistit by it's hash")
+                .arg(
+                    Arg::with_name("secret")
+                        .short("s")
+                        .help("The secret to decrypt the fetched gistit")
+                        .takes_value(true),
+                )
+                .arg(Arg::with_name("no-syntax-highlighting").help("Without syntax highlighting")),
+        )
 }

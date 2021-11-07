@@ -4,8 +4,10 @@ use lazy_static::lazy_static;
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use phf::{phf_set, Set};
 
+use std::borrow::ToOwned;
 use std::ops::RangeInclusive;
 
+use super::Action;
 use crate::errors::addons::AddonsError;
 use crate::Result;
 
@@ -77,26 +79,21 @@ pub struct Addons {
 }
 
 impl Addons {
-    /// Create a new [`Addons`] instance with colorscheme and lifespan specified.
-    /// These fields are expected since they derive default values in the arguments parsing stage.
-    #[must_use]
-    pub fn new(colorscheme: &str, lifespan: u16) -> Self {
-        Self {
-            colorscheme: colorscheme.to_owned(),
-            lifespan,
-            ..Self::default()
-        }
-    }
-
-    /// Append optional description and author information.
-    #[must_use]
-    #[allow(clippy::missing_const_for_fn)] // False positive
-    pub fn with_optional(self, description: Option<String>, author: Option<String>) -> Self {
-        Self {
-            author,
-            description,
-            ..self
-        }
+    /// Create a new [`Addons`] from the send [`Action`]
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`InvalidAddons`] error
+    pub fn from_action(action: &Action) -> Result<Self> {
+        Ok(Self {
+            author: action.author.map(ToOwned::to_owned),
+            description: action.description.map(ToOwned::to_owned),
+            colorscheme: action.theme.to_owned(),
+            lifespan: action
+                .lifespan
+                .parse::<u16>()
+                .map_err(|_| AddonsError::InvalidLifespan)?,
+        })
     }
 
     /// Perform all the needed checks to the addons fields concurrently.
@@ -157,9 +154,9 @@ impl Check for Addons {
             let maybe_match = fuzzy_matches.first();
 
             if let Some(top_match) = maybe_match {
-                Err(AddonsError::Colorscheme(format!("Did you mean: '{}'?", top_match.text)).into())
+                Err(AddonsError::Colorscheme(Some(top_match.text.clone())).into())
             } else {
-                Err(AddonsError::Colorscheme("".to_owned()).into())
+                Err(AddonsError::Colorscheme(None).into())
             }
         }
     }

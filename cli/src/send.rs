@@ -1,10 +1,11 @@
 //! The Send feature
-use std::{convert::TryFrom, ffi::OsString};
+use clap::ArgMatches;
+use std::convert::TryFrom;
+use std::ffi::OsStr;
 
 use async_trait::async_trait;
 use crypto::digest::Digest;
 
-use crate::cli::{Command, MainArgs};
 use crate::clipboard::Clipboard;
 use crate::dispatch::Dispatch;
 use crate::encrypt::{HashedSecret, Hasher, Secret};
@@ -17,49 +18,41 @@ pub mod addons;
 pub mod file;
 
 /// The Send action runtime parameters
-pub struct Action {
+pub struct Action<'a> {
     /// The file to be sent.
-    file: OsString,
+    file: &'a OsStr,
     /// The description of this Gistit.
-    description: Option<String>,
+    description: Option<&'a str>,
     /// The author information.
-    author: Option<String>,
+    author: Option<&'a str>,
     /// The colorscheme to be displayed.
-    theme: String,
-    /// The custom lifespan of a Gistit snippet.
-    lifespan: u16,
+    theme: &'a str,
     /// The password to encrypt.
-    secret: Option<String>,
+    secret: Option<&'a str>,
+    /// The custom lifespan of a Gistit snippet.
+    lifespan: &'a str,
     /// Whether or not to copy successfully sent gistit hash to clipboard.
     clipboard: bool,
-    /// Common param to dry run
+    /// dry_run
     #[doc(hidden)]
     dry_run: bool,
-    /// Param to exit for some reason
-    #[doc(hidden)]
-    _early_exit: bool,
 }
 
-impl TryFrom<&MainArgs> for Action {
+impl<'act, 'args> TryFrom<&'act ArgMatches<'args>> for Action<'act> {
     type Error = Error;
 
-    /// Parse [`MainArgs`] into the Send action or error out
-    fn try_from(top_args: &MainArgs) -> std::result::Result<Self, Self::Error> {
-        if let Command::Send(ref args) = top_args.action {
-            Ok(Self {
-                file: args.file.clone(),
-                description: args.description.as_ref().cloned(),
-                author: args.author.as_ref().cloned(),
-                secret: args.secret.as_ref().cloned(),
-                theme: args.theme.clone(),
-                clipboard: args.clipboard,
-                lifespan: args.lifespan,
-                dry_run: top_args.dry_run,
-                _early_exit: top_args.colorschemes,
-            })
-        } else {
-            Err(Self::Error::Argument)
-        }
+    /// Parse [`ArgMatches`] into the Send action or error out
+    fn try_from(args: &'act ArgMatches<'args>) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            file: args.value_of_os("file").ok_or(Self::Error::Argument)?,
+            description: args.value_of("description"),
+            author: args.value_of("author"),
+            theme: args.value_of("theme").ok_or(Self::Error::Argument)?,
+            secret: args.value_of("secret"),
+            lifespan: args.value_of("lifespan").ok_or(Self::Error::Argument)?,
+            clipboard: args.is_present("clipboard"),
+            dry_run: args.is_present("dry-run"),
+        })
     }
 }
 
@@ -131,7 +124,7 @@ impl Payload {
 
 /// The dispatch implementation for Send action
 #[async_trait]
-impl Dispatch for Action {
+impl Dispatch for Action<'_> {
     type Payload = Payload;
 
     /// Build each top level entity and run inner checks concurrently to assert valid input and
@@ -142,18 +135,12 @@ impl Dispatch for Action {
     async fn prepare(&self) -> Result<Self::Payload> {
         let mut payload = Payload::with_none();
         // Check addons first and exit faster if there's a invalid input
-        let addons = Addons::new(&self.theme, self.lifespan)
-            .with_optional(self.description.clone(), self.author.clone())
-            .check_consume()
-            .await?;
+        let addons = Addons::from_action(self)?.check_consume().await?;
         payload.with_addons(addons);
         // Perform the file check
-        let file = File::from_path(self.file.clone())
-            .await?
-            .check_consume()
-            .await?;
+        let file = File::from_path(self.file).await?.check_consume().await?;
         // If secret provided, hash it and encrypt file
-        if let Some(ref secret_str) = self.secret {
+        if let Some(secret_str) = self.secret {
             let secret = Secret::new(secret_str)
                 .check_consume()
                 .await?

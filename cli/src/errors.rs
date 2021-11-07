@@ -38,7 +38,7 @@ impl std::fmt::Debug for Error {
                 write!(f, "{}", err)
             }
             Self::IO(err) => {
-                write!(f, "{:?}", err)
+                write!(f, "{}", err)
             }
             Self::Argument => {
                 write!(f, "Something went wrong during arg parsing")
@@ -109,8 +109,9 @@ pub mod addons {
     pub enum AddonsError {
         DescriptionCharRange,
         AuthorCharRange,
-        Colorscheme(String),
+        Colorscheme(Option<String>),
         LifespanRange,
+        InvalidLifespan,
     }
 
     impl From<AddonsError> for Error {
@@ -146,17 +147,19 @@ MIN = {} MAX = {}
                         "30 chars".yellow()
                     )
                 }
-                AddonsError::Colorscheme(sugest) => {
+                AddonsError::Colorscheme(maybe_close_match) => {
+                    let suggest = maybe_close_match.as_ref().map(|close_match| {
+                        format!("\n\nDid you mean: '{}'?", close_match.bright_blue())
+                    });
                     println!("{}", "[Colorscheme]".red());
                     write!(
                         f,
                         r#"
 invalid colorscheme parameter.
-run '{}' to list supported colorschemes.
-{}
+run '{}' to list supported colorschemes.{}
                     "#,
                         "gistit --colorschemes".green(),
-                        sugest.bright_blue()
+                        suggest.unwrap_or_else(|| "".to_string())
                     )
                 }
                 AddonsError::LifespanRange => {
@@ -171,6 +174,16 @@ MIN = {} MAX = {}
                         "3600s (default)".yellow()
                     )
                 }
+                AddonsError::InvalidLifespan => {
+                    println!("{}", "[InvalidLifespan]".red());
+                    write!(
+                        f,
+                        r#"
+invalid lifespan parameter.
+input is not a positive number
+                    "#,
+                    )
+                }
             }
         }
     }
@@ -182,9 +195,13 @@ pub mod file {
 
     #[derive(Clone)]
     pub enum FileError {
+        /// File extension doesn't match supported ones
         UnsupportedExtension(String),
+        /// File size is outside allowed range
         UnsupportedSize(u64),
+        /// File is not a file
         UnsupportedType(String),
+        /// File has weird extensions
         MissingExtension,
     }
 
@@ -255,9 +272,9 @@ MIN = {} MAX = {}
 
 /// I/O operations error
 pub mod io {
-    use super::Error;
+    use super::{Colorize, Error};
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone)]
     pub enum IoError {
         /// Failed to spawn a process
         ProcessSpawn(String),
@@ -266,6 +283,37 @@ pub mod io {
         /// Process hanged/can't close
         ProcessWait(String),
         Other(String),
+    }
+
+    impl std::fmt::Display for IoError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match &self {
+                Self::Other(err_string) => {
+                    println!("{}", "[IoError]".red());
+                    write!(
+                        f,
+                        r#"
+Something went wrong during an I/O operation:
+{}
+                    "#,
+                        err_string.yellow()
+                    )
+                }
+                Self::ProcessWait(err_string)
+                | Self::StdinWrite(err_string)
+                | Self::ProcessSpawn(err_string) => {
+                    println!("{} {}", "[IoError]".red(), "[Process]".red());
+                    write!(
+                        f,
+                        r#"
+Something went wrong during an I/O operation:
+{}
+                    "#,
+                        err_string.yellow()
+                    )
+                }
+            }
+        }
     }
 
     impl From<std::io::Error> for Error {

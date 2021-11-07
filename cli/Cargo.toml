@@ -15,8 +15,8 @@ default = ["clipboard"]
 clipboard = ["which", "base64"]
 
 [dependencies]
+clap = "2.33.3"
 env_logger = { version = "0.9.0", default-features = false, features = ["termcolor", "atty"] }
-argh = "0.1.6"
 async-trait = "0.1.51"
 lazy_static = "1.4.0"
 log = "0.4.14"
