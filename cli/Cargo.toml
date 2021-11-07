@@ -11,8 +11,9 @@ repository = "https://github.com/gistit.git"
 version = "0.1.0"
 
 [features]
-default = ["clipboard"]
+default = ["clipboard", "fetch"]
 clipboard = ["which", "base64"]
+fetch = ["bat"]
 
 [dependencies]
 clap = "2.33.3"
@@ -27,6 +28,7 @@ rand = "0.8.4"
 colored = "2.0.0"
 which = { version = "4.2.2", optional = true }
 base64 = { version = "0.13.0", optional = true }
+bat = { version = "0.18.3", optional = true, default-features = false, features = ["atty", "wild", "dirs-next"] }
 
 [dependencies.tokio]
 features = ["macros", "fs", "net", "rt", "rt-multi-thread", "sync", "io-util"]
