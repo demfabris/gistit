@@ -1,5 +1,3 @@
-use std::convert::TryFrom;
-
 use gistit::cli::app;
 use gistit::dispatch::Dispatch;
 use gistit::Result;
@@ -8,12 +6,19 @@ use gistit::Result;
 async fn main() -> Result<()> {
     env_logger::init();
     let matches = app().get_matches();
-    let action = match matches.subcommand() {
-        ("send", Some(args)) => gistit::send::Action::try_from(args)?,
-        ("fetch", Some(args)) => gistit::fetch::Action::try_from(args)?,
-        _ => todo!(),
+    match matches.subcommand() {
+        // TODO: Improve this
+        ("send", Some(args)) => {
+            let action = gistit::send::Action::from_args(args)?;
+            let payload = Dispatch::prepare(&*action).await?;
+            Dispatch::dispatch(&*action, payload).await?;
+        }
+        ("fetch", Some(args)) => {
+            let action = gistit::fetch::Action::from_args(args)?;
+            let payload = Dispatch::prepare(&*action).await?;
+            Dispatch::dispatch(&*action, payload).await?;
+        }
+        _ => unimplemented!(),
     };
-    let payload = Dispatch::prepare(&action).await?;
-    Dispatch::dispatch(&action, payload).await?;
     Ok(())
 }

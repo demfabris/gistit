@@ -103,7 +103,7 @@ This is our best efforts at persisting the hash into the system clipboard after 
         )
         .subcommand(
             SubCommand::with_name("fetch")
-                .about("Fetch a gistit by it's hash")
+                .about("Fetch a gistit wherever it is")
                 .arg(
                     Arg::with_name("hash")
                         .short("h")
@@ -115,7 +115,7 @@ This is our best efforts at persisting the hash into the system clipboard after 
                     Arg::with_name("url")
                         .short("u")
                         .required_unless("hash")
-                        .help("Attempt to open the gistit on your default browser")
+                        .help("Fetch and open a gistit on your default browser")
                         .takes_value(true),
                 )
                 .arg(

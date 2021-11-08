@@ -12,8 +12,8 @@ pub enum Error {
     /// Clipboard feature errors
     #[cfg(feature = "clipboard")]
     Clipboard(clipboard::ClipboardError),
-    /// Gistit addons errors
-    Addons(addons::AddonsError),
+    /// Gistit params errors
+    Params(params::ParamsError),
     /// I/O operations errors
     IO(io::IoError),
     /// File encrypting/hashing errors
@@ -31,7 +31,7 @@ impl std::fmt::Debug for Error {
             Self::Clipboard(err) => {
                 write!(f, "{}", err)
             }
-            Self::Addons(err) => {
+            Self::Params(err) => {
                 write!(f, "{}", err)
             }
             Self::Encryption(err) => {
@@ -102,11 +102,11 @@ Something went wrong during encryption.
     }
 }
 
-/// Addons module errors
-pub mod addons {
+/// Params module errors
+pub mod params {
     use super::{Colorize, Error};
 
-    pub enum AddonsError {
+    pub enum ParamsError {
         DescriptionCharRange,
         AuthorCharRange,
         Colorscheme(Option<String>),
@@ -114,16 +114,16 @@ pub mod addons {
         InvalidLifespan,
     }
 
-    impl From<AddonsError> for Error {
-        fn from(err: AddonsError) -> Self {
-            Self::Addons(err)
+    impl From<ParamsError> for Error {
+        fn from(err: ParamsError) -> Self {
+            Self::Params(err)
         }
     }
 
-    impl std::fmt::Display for AddonsError {
+    impl std::fmt::Display for ParamsError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
-                AddonsError::DescriptionCharRange => {
+                ParamsError::DescriptionCharRange => {
                     println!("{}", "[DescriptionCharLength]".red());
                     write!(
                         f,
@@ -135,7 +135,7 @@ MIN = {} MAX = {}
                         "100 chars".yellow()
                     )
                 }
-                AddonsError::AuthorCharRange => {
+                ParamsError::AuthorCharRange => {
                     println!("{}", "[AuthorCharRange]".red());
                     write!(
                         f,
@@ -147,7 +147,7 @@ MIN = {} MAX = {}
                         "30 chars".yellow()
                     )
                 }
-                AddonsError::Colorscheme(maybe_close_match) => {
+                ParamsError::Colorscheme(maybe_close_match) => {
                     let suggest = maybe_close_match.as_ref().map(|close_match| {
                         format!("\n\nDid you mean: '{}'?", close_match.bright_blue())
                     });
@@ -162,7 +162,7 @@ run '{}' to list supported colorschemes.{}
                         suggest.unwrap_or_else(|| "".to_string())
                     )
                 }
-                AddonsError::LifespanRange => {
+                ParamsError::LifespanRange => {
                     println!("{}", "[LifespanRange]".red());
                     write!(
                         f,
@@ -174,7 +174,7 @@ MIN = {} MAX = {}
                         "3600s (default)".yellow()
                     )
                 }
-                AddonsError::InvalidLifespan => {
+                ParamsError::InvalidLifespan => {
                     println!("{}", "[InvalidLifespan]".red());
                     write!(
                         f,

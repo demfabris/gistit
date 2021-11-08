@@ -1,58 +1,61 @@
 //! The Send feature
-use clap::ArgMatches;
-use std::convert::TryFrom;
+
 use std::ffi::OsStr;
 
 use async_trait::async_trait;
+use clap::ArgMatches;
 use crypto::digest::Digest;
 
 use crate::clipboard::Clipboard;
 use crate::dispatch::Dispatch;
 use crate::encrypt::{HashedSecret, Hasher, Secret};
+use crate::params::{Params, SendParams};
 use crate::{Error, Result};
 
-use addons::Addons;
 use file::{File, FileReady};
 
-pub mod addons;
 pub mod file;
 
 /// The Send action runtime parameters
 pub struct Action<'a> {
     /// The file to be sent.
-    file: &'a OsStr,
+    pub file: &'a OsStr,
     /// The description of this Gistit.
-    description: Option<&'a str>,
+    pub description: Option<&'a str>,
     /// The author information.
-    author: Option<&'a str>,
+    pub author: Option<&'a str>,
     /// The colorscheme to be displayed.
-    theme: &'a str,
+    pub theme: &'a str,
     /// The password to encrypt.
-    secret: Option<&'a str>,
+    pub secret: Option<&'a str>,
     /// The custom lifespan of a Gistit snippet.
-    lifespan: &'a str,
+    pub lifespan: &'a str,
     /// Whether or not to copy successfully sent gistit hash to clipboard.
-    clipboard: bool,
+    pub clipboard: bool,
     /// dry_run
     #[doc(hidden)]
-    dry_run: bool,
+    pub dry_run: bool,
 }
 
-impl<'act, 'args> TryFrom<&'act ArgMatches<'args>> for Action<'act> {
-    type Error = Error;
-
-    /// Parse [`ArgMatches`] into the Send action or error out
-    fn try_from(args: &'act ArgMatches<'args>) -> std::result::Result<Self, Self::Error> {
-        Ok(Self {
-            file: args.value_of_os("file").ok_or(Self::Error::Argument)?,
+impl<'act, 'args> Action<'act> {
+    /// Parse [`ArgMatches`] into the dispatchable Send action
+    ///
+    /// # Errors
+    ///
+    /// Fails with argument errors
+    pub fn from_args(
+        args: &'act ArgMatches<'args>,
+    ) -> Result<Box<dyn Dispatch<InnerData = Payload> + 'act>> {
+        Ok(Box::new(Self {
+            file: args.value_of_os("file").ok_or(Error::Argument)?,
             description: args.value_of("description"),
             author: args.value_of("author"),
-            theme: args.value_of("theme").ok_or(Self::Error::Argument)?,
+            theme: args.value_of("theme").ok_or(Error::Argument)?,
             secret: args.value_of("secret"),
-            lifespan: args.value_of("lifespan").ok_or(Self::Error::Argument)?,
+            lifespan: args.value_of("lifespan").ok_or(Error::Argument)?,
             clipboard: args.is_present("clipboard"),
             dry_run: args.is_present("dry-run"),
-        })
+        }))
     }
 }
 
@@ -60,7 +63,7 @@ impl<'act, 'args> TryFrom<&'act ArgMatches<'args>> for Action<'act> {
 #[derive(Default)]
 pub struct Payload {
     pub file: Option<Box<dyn FileReady + Send + Sync>>,
-    pub addons: Option<Addons>,
+    pub params: Option<SendParams>,
     pub secret: Option<HashedSecret>,
     pub hash: Option<String>,
 }
@@ -72,9 +75,9 @@ impl Payload {
         Self::default()
     }
 
-    /// Append a checked instance of [`Addons`].
-    pub fn with_addons(&mut self, addons: Addons) -> &mut Self {
-        self.addons = Some(addons);
+    /// Append a checked instance of [`Params`].
+    pub fn with_params(&mut self, params: SendParams) -> &mut Self {
+        self.params = Some(params);
         self
     }
 
@@ -125,19 +128,18 @@ impl Payload {
 /// The dispatch implementation for Send action
 #[async_trait]
 impl Dispatch for Action<'_> {
-    type Payload = Payload;
-
+    type InnerData = Payload;
     /// Build each top level entity and run inner checks concurrently to assert valid input and
     /// output data.
     ///
     /// If all checks runs successfully, assemble the payload structure to later be dispatched
     /// by [`Dispatch::dispatch`]
-    async fn prepare(&self) -> Result<Self::Payload> {
+    async fn prepare(&self) -> Result<Self::InnerData> {
         let mut payload = Payload::with_none();
-        // Check addons first and exit faster if there's a invalid input
-        let addons = Addons::from_action(self)?.check_consume().await?;
-        payload.with_addons(addons);
-        // Perform the file check
+        // Check params first and exit faster if there's a invalid input
+        let params = Params::from_send(self)?.check_consume().await?;
+        payload.with_params(params);
+        //Perform the file check
         let file = File::from_path(self.file).await?.check_consume().await?;
         // If secret provided, hash it and encrypt file
         if let Some(secret_str) = self.secret {
@@ -162,7 +164,7 @@ impl Dispatch for Action<'_> {
         }
         Ok(payload)
     }
-    async fn dispatch(&self, payload: Self::Payload) -> Result<()> {
+    async fn dispatch(&self, payload: Self::InnerData) -> Result<()> {
         if self.dry_run {
             return Ok(());
         }
