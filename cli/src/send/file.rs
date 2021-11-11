@@ -302,8 +302,7 @@ impl FileReady for File {
     async fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut buffer: Vec<u8> = Vec::new();
         let mut file = self.inner.try_clone().await?;
-        let bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buffer).await?;
-        log::trace!("read {} bytes from file", bytes_read);
+        let _bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buffer).await?;
         Ok(buffer)
     }
 }
@@ -329,7 +328,6 @@ impl File {
     ///
     /// Fails with [`Encryption`] with the encryption process goes wrong
     pub async fn into_encrypted(self, key: impl AsRef<str> + Sync + Send) -> Result<EncryptedFile> {
-        log::trace!("Encrypting file with key {}", key.as_ref());
         let file_buf = self.to_bytes().await?;
         let encrypted = cryptor_simple(key.as_ref())
             .into_encryptor()
@@ -351,10 +349,8 @@ impl File {
     ///
     /// Fails with [`UnsuportedFile`]
     pub async fn check_consume(self) -> Result<Self> {
-        log::trace!("[FILE]");
-        // Do this sequentially to output more accurate errors
         <Self as Check>::metadata(&self).await?;
-        <Self as Check>::extension(&self).await?;
+        <Self as Check>::extension(&self)?;
         Ok(self)
     }
 }
@@ -373,7 +369,7 @@ trait Check {
     /// # Errors
     ///
     /// Fails with [`UnsuportedFile`] if file extension isn't supported.
-    async fn extension(&self) -> Result<()>;
+    fn extension(&self) -> Result<()>;
 }
 
 #[async_trait]
@@ -388,17 +384,15 @@ impl Check for File {
         } else if !type_allowed {
             return Err(FileError::UnsupportedType(self.path.to_string_lossy().to_string()).into());
         }
-        log::trace!("[OK]: File metadata {:?}", attr);
         Ok(())
     }
-    async fn extension(&self) -> Result<()> {
+    fn extension(&self) -> Result<()> {
         let ext = Path::new(self.path.as_os_str())
             .extension()
             .and_then(OsStr::to_str)
             .ok_or(FileError::MissingExtension)?;
 
         if SUPPORTED_FILE_EXTENSIONS.contains_key(ext) {
-            log::trace!("[OK]: File ext: {}", ext);
             Ok(())
         } else {
             Err(FileError::UnsupportedExtension(ext.to_owned()).into())

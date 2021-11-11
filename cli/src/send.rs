@@ -137,16 +137,13 @@ impl Dispatch for Action<'_> {
     async fn prepare(&self) -> Result<Self::InnerData> {
         let mut payload = Payload::with_none();
         // Check params first and exit faster if there's a invalid input
-        let params = Params::from_send(self)?.check_consume().await?;
+        let params = Params::from_send(self)?.check_consume()?;
         payload.with_params(params);
-        //Perform the file check
+        // Perform the file check
         let file = File::from_path(self.file).await?.check_consume().await?;
         // If secret provided, hash it and encrypt file
         if let Some(secret_str) = self.secret {
-            let secret = Secret::new(secret_str)
-                .check_consume()
-                .await?
-                .into_hashed()?;
+            let secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
             let encrypted_file = file.into_encrypted(secret.to_str()).await?;
             payload
                 .with_file(Box::new(encrypted_file))
@@ -156,6 +153,7 @@ impl Dispatch for Action<'_> {
         }
         let payload_hash = payload.as_hash().await?;
         payload.with_hash(&payload_hash);
+
         if self.clipboard {
             Clipboard::new(payload_hash)
                 .try_into_selected()?

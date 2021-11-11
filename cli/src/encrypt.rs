@@ -76,9 +76,8 @@ impl Secret {
     /// # Errors
     ///
     /// Fails with [`Encryption`] error
-    pub async fn check_consume(self) -> Result<Self> {
-        log::trace!("[SECRET]");
-        <Self as Check>::length(&self).await?;
+    pub fn check_consume(self) -> Result<Self> {
+        <Self as Check>::length(&self)?;
         Ok(self)
     }
 }
@@ -106,14 +105,13 @@ impl HashedSecret {
 #[async_trait]
 trait Check {
     /// Check for allowed secret length
-    async fn length(&self) -> Result<()>;
+    fn length(&self) -> Result<()>;
 }
 
 #[async_trait]
 impl Check for Secret {
-    async fn length(&self) -> Result<()> {
+    fn length(&self) -> Result<()> {
         if ALLOWED_SECRET_CHAR_LENGTH_RANGE.contains(&self.inner.len()) {
-            log::trace!("[OK]: Secret length");
             Ok(())
         } else {
             Err(EncryptionError::SecretLength.into())

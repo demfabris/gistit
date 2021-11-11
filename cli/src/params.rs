@@ -121,13 +121,11 @@ impl SendParams {
     /// # Errors
     ///
     /// Fails with [`InvalidParams`] error
-    pub async fn check_consume(self) -> Result<Self> {
-        let _ = tokio::try_join! {
-            <Self as Check>::lifespan(&self),
-            <Self as Check>::colorscheme(&self),
-            <Self as Check>::description(&self),
-            <Self as Check>::author(&self),
-        }?;
+    pub fn check_consume(self) -> Result<Self> {
+        <Self as Check>::lifespan(&self)?;
+        <Self as Check>::colorscheme(&self)?;
+        <Self as Check>::description(&self)?;
+        <Self as Check>::author(&self)?;
         Ok(self)
     }
 }
@@ -138,12 +136,10 @@ impl FetchParams {
     /// # Errors
     ///
     /// Fails with [`InvalidParams`] error
-    pub async fn check_consume(self) -> Result<Self> {
-        let _ = tokio::try_join! {
-            <Self as Check>::colorscheme(&self),
-            <Self as Check>::hash(&self),
-            <Self as Check>::url(&self),
-        }?;
+    pub fn check_consume(self) -> Result<Self> {
+        <Self as Check>::colorscheme(&self)?;
+        <Self as Check>::hash(&self)?;
+        <Self as Check>::url(&self)?;
         Ok(self)
     }
 }
@@ -188,14 +184,14 @@ trait Check {
     ///
     /// Fails with [`InvalidParams`] if colorscheme isn't named properly.
     /// Prompts the user with a suggestion if it fuzzy matches agains't a probability.
-    async fn colorscheme(&self) -> Result<()>;
+    fn colorscheme(&self) -> Result<()>;
 
     /// Check provided lifetime limit range
     ///
     /// # Errors
     ///
     /// Fails with [`InvalidParams`] if the provided number is outside allowed range.
-    async fn lifespan(&self) -> Result<()>
+    fn lifespan(&self) -> Result<()>
     where
         Self: SendArgs,
     {
@@ -207,7 +203,7 @@ trait Check {
     /// # Errors
     ///
     /// Fails with [`InvalidParams`] if description is over allowed length
-    async fn description(&self) -> Result<()>
+    fn description(&self) -> Result<()>
     where
         Self: SendArgs,
     {
@@ -219,7 +215,7 @@ trait Check {
     /// # Errors
     ///
     /// Fails with [`InvalidParams`] if author name is over allowed length
-    async fn author(&self) -> Result<()>
+    fn author(&self) -> Result<()>
     where
         Self: SendArgs,
     {
@@ -231,7 +227,7 @@ trait Check {
     /// # Errors
     ///
     /// Fails with [`InvalidParams`] if hash is an invalid format
-    async fn hash(&self) -> Result<()>
+    fn hash(&self) -> Result<()>
     where
         Self: FetchArgs,
     {
@@ -243,7 +239,7 @@ trait Check {
     /// # Errors
     ///
     /// Fails with [`InvalidParams`] if url is invalid
-    async fn url(&self) -> Result<()>
+    fn url(&self) -> Result<()>
     where
         Self: FetchArgs,
     {
@@ -253,11 +249,10 @@ trait Check {
 
 #[async_trait]
 impl Check for SendParams {
-    async fn colorscheme(&self) -> Result<()> {
+    fn colorscheme(&self) -> Result<()> {
         Ok(try_match_colorscheme(&self.colorscheme)?)
     }
-
-    async fn lifespan(&self) -> Result<()>
+    fn lifespan(&self) -> Result<()>
     where
         Self: SendArgs,
     {
@@ -267,7 +262,7 @@ impl Check for SendParams {
             Err(ParamsError::LifespanRange.into())
         }
     }
-    async fn description(&self) -> Result<()>
+    fn description(&self) -> Result<()>
     where
         Self: SendArgs,
     {
@@ -282,7 +277,7 @@ impl Check for SendParams {
             },
         )
     }
-    async fn author(&self) -> Result<()>
+    fn author(&self) -> Result<()>
     where
         Self: SendArgs,
     {
@@ -301,13 +296,13 @@ impl Check for SendParams {
 
 #[async_trait]
 impl Check for FetchParams {
-    async fn colorscheme(&self) -> Result<()> {
+    fn colorscheme(&self) -> Result<()> {
         Ok(try_match_colorscheme(&self.colorscheme)?)
     }
-    async fn hash(&self) -> Result<()> {
+    fn hash(&self) -> Result<()> {
         Ok(())
     }
-    async fn url(&self) -> Result<()> {
+    fn url(&self) -> Result<()> {
         Ok(())
     }
 }
