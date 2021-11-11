@@ -13,3 +13,13 @@ pub trait Dispatch {
     /// Execute the action
     async fn dispatch(&self, payload: Self::InnerData) -> Result<()>;
 }
+
+#[macro_export]
+macro_rules! dispatch_from_args {
+    ($mod:path, $args:expr) => {{
+        use $mod as module;
+        let action = module::Action::from_args($args)?;
+        let payload = Dispatch::prepare(&*action).await?;
+        Dispatch::dispatch(&*action, payload).await?;
+    }};
+}
