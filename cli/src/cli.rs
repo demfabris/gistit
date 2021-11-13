@@ -13,7 +13,7 @@ pub fn app() -> App<'static, 'static> {
         .arg(
             Arg::with_name("colorschemes")
                 .long("colorschemes")
-                .help("List avaiable colorschemes"),
+                .help("List available colorschemes"),
         )
         .arg(
             Arg::with_name("silent")
@@ -73,10 +73,10 @@ pub fn app() -> App<'static, 'static> {
                         .default_value("atomDark")
                         .requires("file")
                         .takes_value(true)
-                        .help("The colorscheme to apply syntax highlighting")
+                        .help("The color scheme to apply syntax highlighting")
                         .long_help(
-                            "The colorscheme to apply syntax highlighting.
-Run `gistit --colorschemes` to list avaiable ones.",
+                            "The color scheme to apply syntax highlighting.
+Run `gistit --colorschemes` to list available ones.",
                         ),
                 )
                 .arg(
@@ -108,11 +108,11 @@ This is our best efforts at persisting the hash into the system clipboard after 
                     Arg::with_name("hash")
                         .short("h")
                         .help("Fetch a gistit via it's hash")
-                        .required_unless("url")
+                        .required_unless("URL")
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::with_name("url")
+                    Arg::with_name("URL")
                         .short("u")
                         .required_unless("hash")
                         .help("Fetch and open a gistit on your default browser")
@@ -131,12 +131,16 @@ This is our best efforts at persisting the hash into the system clipboard after 
                         .default_value("atomDark")
                         .requires("file")
                         .takes_value(true)
-                        .help("The colorscheme to apply syntax highlighting")
+                        .help("The color scheme to apply syntax highlighting")
                         .long_help(
-                            "The colorscheme to apply syntax highlighting.
-Run `gistit --colorschemes` to list avaiable ones.",
+                            "The color scheme to apply syntax highlighting.
+Run `gistit --colorschemes` to list available ones.",
                         ),
                 )
-                .arg(Arg::with_name("no-syntax-highlighting").help("Without syntax highlighting")),
+                .arg(
+                    Arg::with_name("no-syntax-highlighting")
+                        .long("no-syntax-highlighting")
+                        .help("Without syntax highlighting"),
+                ),
         )
 }

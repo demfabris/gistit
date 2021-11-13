@@ -42,7 +42,7 @@ impl Dispatch for Action<'_> {
         todo!()
     }
 
-    async fn dispatch(&self, payload: Self::InnerData) -> Result<()> {
+    async fn dispatch(&self, _payload: Self::InnerData) -> Result<()> {
         todo!()
     }
 }

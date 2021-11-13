@@ -297,7 +297,8 @@ impl Check for SendParams {
 #[async_trait]
 impl Check for FetchParams {
     fn colorscheme(&self) -> Result<()> {
-        Ok(try_match_colorscheme(&self.colorscheme)?)
+        // Ok(try_match_colorscheme(&self.colorscheme)?)
+        todo!()
     }
     fn hash(&self) -> Result<()> {
         Ok(())
