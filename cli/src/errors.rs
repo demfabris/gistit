@@ -112,6 +112,8 @@ pub mod params {
         Colorscheme(Option<String>),
         LifespanRange,
         InvalidLifespan,
+        InvalidUrl(String),
+        InvalidHash(String),
     }
 
     impl From<ParamsError> for Error {
@@ -182,6 +184,28 @@ MIN = {} MAX = {}
 invalid lifespan parameter.
 input is not a positive number
                     "#,
+                    )
+                }
+                ParamsError::InvalidUrl(err) => {
+                    println!("{}", "[InvalidUrl]".red());
+                    write!(
+                        f,
+                        r#"
+input is not a valid URL
+{}
+                    "#,
+                        err
+                    )
+                }
+                ParamsError::InvalidHash(err) => {
+                    println!("{}", "[InvalidHash]".red());
+                    write!(
+                        f,
+                        r#"
+input is not a valid gistit hash
+{}
+                    "#,
+                        err
                     )
                 }
             }

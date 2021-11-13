@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use lazy_static::lazy_static;
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use phf::{phf_set, Set};
+use url::Url;
 
 use std::borrow::ToOwned;
 use std::ops::RangeInclusive;
@@ -250,7 +251,7 @@ trait Check {
 #[async_trait]
 impl Check for SendParams {
     fn colorscheme(&self) -> Result<()> {
-        Ok(try_match_colorscheme(&self.colorscheme)?)
+        try_match_colorscheme(&self.colorscheme)
     }
     fn lifespan(&self) -> Result<()>
     where
@@ -297,13 +298,17 @@ impl Check for SendParams {
 #[async_trait]
 impl Check for FetchParams {
     fn colorscheme(&self) -> Result<()> {
-        // Ok(try_match_colorscheme(&self.colorscheme)?)
-        todo!()
+        try_match_colorscheme(&self.colorscheme)
     }
     fn hash(&self) -> Result<()> {
         Ok(())
     }
     fn url(&self) -> Result<()> {
-        Ok(())
+        if let Some(ref url) = self.url {
+            let _url = Url::parse(url).map_err(|err| ParamsError::InvalidUrl(err.to_string()))?;
+            Ok(())
+        } else {
+            Ok(())
+        }
     }
 }
