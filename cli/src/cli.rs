@@ -108,11 +108,11 @@ This is our best efforts at persisting the hash into the system clipboard after 
                     Arg::with_name("hash")
                         .short("h")
                         .help("Fetch a gistit via it's hash")
-                        .required_unless("URL")
+                        .required_unless("url")
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::with_name("URL")
+                    Arg::with_name("url")
                         .short("u")
                         .required_unless("hash")
                         .help("Fetch and open a gistit on your default browser")
@@ -129,7 +129,6 @@ This is our best efforts at persisting the hash into the system clipboard after 
                         .long("theme")
                         .short("t")
                         .default_value("atomDark")
-                        .requires("file")
                         .takes_value(true)
                         .help("The color scheme to apply syntax highlighting")
                         .long_help(
@@ -140,7 +139,7 @@ Run `gistit --colorschemes` to list available ones.",
                 .arg(
                     Arg::with_name("no-syntax-highlighting")
                         .long("no-syntax-highlighting")
-                        .help("Without syntax highlighting"),
+                        .help("Disable syntax highlighting"),
                 ),
         )
 }
