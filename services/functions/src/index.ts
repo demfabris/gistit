@@ -1,17 +1,15 @@
 import * as __fn from "firebase-functions";
 import * as __adm from "firebase-admin";
-import schema from "../../schema.json";
+import example from "../../example.json";
 
-const constants = {
-  __HASH_LENGTH: 33,
-  __HASH_P2P_PREFIX: "@",
-  __HASH_SERVER_PREFIX: "$",
-  __DESCRIPTION_CHAR_LENGTH: 100,
-  __AUTHOR_CHAR_LENGTH: 30,
-  __SECRET_CHAR_LENGTH: 30,
-  __TIMESTAMP_DELTA_LIMIT: 120000,
-  __LIFESPAN_MAX_VALUE: 3600,
-};
+const HASH_LENGTH = 33;
+const HASH_P2P_PREFIX = "@";
+const HASH_SERVER_PREFIX = "$";
+const DESCRIPTION_CHAR_LENGTH = 100;
+const AUTHOR_CHAR_LENGTH = 30;
+const SECRET_CHAR_LENGTH = 30;
+const TIMESTAMP_DELTA_LIMIT = 120000;
+const LIFESPAN_MAX_VALUE = 3600;
 
 __adm.initializeApp();
 const db = __adm.firestore();
@@ -27,31 +25,15 @@ type GistitPayload = {
   gistit: {
     name: string;
     lang: string;
-    file: {
-      mime: string;
-      data: string;
-    };
+    data: string;
   };
 };
 
-/**
- * Compute the time when the gistit should be destroyed
- * @param {GistitPayload} payload
- * @return {number}
- */
-function getTimeToRemove(payload: GistitPayload): number {
-  return payload.timestamp + payload.lifespan;
-}
-
 (async () => {
   try {
-    const {hash, ...rest} = schema.gistits.first;
+    const {hash, ...rest} = example as GistitPayload;
     await db.collection("gistits").doc(hash).set(rest);
-    await db.collection("reserved").doc("server").set({__state: "running"});
-    await db
-        .collection("toRemove")
-        .doc(hash)
-        .set({removeAt: getTimeToRemove(schema.gistits.first)});
+    await db.collection("__db").doc("server").set({state: "running"});
     __fn.logger.log("successfully init db");
   } catch (err) {
     __fn.logger.error(err);
@@ -63,16 +45,16 @@ function getTimeToRemove(payload: GistitPayload): number {
  * @param {string} hash
  */
 function checkHash(hash: string) {
-  if (hash.length === constants.__HASH_LENGTH) {
+  if (hash.length === HASH_LENGTH) {
     switch (hash[0]) {
-      case constants.__HASH_P2P_PREFIX:
+      case HASH_P2P_PREFIX:
         __fn.logger.log("p2p");
         break;
-      case constants.__HASH_SERVER_PREFIX:
+      case HASH_SERVER_PREFIX:
         __fn.logger.log("server");
         break;
       default:
-        throw Error("invalid hash");
+        throw Error("invalid gistit hash format");
     }
   }
 }
@@ -89,11 +71,11 @@ function checkParamsCharLength(
     secret: string
 ) {
   if (
-    description.length > constants.__DESCRIPTION_CHAR_LENGTH ||
-    author.length > constants.__AUTHOR_CHAR_LENGTH ||
-    secret.length > constants.__SECRET_CHAR_LENGTH
+    description.length > DESCRIPTION_CHAR_LENGTH ||
+    author.length > AUTHOR_CHAR_LENGTH ||
+    secret.length > SECRET_CHAR_LENGTH
   ) {
-    throw Error("invalid author or description char length");
+    throw Error("Invalid author or description character length");
   }
 }
 
@@ -105,14 +87,13 @@ function checkParamsCharLength(
  */
 function checkTimeDelta(timestamp: number, lifespan: number) {
   const serverNow = Date.now();
-  const timeDiff = serverNow - timestamp * 1000;
-  __fn.logger.log("serverNow: ", serverNow);
-  __fn.logger.log("timeDifff: ", timeDiff);
-  if (Math.abs(timeDiff) > constants.__TIMESTAMP_DELTA_LIMIT) {
-    throw Error("invalid timestamp");
+  // TODO: The incoming timestamp is in seconds, we need to provide in ms
+  const timeDelta = serverNow - timestamp * 1000;
+  if (Math.abs(timeDelta) > TIMESTAMP_DELTA_LIMIT) {
+    throw Error("time delta beyond allowed limit, check your system time");
   }
-  if (lifespan > constants.__LIFESPAN_MAX_VALUE) {
-    throw Error("invalid lifespan");
+  if (lifespan > LIFESPAN_MAX_VALUE) {
+    throw Error("invalid lifespan parameter value");
   }
 }
 
@@ -126,30 +107,45 @@ export const load = __fn.https.onRequest(async (req, res) => {
       lifespan,
       timestamp,
       secret,
-      gistit: {
-        name,
-        lang,
-        file: {mime, data},
-      },
+      gistit: {name, lang, data},
     } = req.body;
+
     checkHash(hash);
     checkParamsCharLength(author, description, secret);
     checkTimeDelta(timestamp, lifespan);
-    await db
-        .collection("gistits")
-        .doc(hash)
-        .set({
-          author,
-          description,
-          colorscheme,
-          lifespan,
-          secret,
-          timestamp,
-          gistit: {name, lang, file: {mime, data}},
-        });
-    res.send("ok");
+
+    await db.collection("gistits").doc(hash).set({
+      author,
+      description,
+      colorscheme,
+      lifespan,
+      secret,
+      timestamp,
+      gistit: {name, lang, data},
+    });
+    res.send({success: hash});
   } catch (err) {
     __fn.logger.error(err);
-    res.status(400).send("Invalid request body");
+    res.status(400).send({error: (err as Error).message});
   }
 });
+
+interface onChangeContext extends __fn.EventContext {
+  params: {
+    hash: string;
+  };
+}
+export const writeReservedData = __fn.firestore
+    .document("gistits/{hash}")
+    .onWrite(async (change, context) => {
+      const hash = (context as onChangeContext).params.hash;
+      const {timestamp, lifespan} = change.after.data() as GistitPayload;
+
+      return db
+          .collection("reserved")
+          .doc(hash)
+          .set({
+            removeAt: timestamp + lifespan,
+            reupload: false,
+          });
+    });

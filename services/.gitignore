@@ -11,4 +11,4 @@ node_modules/
 keys/*
 
 # Logs
-functions/*.logs
+*.log
