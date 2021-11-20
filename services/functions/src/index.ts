@@ -1,6 +1,5 @@
 import * as __fn from "firebase-functions";
 import * as __adm from "firebase-admin";
-import example from "../../example.json";
 import defs from "./defs.json";
 
 __adm.initializeApp();
@@ -21,17 +20,9 @@ type GistitPayload = {
   };
 };
 
-try {
-  const { hash, ...rest } = example as GistitPayload;
-  db.collection("gistits").doc(hash).set(rest);
-  db.collection("__db").doc("server").set({ state: "running" });
-  __fn.logger.log("successfully init db");
-} catch (err) {
-  __fn.logger.error(err);
-}
-
 /**
  * Checks for a valid gistit hash
+ * @function
  * @param {string} hash
  */
 function checkHash(hash: string) {
@@ -66,6 +57,7 @@ function paramValueInRange(obj: RangeObj, value: number): boolean {
 
 /**
  * Checks author and description char length
+ * @function
  * @param {string} author
  * @param {string} description
  * @param {string} secret
@@ -87,13 +79,13 @@ function checkParamsCharLength(
 /**
  * Check if timestamp is between margin of error
  * If it took more than 120s to reach server we refuse it
+ * @function
  * @param {number} timestamp
  * @param {number} lifespan
  */
 function checkTimeDelta(timestamp: number, lifespan: number) {
   const serverNow = Date.now();
-  // TODO: The incoming timestamp is in seconds, we need to provide in ms
-  const timeDelta = serverNow - timestamp * 1000;
+  const timeDelta = serverNow - timestamp;
 
   if (Math.abs(timeDelta) > defs.TIMESTAMP_DELTA_LIMIT_MS)
     throw Error("time delta beyond allowed limit, check your system time");
@@ -140,26 +132,49 @@ interface onChangeContext extends __fn.EventContext {
     hash: string;
   };
 }
-export const writeReservedData = __fn.firestore
+export const createReservedData = __fn.firestore
   .document("gistits/{hash}")
-  .onWrite(async (change, context) => {
+  .onCreate(async (snap, context) => {
+    const hash = (context as onChangeContext).params.hash;
+    const { timestamp, lifespan } = snap.data() as GistitPayload;
+
+    return db
+      .collection("reserved")
+      .doc(hash)
+      .set({
+        removeAt: timestamp + lifespan * 1000,
+        reuploaded: 0,
+      });
+  });
+
+export const updateReservedData = __fn.firestore
+  .document("gistits/{hash}")
+  .onUpdate(async (change, context) => {
     const hash = (context as onChangeContext).params.hash;
     const { timestamp, lifespan } = change.after.data() as GistitPayload;
 
     return db
       .collection("reserved")
       .doc(hash)
-      .set({
-        removeAt: timestamp + lifespan,
-        reupload: false,
+      .update({
+        removeAt: timestamp + lifespan * 1000,
+        reuploaded: __adm.firestore.FieldValue.increment(1),
       });
   });
 
 export const scheduledCleanup = __fn.pubsub
-  .schedule("every 5 mins")
-  .onRun((context) => {
-    db.collection("test").doc("asd").set({ hello: "world" });
-    __fn.logger.log("test schedule");
-    __fn.logger.log(context);
+  .schedule("every 30 mins")
+  .onRun(async () => {
+    const expiredDocuments = await db
+      .collection("reserved")
+      .where("removeAt", "<", Date.now())
+      .get();
+
+    expiredDocuments.forEach(async (doc) => {
+      const hash = doc.id;
+      await db.doc(`reserved/${hash}`).delete();
+      await db.doc(`gistits/${hash}`).delete();
+      __fn.logger.info("deleted hash: ", hash);
+    });
     return null;
   });
