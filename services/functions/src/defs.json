@@ -1,0 +1,22 @@
+{
+  "HASH_LENGTH": 33,
+  "HASH_P2P_PREFIX": "@",
+  "HASH_SERVER_PREFIX": "$",
+  "DESCRIPTION_CHAR_LENGTH": {
+    "MIN": 10,
+    "MAX": 100
+  },
+  "AUTHOR_CHAR_LENGTH": {
+    "MIN": 3,
+    "MAX": 30
+  },
+  "SECRET_CHAR_LENGTH": {
+    "MIN": 5,
+    "MAX": 30
+  },
+  "TIMESTAMP_DELTA_LIMIT_MS": 120000000,
+  "LIFESPAN_VALUE": {
+    "MIN": 300,
+    "MAX": 3600
+  }
+}
