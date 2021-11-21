@@ -345,6 +345,12 @@ Something went wrong during an I/O operation:
             Self::IO(IoError::Other(err.to_string()))
         }
     }
+
+    impl From<reqwest::Error> for Error {
+        fn from(err: reqwest::Error) -> Self {
+            Self::IO(IoError::Other(err.to_string()))
+        }
+    }
 }
 
 /// Clipboard module errors

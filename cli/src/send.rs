@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use clap::ArgMatches;
 use crypto::digest::Digest;
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::clipboard::Clipboard;
@@ -104,6 +105,11 @@ impl Payload {
         Ok(hash)
     }
 
+    /// Serializes this payload into [`serde_json::Value`]
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
     async fn into_json(self, hash: &str) -> Result<serde_json::Value> {
         let file_ref = self.file.inner();
         Ok(json!({
@@ -128,6 +134,13 @@ impl Payload {
     }
 }
 
+/// The cloud functions response structure
+#[derive(Deserialize, Debug)]
+struct Response {
+    success: Option<String>,
+    error: Option<String>,
+}
+
 /// The dispatch implementation for Send action
 #[async_trait]
 impl Dispatch for Action<'_> {
@@ -140,10 +153,9 @@ impl Dispatch for Action<'_> {
     async fn prepare(&self) -> Result<Self::InnerData> {
         // Check params first and exit faster if there's a invalid input
         let params = Params::from_send(self)?.check_consume()?;
-        // If secret provided, hash it and encrypt file
         let (file, maybe_hashed_secret): (Box<dyn FileReady + Send + Sync>, Option<HashedSecret>) = {
             let file = File::from_path(self.file).await?.check_consume().await?;
-
+            // If secret provided, hash it and encrypt file
             if let Some(secret_str) = self.secret {
                 let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
                 let encrypted_file = file.into_encrypted(hashed_secret.to_str()).await?;
@@ -161,6 +173,14 @@ impl Dispatch for Action<'_> {
         }
         let hash = payload.hash().await?;
         let json = payload.into_json(&hash).await?;
+        let res: Response = reqwest::Client::new()
+            .post("http://localhost:4001/gistit-base/us-central1/load")
+            .json(&json)
+            .send()
+            .await?
+            .json()
+            .await?;
+        dbg!(res);
         if self.clipboard {
             Clipboard::new(hash)
                 .try_into_selected()?
