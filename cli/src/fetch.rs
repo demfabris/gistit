@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 
 use crate::dispatch::Dispatch;
+use crate::encrypt::Secret;
 use crate::params::{FetchParams, Params};
 use crate::{Error, Result};
 
@@ -38,13 +39,32 @@ pub struct Payload {
     pub params: Option<FetchParams>,
 }
 
+impl Payload {
+    /// Trivially initialize payload structure
+    #[must_use]
+    pub fn with_none() -> Self {
+        Self::default()
+    }
+
+    /// Append a checked instance of [`Params`].
+    pub fn with_params(&mut self, params: FetchParams) -> &mut Self {
+        self.params = Some(params);
+        self
+    }
+}
+
 #[async_trait]
 impl Dispatch for Action<'_> {
     type InnerData = Payload;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
+        let mut payload = Payload::with_none();
         let params = Params::from_fetch(self)?.check_consume()?;
-        todo!()
+        if let Some(secret_str) = self.secret {
+            Secret::new(secret_str).check_consume()?;
+        }
+        payload.with_params(params);
+        Ok(payload)
     }
 
     async fn dispatch(&self, _payload: Self::InnerData) -> Result<()> {
