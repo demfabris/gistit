@@ -12,8 +12,9 @@ version = "0.1.0"
 
 [features]
 default = ["clipboard", "fetch"]
-clipboard = ["which", "base64"]
+clipboard = ["which"]
 fetch = ["bat"]
+send = []
 
 [dependencies]
 clap = "2.33.3"
@@ -27,11 +28,11 @@ rust-crypto = "0.2.36"
 rand = "0.8.4"
 colored = "2.0.0"
 url = "2.2.2"
-reqwest = "0.11.6"
+reqwest = { version = "0.11.6", features = ["json"] }
 serde = "1.0.117"
 serde_json = "1.0.59"
+base64 = "0.13.0"
 which = { version = "4.2.2", optional = true }
-base64 = { version = "0.13.0", optional = true }
 bat = { version = "0.18.3", optional = true, default-features = false, features = ["atty", "wild", "dirs-next", "regex-onig"] }
 
 [dependencies.tokio]

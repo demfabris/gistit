@@ -1,6 +1,7 @@
 //! The Send feature
 
 use std::ffi::OsStr;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use clap::ArgMatches;
@@ -92,7 +93,7 @@ impl Payload {
     ///
     /// Fails with [`std::io::Error`]
     async fn hash(&self) -> Result<String> {
-        let file_buf = self.file.as_ref().to_bytes().await?;
+        let file_buf = self.file.to_bytes().await?;
         let maybe_secret_str = self.maybe_secret.as_ref().map_or("", |s| s.to_str());
         // Digest and collect output
         let hash = Hasher::default()
@@ -101,6 +102,29 @@ impl Payload {
             .consume()
             .result_str();
         Ok(hash)
+    }
+
+    async fn into_json(self, hash: &str) -> Result<serde_json::Value> {
+        let file_ref = self.file.inner();
+        Ok(json!({
+            "hash": hash,
+            "author": self.params.author,
+            "description": self.params.description,
+            "colorscheme": self.params.colorscheme,
+            "lifespan": self.params.lifespan,
+            "secret": self.maybe_secret.map(|t| t.to_str().to_owned()),
+            "timestamp": SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Check your system time")
+                .as_millis()
+                .to_string(),
+            "gistit": {
+                "name": file_ref.name(),
+                "lang": file_ref.lang(),
+                "size": file_ref.inner.metadata().await?.len(),
+                "data": base64::encode(self.file.to_bytes().await?)
+            }
+        }))
     }
 }
 
@@ -135,14 +159,14 @@ impl Dispatch for Action<'_> {
         if self.dry_run {
             return Ok(());
         }
+        let hash = payload.hash().await?;
+        let json = payload.into_json(&hash).await?;
         if self.clipboard {
-            Clipboard::new(payload.hash().await?)
+            Clipboard::new(hash)
                 .try_into_selected()?
                 .into_provider()
                 .set_contents()?;
         }
-        let req = reqwest::Client::new();
-        let res = req.post("https://us-central1-gistit-base.cloudfunctions.net/load");
         Ok(())
     }
 }
