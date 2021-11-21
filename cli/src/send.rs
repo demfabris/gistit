@@ -61,42 +61,25 @@ impl<'act, 'args> Action<'act> {
 }
 
 /// The parsed/checked data that should be dispatched
-#[derive(Default)]
 pub struct Payload {
-    pub file: Option<Box<dyn FileReady + Send + Sync>>,
-    pub params: Option<SendParams>,
-    pub secret: Option<HashedSecret>,
-    pub hash: Option<String>,
+    pub file: Box<dyn FileReady + Send + Sync>,
+    pub params: SendParams,
+    pub maybe_secret: Option<HashedSecret>,
 }
 
 impl Payload {
     /// Trivially initialize payload structure
     #[must_use]
-    fn with_none() -> Self {
-        Self::default()
-    }
-
-    /// Append a checked instance of [`Params`].
-    fn with_params(&mut self, params: SendParams) -> &mut Self {
-        self.params = Some(params);
-        self
-    }
-
-    /// Append a checked instance of [`File`] or [`EncryptedFile`]
-    fn with_file(&mut self, file: Box<dyn FileReady + Send + Sync>) -> &mut Self {
-        self.file = Some(file);
-        self
-    }
-
-    /// Append a checked instance of [`HashedSecret`]
-    fn with_secret(&mut self, secret: HashedSecret) -> &mut Self {
-        self.secret = Some(secret);
-        self
-    }
-
-    fn with_hash(&mut self, hash: impl Into<String>) -> &mut Self {
-        self.hash = Some(hash.into());
-        self
+    fn new(
+        file: Box<dyn FileReady + Send + Sync>,
+        params: SendParams,
+        maybe_secret: Option<HashedSecret>,
+    ) -> Self {
+        Self {
+            file,
+            params,
+            maybe_secret,
+        }
     }
 
     /// Hash payload fields.
@@ -108,14 +91,9 @@ impl Payload {
     /// # Errors
     ///
     /// Fails with [`std::io::Error`]
-    async fn as_hash(&self) -> Result<String> {
-        let file_buf = self
-            .file
-            .as_ref()
-            .expect("to have a file")
-            .to_bytes()
-            .await?;
-        let maybe_secret_str = self.secret.as_ref().map_or("", |s| s.to_str());
+    async fn hash(&self) -> Result<String> {
+        let file_buf = self.file.as_ref().to_bytes().await?;
+        let maybe_secret_str = self.maybe_secret.as_ref().map_or("", |s| s.to_str());
         // Digest and collect output
         let hash = Hasher::default()
             .digest_buf(&file_buf)
@@ -136,36 +114,32 @@ impl Dispatch for Action<'_> {
     /// If all checks runs successfully, assemble the payload structure to later be dispatched
     /// by [`Dispatch::dispatch`]
     async fn prepare(&self) -> Result<Self::InnerData> {
-        let mut payload = Payload::with_none();
         // Check params first and exit faster if there's a invalid input
         let params = Params::from_send(self)?.check_consume()?;
-        payload.with_params(params);
-        // Perform the file check
-        let file = File::from_path(self.file).await?.check_consume().await?;
         // If secret provided, hash it and encrypt file
-        if let Some(secret_str) = self.secret {
-            let secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
-            let encrypted_file = file.into_encrypted(secret.to_str()).await?;
-            payload
-                .with_file(Box::new(encrypted_file))
-                .with_secret(secret);
-        } else {
-            payload.with_file(Box::new(file));
-        }
-        let payload_hash = payload.as_hash().await?;
-        payload.with_hash(&payload_hash);
+        let (file, maybe_hashed_secret): (Box<dyn FileReady + Send + Sync>, Option<HashedSecret>) = {
+            let file = File::from_path(self.file).await?.check_consume().await?;
 
-        if self.clipboard {
-            Clipboard::new(payload_hash)
-                .try_into_selected()?
-                .into_provider()
-                .set_contents()?;
-        }
+            if let Some(secret_str) = self.secret {
+                let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
+                let encrypted_file = file.into_encrypted(hashed_secret.to_str()).await?;
+                (Box::new(encrypted_file), Some(hashed_secret))
+            } else {
+                (Box::new(file), None)
+            }
+        };
+        let payload = Payload::new(file, params, maybe_hashed_secret);
         Ok(payload)
     }
     async fn dispatch(&self, payload: Self::InnerData) -> Result<()> {
         if self.dry_run {
             return Ok(());
+        }
+        if self.clipboard {
+            Clipboard::new(payload.hash().await?)
+                .try_into_selected()?
+                .into_provider()
+                .set_contents()?;
         }
         let req = reqwest::Client::new();
         let res = req.post("https://us-central1-gistit-base.cloudfunctions.net/load");
