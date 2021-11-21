@@ -101,10 +101,10 @@ impl SendArgs for SendParams {}
 /// The data structure that holds data to be checked/dispatched during a [`SendAction`]
 #[derive(Clone, Default, Debug)]
 pub struct SendParams {
-    author: Option<String>,
-    description: Option<String>,
-    colorscheme: String,
-    lifespan: u16,
+    pub author: Option<String>,
+    pub description: Option<String>,
+    pub colorscheme: String,
+    pub lifespan: u16,
 }
 
 /// Marker trait for fetch action
@@ -113,9 +113,9 @@ impl FetchArgs for FetchParams {}
 /// The data structure that holds data to be checked/dispatched during a [`FetchAction`]
 #[derive(Clone, Default, Debug)]
 pub struct FetchParams {
-    hash: Option<String>,
-    url: Option<String>,
-    colorscheme: String,
+    pub hash: Option<String>,
+    pub url: Option<String>,
+    pub colorscheme: String,
 }
 
 impl SendParams {
