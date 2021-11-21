@@ -306,6 +306,9 @@ pub mod io {
         StdinWrite(String),
         /// Process hanged/can't close
         ProcessWait(String),
+        /// Something wrong happened during a request
+        Request(String),
+        /// Unknown
         Other(String),
     }
 
@@ -318,6 +321,17 @@ pub mod io {
                         f,
                         r#"
 Something went wrong during an I/O operation:
+{}
+                    "#,
+                        err_string.yellow()
+                    )
+                }
+                Self::Request(err_string) => {
+                    println!("{}", "[IoError]".red());
+                    write!(
+                        f,
+                        r#"
+Something went wrong during a request:
 {}
                     "#,
                         err_string.yellow()
@@ -348,7 +362,7 @@ Something went wrong during an I/O operation:
 
     impl From<reqwest::Error> for Error {
         fn from(err: reqwest::Error) -> Self {
-            Self::IO(IoError::Other(err.to_string()))
+            Self::IO(IoError::Request(err.to_string()))
         }
     }
 }
@@ -470,7 +484,9 @@ This is not expected, check if your clipboard program installation is healthy.
                             output
                         )
                     }
-                    io::IoError::ProcessWait(output) | io::IoError::Other(output) => {
+                    io::IoError::ProcessWait(output)
+                    | io::IoError::Other(output)
+                    | io::IoError::Request(output) => {
                         println!("{} {}", "[Clipboard]".blue(), "[BinExecution]".red());
                         write!(
                             f,

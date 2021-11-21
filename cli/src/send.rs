@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use clap::ArgMatches;
+use colored::Colorize;
 use crypto::digest::Digest;
 use serde::Deserialize;
 use serde_json::json;
@@ -12,12 +13,15 @@ use serde_json::json;
 use crate::clipboard::Clipboard;
 use crate::dispatch::Dispatch;
 use crate::encrypt::{HashedSecret, Hasher, Secret};
+use crate::errors::io::IoError;
 use crate::params::{Params, SendParams};
 use crate::{Error, Result};
 
 use file::{File, FileReady};
 
 pub mod file;
+
+const SERVER_IDENTIFIER_CHAR: char = '@';
 
 /// The Send action runtime parameters
 pub struct Action<'a> {
@@ -88,7 +92,7 @@ impl Payload {
     /// Reads the inner file contents into a buffer and digest it into the hasher.
     /// If a secret was provided it should be digested by the hasher as well.
     ///
-    /// Returns the hashed string hex encoded
+    /// Returns the hashed string hex encoded with an identification prefix
     ///
     /// # Errors
     ///
@@ -102,7 +106,7 @@ impl Payload {
             .digest_str(maybe_secret_str)
             .consume()
             .result_str();
-        Ok(hash)
+        Ok(format!("{}{}", SERVER_IDENTIFIER_CHAR, hash))
     }
 
     /// Serializes this payload into [`serde_json::Value`]
@@ -141,6 +145,22 @@ struct Response {
     error: Option<String>,
 }
 
+impl Response {
+    fn into_inner(self) -> Result<String> {
+        match self {
+            Self {
+                success: Some(hash),
+                ..
+            } => Ok(hash),
+            Self {
+                error: Some(error_msg),
+                ..
+            } => Err(Error::IO(IoError::Request(error_msg))),
+            _ => unreachable!("Gistit server is unreachable"),
+        }
+    }
+}
+
 /// The dispatch implementation for Send action
 #[async_trait]
 impl Dispatch for Action<'_> {
@@ -173,20 +193,30 @@ impl Dispatch for Action<'_> {
         }
         let hash = payload.hash().await?;
         let json = payload.into_json(&hash).await?;
-        let res: Response = reqwest::Client::new()
+        let response: Response = reqwest::Client::new()
             .post("http://localhost:4001/gistit-base/us-central1/load")
             .json(&json)
             .send()
             .await?
             .json()
             .await?;
-        dbg!(res);
+        let server_hash = response.into_inner()?;
         if self.clipboard {
-            Clipboard::new(hash)
+            Clipboard::new(server_hash.clone())
                 .try_into_selected()?
                 .into_provider()
                 .set_contents()?;
         }
+        println!(
+            r#"{}
+
+Gistit hash: {}
+Gistit url: {}
+            "#,
+            "[Success]".green(),
+            server_hash.bright_blue(),
+            "https://foo.bar".blue()
+        );
         Ok(())
     }
 }
