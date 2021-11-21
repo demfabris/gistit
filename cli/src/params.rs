@@ -19,6 +19,8 @@ const ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE: RangeInclusive<usize> = 10..=100;
 const ALLOWED_AUTHOR_CHAR_LENGTH_RANGE: RangeInclusive<usize> = 3..=30;
 /// Allowed lifespan range
 const ALLOWED_LIFESPAN_VALUE_RANGE: RangeInclusive<u16> = 300..=3600;
+/// Valid hash length
+const GISTIT_HASH_CHAR_LENGTH: usize = 33;
 
 /// A [`phf::Set`] with all the supported colorschemes
 const SUPPORTED_COLORSCHEMES: Set<&'static str> = phf_set![
@@ -301,6 +303,13 @@ impl Check for FetchParams {
         try_match_colorscheme(&self.colorscheme)
     }
     fn hash(&self) -> Result<()> {
+        if let Some(hash) = &self.hash {
+            let valid = (hash.starts_with('@') || hash.starts_with('$'))
+                && hash.len() == GISTIT_HASH_CHAR_LENGTH;
+            if !valid {
+                return Err(ParamsError::InvalidHash(hash.clone()).into());
+            }
+        }
         Ok(())
     }
     fn url(&self) -> Result<()> {

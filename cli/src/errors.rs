@@ -192,9 +192,9 @@ input is not a positive number
                         f,
                         r#"
 input is not a valid URL
-{}
+reason: {}
                     "#,
-                        err
+                        err.yellow()
                     )
                 }
                 ParamsError::InvalidHash(err) => {
@@ -203,9 +203,9 @@ input is not a valid URL
                         f,
                         r#"
 input is not a valid gistit hash
-{}
+capture: {}
                     "#,
-                        err
+                        err.yellow()
                     )
                 }
             }

@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 
 use crate::dispatch::Dispatch;
+use crate::params::{FetchParams, Params};
 use crate::{Error, Result};
 
 pub struct Action<'a> {
@@ -32,17 +33,21 @@ impl<'act, 'args> Action<'act> {
     }
 }
 
-pub struct Payload;
+#[derive(Default)]
+pub struct Payload {
+    pub params: Option<FetchParams>,
+}
 
 #[async_trait]
 impl Dispatch for Action<'_> {
     type InnerData = Payload;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
+        let params = Params::from_fetch(self)?.check_consume()?;
         todo!()
     }
 
     async fn dispatch(&self, _payload: Self::InnerData) -> Result<()> {
-        todo!()
+        Ok(())
     }
 }
