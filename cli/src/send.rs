@@ -5,6 +5,7 @@ use std::ffi::OsStr;
 use async_trait::async_trait;
 use clap::ArgMatches;
 use crypto::digest::Digest;
+use serde_json::json;
 
 use crate::clipboard::Clipboard;
 use crate::dispatch::Dispatch;
@@ -71,29 +72,29 @@ pub struct Payload {
 impl Payload {
     /// Trivially initialize payload structure
     #[must_use]
-    pub fn with_none() -> Self {
+    fn with_none() -> Self {
         Self::default()
     }
 
     /// Append a checked instance of [`Params`].
-    pub fn with_params(&mut self, params: SendParams) -> &mut Self {
+    fn with_params(&mut self, params: SendParams) -> &mut Self {
         self.params = Some(params);
         self
     }
 
     /// Append a checked instance of [`File`] or [`EncryptedFile`]
-    pub fn with_file(&mut self, file: Box<dyn FileReady + Send + Sync>) -> &mut Self {
+    fn with_file(&mut self, file: Box<dyn FileReady + Send + Sync>) -> &mut Self {
         self.file = Some(file);
         self
     }
 
     /// Append a checked instance of [`HashedSecret`]
-    pub fn with_secret(&mut self, secret: HashedSecret) -> &mut Self {
+    fn with_secret(&mut self, secret: HashedSecret) -> &mut Self {
         self.secret = Some(secret);
         self
     }
 
-    pub fn with_hash(&mut self, hash: impl Into<String>) -> &mut Self {
+    fn with_hash(&mut self, hash: impl Into<String>) -> &mut Self {
         self.hash = Some(hash.into());
         self
     }
@@ -107,7 +108,7 @@ impl Payload {
     /// # Errors
     ///
     /// Fails with [`std::io::Error`]
-    pub async fn as_hash(&self) -> Result<String> {
+    async fn as_hash(&self) -> Result<String> {
         let file_buf = self
             .file
             .as_ref()
@@ -166,9 +167,8 @@ impl Dispatch for Action<'_> {
         if self.dry_run {
             return Ok(());
         }
-        let file = payload.file.unwrap().to_bytes().await?;
-        log::trace!("{:?}", file);
-
+        let req = reqwest::Client::new();
+        let res = req.post("https://us-central1-gistit-base.cloudfunctions.net/load");
         Ok(())
     }
 }
