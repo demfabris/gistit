@@ -6,6 +6,7 @@ use std::path::Path;
 use async_trait::async_trait;
 use crypto::mac::Mac;
 use phf::{phf_map, Map};
+use tokio::io::AsyncSeekExt;
 
 use crate::encrypt::cryptor_simple;
 use crate::errors::file::FileError;
@@ -19,7 +20,7 @@ const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=200_000;
 /// Follows the extensions supported by currently UI syntax highlighting lib:
 /// [`react-syntax-highlighter`](https://gist.github.com/ppisarczyk/43962d06686722d26d176fad46879d41)
 //TODO: fill this https://gist.github.com/ppisarczyk/43962d06686722d26d176fad46879d41
-const SUPPORTED_FILE_EXTENSIONS: Map<&'static str, &'static str> = phf_map! {
+const EXTENSION_TO_LANG_MAPPING: Map<&'static str, &'static str> = phf_map! {
     "abap" => "abap",
     "as" => "actionscript",
     "ada" => "ada",
@@ -272,28 +273,35 @@ const SUPPORTED_FILE_EXTENSIONS: Map<&'static str, &'static str> = phf_map! {
 /// The file structure that holds data to be checked/dispatched.
 #[derive(Debug)]
 pub struct File {
-    inner: tokio::fs::File,
-    path: OsString,
+    pub inner: tokio::fs::File,
+    pub path: OsString,
+    pub bytes: Option<Vec<u8>>,
 }
 
 /// The file after encryption
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
 pub struct EncryptedFile {
-    hmac_raw: Vec<u8>,
-    bytes: Vec<u8>,
-    prev: Box<File>,
+    pub hmac_raw: Vec<u8>,
+    pub bytes: Vec<u8>,
+    pub prev: Box<File>,
 }
 
 #[async_trait]
 pub trait FileReady {
     async fn to_bytes(&self) -> Result<Vec<u8>>;
+
+    fn inner(&self) -> &File;
 }
 
 #[async_trait]
 impl FileReady for EncryptedFile {
     async fn to_bytes(&self) -> Result<Vec<u8>> {
         Ok(self.bytes.clone())
+    }
+
+    fn inner(&self) -> &File {
+        &*self.prev
     }
 }
 
@@ -302,8 +310,13 @@ impl FileReady for File {
     async fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut buffer: Vec<u8> = Vec::new();
         let mut file = self.inner.try_clone().await?;
+        file.rewind().await?;
         let _bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buffer).await?;
         Ok(buffer)
+    }
+
+    fn inner(&self) -> &File {
+        self
     }
 }
 
@@ -319,7 +332,31 @@ impl File {
         Ok(Self {
             inner,
             path: path_ref.to_os_string(),
+            bytes: None,
         })
+    }
+
+    /// Returns a reference to the file name
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`FileError`]
+    pub fn name(&self) -> String {
+        Path::new(&self.path)
+            .file_name()
+            .expect("to be valid")
+            .to_string_lossy()
+            .to_string()
+    }
+
+    /// Returns the programming language that maps to this file extension
+    pub fn lang(&self) -> &str {
+        Path::new(self.path.as_os_str())
+            .extension()
+            .and_then(OsStr::to_str)
+            .map(|t| EXTENSION_TO_LANG_MAPPING.get(t))
+            .expect("to be valid")
+            .expect("to be valid")
     }
 
     /// Encrypts the file and return it as a byte vector
@@ -364,7 +401,7 @@ trait Check {
     /// Fails with [`UnsuportedFile`] if size and type isn't allowed.
     async fn metadata(&self) -> Result<()>;
 
-    /// Checks the file extension against [`SUPPORTED_FILE_EXTENSIONS`]
+    /// Checks the file extension against [`EXTENSION_TO_LANG_MAPPING`]
     ///
     /// # Errors
     ///
@@ -392,7 +429,7 @@ impl Check for File {
             .and_then(OsStr::to_str)
             .ok_or(FileError::MissingExtension)?;
 
-        if SUPPORTED_FILE_EXTENSIONS.contains_key(ext) {
+        if EXTENSION_TO_LANG_MAPPING.contains_key(ext) {
             Ok(())
         } else {
             Err(FileError::UnsupportedExtension(ext.to_owned()).into())
