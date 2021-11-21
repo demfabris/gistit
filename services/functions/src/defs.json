@@ -11,12 +11,16 @@
     "MAX": 30
   },
   "SECRET_CHAR_LENGTH": {
-    "MIN": 5,
-    "MAX": 30
+    "MIN": 50,
+    "MAX": 100
   },
   "TIMESTAMP_DELTA_LIMIT_MS": 120000000,
   "LIFESPAN_VALUE": {
     "MIN": 300,
     "MAX": 3600
+  },
+  "FILE_SIZE": {
+    "MIN": 20,
+    "MAX": 200000
   }
 }

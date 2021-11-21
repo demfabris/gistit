@@ -1,6 +1,11 @@
 import * as __fn from "firebase-functions";
 import * as __adm from "firebase-admin";
-import defs from "./defs.json";
+import {
+  checkHash,
+  checkParamsCharLength,
+  checkTimeDelta,
+  checkFileSize,
+} from "./checks";
 
 __adm.initializeApp();
 const db = __adm.firestore();
@@ -20,80 +25,6 @@ type GistitPayload = {
   };
 };
 
-/**
- * Checks for a valid gistit hash
- * @function
- * @param {string} hash
- */
-function checkHash(hash: string) {
-  if (hash.length === defs.HASH_LENGTH) {
-    switch (hash[0]) {
-      case defs.HASH_P2P_PREFIX:
-        __fn.logger.log("p2p");
-        break;
-      case defs.HASH_SERVER_PREFIX:
-        __fn.logger.log("server");
-        break;
-      default:
-        throw Error("invalid gistit hash format");
-    }
-  }
-}
-
-interface RangeObj {
-  MIN: number;
-  MAX: number;
-}
-/**
- * @function
- * @param {RangeObj} obj
- * @param {number} value
- * @return {boolean}
- */
-function paramValueInRange(obj: RangeObj, value: number): boolean {
-  if (value > obj.MAX || value < obj.MIN) return false;
-  return true;
-}
-
-/**
- * Checks author and description char length
- * @function
- * @param {string} author
- * @param {string} description
- * @param {string} secret
- */
-function checkParamsCharLength(
-  author: string,
-  description: string,
-  secret: string
-) {
-  if (
-    paramValueInRange(defs.AUTHOR_CHAR_LENGTH, author.length) &&
-    paramValueInRange(defs.DESCRIPTION_CHAR_LENGTH, description.length) &&
-    paramValueInRange(defs.SECRET_CHAR_LENGTH, secret.length)
-  )
-    return;
-  else throw Error("Invalid author or description character length");
-}
-
-/**
- * Check if timestamp is between margin of error
- * If it took more than 120s to reach server we refuse it
- * @function
- * @param {number} timestamp
- * @param {number} lifespan
- */
-function checkTimeDelta(timestamp: number, lifespan: number) {
-  const serverNow = Date.now();
-  const timeDelta = serverNow - timestamp;
-
-  if (Math.abs(timeDelta) > defs.TIMESTAMP_DELTA_LIMIT_MS)
-    throw Error("time delta beyond allowed limit, check your system time");
-
-  if (paramValueInRange(defs.LIFESPAN_VALUE, lifespan)) return;
-  else throw Error("invalid lifespan parameter value");
-}
-
 export const load = __fn.https.onRequest(async (req, res) => {
   try {
     const {
@@ -104,12 +35,13 @@ export const load = __fn.https.onRequest(async (req, res) => {
       lifespan,
       timestamp,
       secret,
-      gistit: { name, lang, data },
+      gistit: { name, lang, data, size },
     } = req.body;
 
     checkHash(hash);
     checkParamsCharLength(author, description, secret);
     checkTimeDelta(timestamp, lifespan);
+    checkFileSize(size);
 
     await db.collection("gistits").doc(hash).set({
       author,
@@ -120,6 +52,7 @@ export const load = __fn.https.onRequest(async (req, res) => {
       timestamp,
       gistit: { name, lang, data },
     });
+    __fn.logger.info("added gistit: ", hash);
     res.send({ success: hash });
   } catch (err) {
     __fn.logger.error(err);
