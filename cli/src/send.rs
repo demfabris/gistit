@@ -7,8 +7,10 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 use colored::Colorize;
 use crypto::digest::Digest;
+use lazy_static::lazy_static;
 use serde::Deserialize;
 use serde_json::json;
+use url::Url;
 
 use crate::clipboard::Clipboard;
 use crate::dispatch::Dispatch;
@@ -22,6 +24,15 @@ use file::{File, FileReady};
 pub mod file;
 
 const SERVER_IDENTIFIER_CHAR: char = '@';
+lazy_static! {
+    static ref GISTIT_SERVER_LOAD_URL: Url = Url::parse(
+        option_env!("GISTIT_SERVER_URL")
+            .unwrap_or("https://us-central1-gistit-base.cloudfunctions.net")
+    )
+    .expect("GISTIT_SERVER_URL env variable is not valid URL")
+    .join("load")
+    .expect("to join load function URL");
+}
 
 /// The Send action runtime parameters
 pub struct Action<'a> {
@@ -194,7 +205,7 @@ impl Dispatch for Action<'_> {
         let hash = payload.hash().await?;
         let json = payload.into_json(&hash).await?;
         let response: Response = reqwest::Client::new()
-            .post("http://localhost:4001/gistit-base/us-central1/load")
+            .post(GISTIT_SERVER_LOAD_URL.to_string())
             .json(&json)
             .send()
             .await?
