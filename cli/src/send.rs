@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use clap::ArgMatches;
-use colored::Colorize;
+use console::style;
 use crypto::digest::Digest;
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -224,9 +224,9 @@ impl Dispatch for Action<'_> {
 Gistit hash: {}
 Gistit url: {}
             "#,
-            "[Success]".green(),
-            server_hash.bright_blue(),
-            "https://foo.bar".blue()
+            style("Success").green().bold(),
+            style(server_hash).blue(),
+            style("https://foo.bar").blue()
         );
         Ok(())
     }

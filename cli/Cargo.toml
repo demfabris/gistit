@@ -18,15 +18,13 @@ send = []
 
 [dependencies]
 clap = "2.33.3"
-env_logger = { version = "0.9.0", default-features = false, features = ["termcolor", "atty"] }
 async-trait = "0.1.51"
 lazy_static = "1.4.0"
-log = "0.4.14"
 phf = { version = "0.10", features = ["macros"] }
 ngrammatic = "0.3.2"
 rust-crypto = "0.2.36"
 rand = "0.8.4"
-colored = "2.0.0"
+console = "0.15.0"
 url = "2.2.2"
 reqwest = { version = "0.11.6", features = ["json"] }
 serde = "1.0.117"
@@ -35,9 +33,19 @@ base64 = "0.13.0"
 which = { version = "4.2.2", optional = true }
 bat = { version = "0.18.3", optional = true, default-features = false, features = ["atty", "wild", "dirs-next", "regex-onig"] }
 
+[target.'cfg(windows)'.dependencies.console]
+version = "0.15.0"
+features = ["windows-console-colors"]
+
 [dependencies.tokio]
-features = ["macros", "fs", "net", "rt", "rt-multi-thread", "sync", "io-util"]
+features = ["macros", "fs", "rt", "rt-multi-thread", "sync", "io-util"]
 version = "1.12.0"
 
 [profile.release]
 lto = true
+codegen-units = 1
+
+# Might be a necessity in the future
+# opt-level = "z"
+# panic = "abort"
+# strip = true

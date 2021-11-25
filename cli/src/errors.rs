@@ -3,7 +3,7 @@
 //! Here we define all errors (fatal and non-fatal) that gistit can output
 //! We moved to manual implementation of the errors to allow for prettier and colorized output
 //! Every error should convert to top level [`Error`] in the end.
-use colored::Colorize;
+use console::style;
 
 /// The top level error structure
 pub enum Error {
@@ -49,7 +49,7 @@ impl std::fmt::Debug for Error {
 
 /// Encryption module errors
 pub mod encryption {
-    use super::{Colorize, Error};
+    use super::{style, Error};
     use crypto::symmetriccipher::SymmetricCipherError;
 
     pub enum EncryptionError {
@@ -74,26 +74,26 @@ pub mod encryption {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 EncryptionError::SecretLength => {
-                    println!("{}", "[SecretLength]".red());
+                    println!("{}", style("\u{274c} SecretLength").red().bold());
                     write!(
                         f,
                         r#"
-invalid description character length.
-MIN = {} MAX = {}
+Invalid secret character length.
+min = {} max = {}
                     "#,
-                        "5 chars".yellow(),
-                        "50 chars".yellow()
+                        style("5 chars").yellow(),
+                        style("50 chars").yellow()
                     )
                 }
                 EncryptionError::CipherError(err) => {
-                    println!("{}", "[CipherError]".red());
+                    println!("{}", style("\u{274c} CipherError").red().bold());
                     write!(
                         f,
                         r#"
-Something went wrong during encryption.
-{}: {:?}
+The encryption process failed:
+
+{:?}
                     "#,
-                        "Reason".bright_magenta(),
                         err
                     )
                 }
@@ -104,7 +104,7 @@ Something went wrong during encryption.
 
 /// Params module errors
 pub mod params {
-    use super::{Colorize, Error};
+    use super::{style, Error};
 
     pub enum ParamsError {
         DescriptionCharRange,
@@ -126,86 +126,88 @@ pub mod params {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 ParamsError::DescriptionCharRange => {
-                    println!("{}", "[DescriptionCharLength]".red());
+                    println!("{}", style("\u{274c} DescriptionCharLength").red().bold());
                     write!(
                         f,
                         r#"
-invalid description character length.
-MIN = {} MAX = {}
+Invalid description character length.
+min = {} max = {}
                     "#,
-                        "10 chars".yellow(),
-                        "100 chars".yellow()
+                        style("10 chars").yellow(),
+                        style("100 chars").yellow()
                     )
                 }
                 ParamsError::AuthorCharRange => {
-                    println!("{}", "[AuthorCharRange]".red());
+                    println!("{}", style("\u{274c} AuthorCharRange").red().bold());
                     write!(
                         f,
                         r#"
-invalid author character length.
-MIN = {} MAX = {}
+Invalid author character length.
+min = {} max = {}
                     "#,
-                        "3 chars".yellow(),
-                        "30 chars".yellow()
+                        style("3 chars").yellow(),
+                        style("30 chars").yellow()
                     )
                 }
                 ParamsError::Colorscheme(maybe_close_match) => {
                     let suggest = maybe_close_match.as_ref().map(|close_match| {
-                        format!("\n\nDid you mean: '{}'?", close_match.bright_blue())
+                        format!("\n\nDid you mean: '{}'?", style(close_match).blue())
                     });
-                    println!("{}", "[Colorscheme]".red());
+                    println!("{}", style("\u{274c} Colorscheme").red().bold());
                     write!(
                         f,
                         r#"
-invalid colorscheme parameter.
-run '{}' to list supported colorschemes.{}
+Invalid colorscheme parameter.
+Run '{}' to list supported colorschemes.{}
                     "#,
-                        "gistit --colorschemes".green(),
+                        style("gistit --colorschemes").green(),
                         suggest.unwrap_or_else(|| "".to_string())
                     )
                 }
                 ParamsError::LifespanRange => {
-                    println!("{}", "[LifespanRange]".red());
+                    println!("{}", style("\u{274c} LifespanRange").red().bold());
                     write!(
                         f,
                         r#"
-invalid lifespan parameter.
-MIN = {} MAX = {}
+Invalid lifespan parameter value range.
+min = {} max = {}
                     "#,
-                        "300s".yellow(),
-                        "3600s (default)".yellow()
+                        style("300s").yellow(),
+                        style("3600s (default)").yellow()
                     )
                 }
                 ParamsError::InvalidLifespan => {
-                    println!("{}", "[InvalidLifespan]".red());
+                    println!("{}", style("\u{274c} InvalidLifespan").red().bold());
                     write!(
                         f,
                         r#"
-invalid lifespan parameter.
-input is not a positive number
+Invalid lifespan parameter.
+Input is not a positive number
                     "#,
                     )
                 }
                 ParamsError::InvalidUrl(err) => {
-                    println!("{}", "[InvalidUrl]".red());
+                    println!("{}", style("\u{274c} InvalidUrl").red().bold());
                     write!(
                         f,
                         r#"
-input is not a valid URL
-reason: {}
+Input is not a valid URL:
+
+{}
                     "#,
-                        err.yellow()
+                        style(err).yellow()
                     )
                 }
-                ParamsError::InvalidHash(err) => {
-                    println!("{}", "[InvalidHash]".red());
+                ParamsError::InvalidHash(hash_captured) => {
+                    println!("{}", style("\u{274c} InvalidHash").red().bold());
                     write!(
                         f,
                         r#"
-input is not a valid gistit hash
-capture: {}
+Input is not a valid gistit hash
+
+got: {}
                     "#,
-                        err.yellow()
+                        style(hash_captured).yellow()
                     )
                 }
             }
@@ -215,7 +217,7 @@ capture: {}
 
 /// File module errors
 pub mod file {
-    use super::{Colorize, Error};
+    use super::{style, Error};
 
     #[derive(Clone)]
     pub enum FileError {
@@ -239,40 +241,34 @@ pub mod file {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 Self::MissingExtension => {
-                    println!("{}", "[MissingFileExtension]".red());
+                    println!("{}", style("\u{274c} MissingFileExtension").red().bold());
                     write!(
                         f,
                         r#"
-input file must have an extension.
-see avaiable file extensions here: {}
+Input file must have an extension.
+see supported file extensions here: {}
                     "#,
-                        "https://rust-lang.org".bright_blue()
+                        style("https://rust-lang.org").blue()
                     )
                 }
                 Self::UnsupportedExtension(ext) => {
-                    println!("{}", "[UnsupportedExtension]".red());
+                    println!("{}", style("\u{274c} UnsupportedExtension").red().bold());
                     write!(
                         f,
                         r#"
-file extension not currently supported: '{}'
-see avaiable file extensions here: {}
+File extension not currently supported: '{}'
+see supported file extensions here: {}
                     "#,
-                        ext.cyan(),
-                        "https://rust-lang.org".bright_blue()
+                        style(ext).cyan(),
+                        style("https://rust-lang.org").blue()
                     )
                 }
                 Self::UnsupportedType(name) => {
-                    println!("{}", "[UnsupportedType]".red());
-                    write!(
-                        f,
-                        r#"
-input '{}' is not a file
-                    "#,
-                        name.cyan()
-                    )
+                    println!("{}", style("\u{274c} UnsupportedType").red().bold());
+                    write!(f, "Input '{}' is not a file", style(name).cyan())
                 }
                 Self::UnsupportedSize(size) => {
-                    println!("{}", "[UnsupportedSize]".red());
+                    println!("{}", style("\u{274c} UnsupportedSize").red().bold());
                     let size_str = if size > &1 {
                         format!("{} bytes", size.to_string())
                     } else {
@@ -281,12 +277,12 @@ input '{}' is not a file
                     write!(
                         f,
                         r#"
-file size is not in allowed range. ({})
-MIN = {} MAX = {}
+File size is not in allowed range. ({})
+min = {} max = {}
                     "#,
-                        size_str.bright_red(),
-                        "20 bytes".yellow(),
-                        "200 kb".yellow()
+                        style(size_str).red().bold(),
+                        style("20 bytes").yellow(),
+                        style("200 kb").yellow()
                     )
                 }
             }
@@ -296,7 +292,7 @@ MIN = {} MAX = {}
 
 /// I/O operations error
 pub mod io {
-    use super::{Colorize, Error};
+    use super::{style, Error};
 
     #[derive(Clone)]
     pub enum IoError {
@@ -315,40 +311,19 @@ pub mod io {
     impl std::fmt::Display for IoError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
-                Self::Other(err_string) => {
-                    println!("{}", "[IoError]".red());
-                    write!(
-                        f,
-                        r#"
-Something went wrong during an I/O operation:
-{}
-                    "#,
-                        err_string.yellow()
-                    )
-                }
-                Self::Request(err_string) => {
-                    println!("{}", "[IoError]".red());
-                    write!(
-                        f,
-                        r#"
-Something went wrong during a request:
-{}
-                    "#,
-                        err_string.yellow()
-                    )
+                Self::Other(err_string) | Self::Request(err_string) => {
+                    println!("{}", style("\u{274c} IoError").red().bold());
+                    write!(f, "\n{}", style(err_string).yellow())
                 }
                 Self::ProcessWait(err_string)
                 | Self::StdinWrite(err_string)
                 | Self::ProcessSpawn(err_string) => {
-                    println!("{} {}", "[IoError]".red(), "[Process]".red());
-                    write!(
-                        f,
-                        r#"
-Something went wrong during an I/O operation:
-{}
-                    "#,
-                        err_string.yellow()
-                    )
+                    println!(
+                        "{} {}",
+                        style("\u{274c} IoError").red().bold(),
+                        style("\u{274c} Process").red().bold()
+                    );
+                    write!(f, "\n{}", style(err_string).yellow())
                 }
             }
         }
@@ -369,7 +344,7 @@ Something went wrong during an I/O operation:
 
 /// Clipboard module errors
 pub mod clipboard {
-    use super::{io, Colorize, Error};
+    use super::{io, style, Error};
 
     impl From<ClipboardError> for Error {
         fn from(err: ClipboardError) -> Self {
@@ -382,11 +357,15 @@ pub mod clipboard {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 Self::UnknownPlatform => {
-                    println!("{} {}", "[Clipboard]".blue(), "[UnknownPlatform]".red());
+                    println!(
+                        "{} {}",
+                        style("Clipboard").blue().bold(),
+                        style("\u{274c} UnknownPlatform").red().bold()
+                    );
                     write!(
                         f,
                         r#"
-Could not enable clipboard feature under this platform
+Could not enable clipboard feature under this platform.
 supported platforms: Linux, BSD, Windows, MacOs.
                     "#
                     )
@@ -394,8 +373,8 @@ supported platforms: Linux, BSD, Windows, MacOs.
                 Self::MissingX11ClipboardBin => {
                     println!(
                         "{} {}",
-                        "[Clipboard]".blue(),
-                        "[MissingX11ClipboardBin]".yellow()
+                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
+                        style("MissingX11ClipboardBin").yellow().bold()
                     );
                     write!(
                         f,
@@ -410,8 +389,8 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 Self::MissingWaylandClipboardBin => {
                     println!(
                         "{} {}",
-                        "[Clipboard]".blue(),
-                        "[MissingWaylandClipboardBin]".yellow()
+                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
+                        style("MissingWaylandClipboardBin").yellow().bold()
                     );
                     write!(
                         f,
@@ -426,8 +405,8 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 Self::MissingTtyClipboardBin => {
                     println!(
                         "{} {}",
-                        "[Clipboard]".blue(),
-                        "[MissingTtyClipboardBin]".yellow()
+                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
+                        style("MissingTtyClipboardBin").yellow().bold()
                     );
                     write!(
                         f,
@@ -442,8 +421,8 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 Self::MissingDisplayEnvSsh => {
                     println!(
                         "{} {}",
-                        "[Clipboard]".blue(),
-                        "[MissingDisplayEnvSsh]".yellow()
+                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
+                        style("MissingDisplayEnvSsh").yellow().bold()
                     );
                     write!(
                         f,
@@ -457,46 +436,54 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 }
                 Self::BinExecution(io_err) => match io_err {
                     io::IoError::ProcessSpawn(output) => {
-                        println!("{} {}", "[Clipboard]".blue(), "[BinExecution]".red());
+                        println!(
+                            "{} {}",
+                            style("Clipboard").blue().bold(),
+                            style("\u{274c} BinExecution").red().bold()
+                        );
                         write!(
                             f,
                             r#"
 Could not spawn the clipboard program process.
 This is not expected, check if you have permission to execute programs.
 
-{}: {}
+{}
                             "#,
-                            "Reason".bright_magenta(),
                             output
                         )
                     }
                     io::IoError::StdinWrite(output) => {
-                        println!("{} {}", "[Clipboard]".blue(), "[BinExecution]".red());
+                        println!(
+                            "{} {}",
+                            style("Clipboard").blue().bold(),
+                            style("\u{274c} BinExecution").red().bold()
+                        );
                         write!(
                             f,
                             r#"
 Could not write to the stdin of the matched clipboard program process.
 This is not expected, check if your clipboard program installation is healthy.
 
-{}: {} 
+{} 
                             "#,
-                            "Reason".bright_magenta(),
                             output
                         )
                     }
                     io::IoError::ProcessWait(output)
                     | io::IoError::Other(output)
                     | io::IoError::Request(output) => {
-                        println!("{} {}", "[Clipboard]".blue(), "[BinExecution]".red());
+                        println!(
+                            "{} {}",
+                            style("Clipboard").blue().bold(),
+                            style("\u{274c} BinExecution").red().bold()
+                        );
                         write!(
                             f,
                             r#"
-The clipboard program process crashed.
-Something wen't wrong during execution
+The clipboard program process crashed:
 
-{}: {}
+{}
                             "#,
-                            "Reason".bright_magenta(),
                             output
                         )
                     }
@@ -505,8 +492,8 @@ Something wen't wrong during execution
                 Self::MissingMacosClipboardBin => {
                     println!(
                         "{} {}",
-                        "[Clipboard]".blue(),
-                        "[MissingMacosClipboardBin]".yellow()
+                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
+                        style("MissingMacosClipboardBin").yellow().bold()
                     );
                     write!(
                         f,
