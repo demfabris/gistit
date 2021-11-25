@@ -1,9 +1,12 @@
 //! The Fetch module
 use async_trait::async_trait;
 use clap::ArgMatches;
+use serde_json::json;
+use url::Url;
 
 use crate::dispatch::Dispatch;
 use crate::encrypt::Secret;
+use crate::errors::params::ParamsError;
 use crate::params::{FetchParams, Params};
 use crate::{Error, Result};
 
@@ -34,22 +37,50 @@ impl<'act, 'args> Action<'act> {
     }
 }
 
-#[derive(Default)]
 pub struct Config {
-    pub params: Option<FetchParams>,
+    pub params: FetchParams,
+    pub maybe_secret: Option<String>,
 }
 
 impl Config {
     /// Trivially initialize config structure
     #[must_use]
-    pub fn with_none() -> Self {
-        Self::default()
+    const fn new(params: FetchParams, maybe_secret: Option<String>) -> Self {
+        Self {
+            params,
+            maybe_secret,
+        }
     }
 
-    /// Append a checked instance of [`Params`].
-    pub fn with_params(&mut self, params: FetchParams) -> &mut Self {
-        self.params = Some(params);
-        self
+    /// Converts `gistit-fetch` [`Config`] into json.
+    /// If input is a URL it extracts the hash and it's safe to grab it
+    /// directly from `url.path()` because it was previously checked to be valid.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`InvalidUrl`] error
+    fn into_json(self) -> Result<serde_json::Value> {
+        let final_hash = match &self.params {
+            FetchParams {
+                hash: Some(hash), ..
+            } => hash.clone(),
+            FetchParams {
+                url: Some(url),
+                hash: None,
+                ..
+            } => Url::parse(url)
+                .map_err(|err| ParamsError::InvalidUrl(err.to_string()))?
+                .path()
+                // Removing `/` prefix from URL parsing
+                .split_at(1)
+                .1
+                .to_owned(),
+            _ => unreachable!(),
+        };
+        Ok(json!({
+            "hash": final_hash,
+            "secret": self.maybe_secret,
+        }))
     }
 }
 
@@ -58,16 +89,17 @@ impl Dispatch for Action<'_> {
     type InnerData = Config;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
-        let mut config = Config::with_none();
         let params = Params::from_fetch(self)?.check_consume()?;
         if let Some(secret_str) = self.secret {
             Secret::new(secret_str).check_consume()?;
         }
-        config.with_params(params);
+        let config = Config::new(params, self.secret.map(ToOwned::to_owned));
         Ok(config)
     }
 
-    async fn dispatch(&self, _config: Self::InnerData) -> Result<()> {
+    async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
+        let json = config.into_json()?;
+        dbg!(json);
         Ok(())
     }
 }

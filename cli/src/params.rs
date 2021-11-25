@@ -73,26 +73,6 @@ lazy_static! {
     );
 }
 
-/// Common function to match agains the avaiable colorschemes
-///
-/// # Errors
-///
-/// Fails with [`InvalidParams`] if colorscheme isn't named properly.
-/// Prompts the user with a suggestion if it fuzzy matches agains't a probability.
-pub fn try_match_colorscheme(value: &(impl AsRef<str> + Send)) -> Result<()> {
-    if SUPPORTED_COLORSCHEMES.contains(value.as_ref()) {
-        Ok(())
-    } else {
-        let fuzzy_matches = FUZZY_MATCH.search(value.as_ref(), 0.25);
-        let maybe_match = fuzzy_matches.first();
-
-        maybe_match.map_or_else(
-            || Err(ParamsError::Colorscheme(None).into()),
-            |top_match| Err(ParamsError::Colorscheme(Some(top_match.text.clone())).into()),
-        )
-    }
-}
-
 /// Main params struct, used to further check parameters based on the action
 pub struct Params;
 
@@ -225,7 +205,7 @@ trait Check {
         Ok(())
     }
 
-    /// Check wthe gistit hash (if any)
+    /// Check the gistit hash (if any)
     ///
     /// # Errors
     ///
@@ -304,20 +284,53 @@ impl Check for FetchParams {
     }
     fn hash(&self) -> Result<()> {
         if let Some(hash) = &self.hash {
-            let valid = (hash.starts_with('@') || hash.starts_with('$'))
-                && hash.len() == GISTIT_HASH_CHAR_LENGTH;
-            if !valid {
-                return Err(ParamsError::InvalidHash(hash.clone()).into());
-            }
+            validate_hash(hash)?;
         }
         Ok(())
     }
     fn url(&self) -> Result<()> {
         if let Some(ref url) = self.url {
-            let _url = Url::parse(url).map_err(|err| ParamsError::InvalidUrl(err.to_string()))?;
+            let url = Url::parse(url).map_err(|err| ParamsError::InvalidUrl(err.to_string()))?;
+            let (_, hash) = url.path().split_at(1);
+            validate_hash(hash)?;
             Ok(())
         } else {
             Ok(())
         }
+    }
+}
+
+/// Validates the hash format to match spec.
+/// - starts with '@': gistit is on another user pc
+/// - starts with '$': gistit is on the server
+///
+/// # Errors
+/// Fails with [`InvalidHash`] error
+pub fn validate_hash(hash: &str) -> Result<()> {
+    let valid =
+        (hash.starts_with('@') || hash.starts_with('$')) && hash.len() == GISTIT_HASH_CHAR_LENGTH;
+    if !valid {
+        return Err(ParamsError::InvalidHash(hash.to_owned()).into());
+    }
+    Ok(())
+}
+
+/// Common function to match agains the avaiable colorschemes
+///
+/// # Errors
+///
+/// Fails with [`InvalidParams`] if colorscheme isn't named properly.
+/// Prompts the user with a suggestion if it fuzzy matches agains't a probability.
+pub fn try_match_colorscheme(value: &(impl AsRef<str> + Send)) -> Result<()> {
+    if SUPPORTED_COLORSCHEMES.contains(value.as_ref()) {
+        Ok(())
+    } else {
+        let fuzzy_matches = FUZZY_MATCH.search(value.as_ref(), 0.25);
+        let maybe_match = fuzzy_matches.first();
+
+        maybe_match.map_or_else(
+            || Err(ParamsError::Colorscheme(None).into()),
+            |top_match| Err(ParamsError::Colorscheme(Some(top_match.text.clone())).into()),
+        )
     }
 }
