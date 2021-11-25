@@ -1,6 +1,6 @@
 //! Gistit command line interface
 
-use clap::{crate_authors, crate_description, crate_version, App, Arg, SubCommand};
+use clap::{crate_description, crate_version, App, AppSettings, Arg, SubCommand};
 
 /// The gistit application
 #[allow(clippy::too_many_lines)]
@@ -8,8 +8,8 @@ use clap::{crate_authors, crate_description, crate_version, App, Arg, SubCommand
 pub fn app() -> App<'static, 'static> {
     App::new("Gistit")
         .version(crate_version!())
+        .global_setting(AppSettings::ColoredHelp)
         .about(crate_description!())
-        .author(crate_authors!())
         .arg(
             Arg::with_name("colorschemes")
                 .long("colorschemes")
