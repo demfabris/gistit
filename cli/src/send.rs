@@ -63,7 +63,7 @@ impl<'act, 'args> Action<'act> {
     /// Fails with argument errors
     pub fn from_args(
         args: &'act ArgMatches<'args>,
-    ) -> Result<Box<dyn Dispatch<InnerData = Payload> + 'act>> {
+    ) -> Result<Box<dyn Dispatch<InnerData = Config> + 'act>> {
         Ok(Box::new(Self {
             file: args.value_of_os("file").ok_or(Error::Argument)?,
             description: args.value_of("description"),
@@ -78,14 +78,14 @@ impl<'act, 'args> Action<'act> {
 }
 
 /// The parsed/checked data that should be dispatched
-pub struct Payload {
+pub struct Config {
     pub file: Box<dyn FileReady + Send + Sync>,
     pub params: SendParams,
     pub maybe_secret: Option<HashedSecret>,
 }
 
-impl Payload {
-    /// Trivially initialize payload structure
+impl Config {
+    /// Trivially initialize config structure
     #[must_use]
     fn new(
         file: Box<dyn FileReady + Send + Sync>,
@@ -99,7 +99,7 @@ impl Payload {
         }
     }
 
-    /// Hash payload fields.
+    /// Hash config fields.
     /// Reads the inner file contents into a buffer and digest it into the hasher.
     /// If a secret was provided it should be digested by the hasher as well.
     ///
@@ -120,7 +120,7 @@ impl Payload {
         Ok(format!("{}{}", SERVER_IDENTIFIER_CHAR, hash))
     }
 
-    /// Serializes this payload into [`serde_json::Value`]
+    /// Serializes this config into [`serde_json::Value`]
     ///
     /// # Errors
     ///
@@ -175,11 +175,11 @@ impl Response {
 /// The dispatch implementation for Send action
 #[async_trait]
 impl Dispatch for Action<'_> {
-    type InnerData = Payload;
+    type InnerData = Config;
     /// Build each top level entity and run inner checks concurrently to assert valid input and
     /// output data.
     ///
-    /// If all checks runs successfully, assemble the payload structure to later be dispatched
+    /// If all checks runs successfully, assemble the config structure to later be dispatched
     /// by [`Dispatch::dispatch`]
     async fn prepare(&self) -> Result<Self::InnerData> {
         // Check params first and exit faster if there's a invalid input
@@ -195,15 +195,15 @@ impl Dispatch for Action<'_> {
                 (Box::new(file), None)
             }
         };
-        let payload = Payload::new(file, params, maybe_hashed_secret);
-        Ok(payload)
+        let config = Config::new(file, params, maybe_hashed_secret);
+        Ok(config)
     }
-    async fn dispatch(&self, payload: Self::InnerData) -> Result<()> {
+    async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         if self.dry_run {
             return Ok(());
         }
-        let hash = payload.hash().await?;
-        let json = payload.into_json(&hash).await?;
+        let hash = config.hash().await?;
+        let json = config.into_json(&hash).await?;
         let response: Response = reqwest::Client::new()
             .post(GISTIT_SERVER_LOAD_URL.to_string())
             .json(&json)
