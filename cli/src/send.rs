@@ -9,11 +9,10 @@ use console::style;
 use crypto::digest::Digest;
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use serde_json::json;
 use url::Url;
 
 use crate::clipboard::Clipboard;
-use crate::dispatch::Dispatch;
+use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::encrypt::{HashedSecret, Hasher, Secret};
 use crate::errors::io::IoError;
 use crate::params::{Params, SendParams};
@@ -84,21 +83,8 @@ pub struct Config {
     pub maybe_secret: Option<HashedSecret>,
 }
 
-impl Config {
-    /// Trivially initialize config structure
-    #[must_use]
-    fn new(
-        file: Box<dyn FileReady + Send + Sync>,
-        params: SendParams,
-        maybe_secret: Option<HashedSecret>,
-    ) -> Self {
-        Self {
-            file,
-            params,
-            maybe_secret,
-        }
-    }
-
+#[async_trait]
+impl Hasheable for Config {
     /// Hash config fields.
     /// Reads the inner file contents into a buffer and digest it into the hasher.
     /// If a secret was provided it should be digested by the hasher as well.
@@ -119,33 +105,49 @@ impl Config {
             .result_str();
         Ok(format!("{}{}", SERVER_IDENTIFIER_CHAR, hash))
     }
+}
 
-    /// Serializes this config into [`serde_json::Value`]
+impl Config {
+    /// Trivially initialize config structure
+    #[must_use]
+    fn new(
+        file: Box<dyn FileReady + Send + Sync>,
+        params: SendParams,
+        maybe_secret: Option<HashedSecret>,
+    ) -> Self {
+        Self {
+            file,
+            params,
+            maybe_secret,
+        }
+    }
+
+    /// Serializes this config into [`GistitPayload`]
     ///
     /// # Errors
     ///
     /// Fails with [`std::io::Error`]
-    async fn into_json(self, hash: &str) -> Result<serde_json::Value> {
+    async fn into_payload(self) -> Result<GistitPayload> {
         let file_ref = self.file.inner();
-        Ok(json!({
-            "hash": hash,
-            "author": self.params.author,
-            "description": self.params.description,
-            "colorscheme": self.params.colorscheme,
-            "lifespan": self.params.lifespan,
-            "secret": self.maybe_secret.map(|t| t.to_str().to_owned()),
-            "timestamp": SystemTime::now()
+        Ok(GistitPayload {
+            hash: self.hash().await?,
+            author: self.params.author,
+            description: self.params.description,
+            colorscheme: self.params.colorscheme,
+            lifespan: self.params.lifespan,
+            secret: self.maybe_secret.map(|t| t.to_str().to_owned()),
+            timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Check your system time")
                 .as_millis()
                 .to_string(),
-            "gistit": {
-                "name": file_ref.name(),
-                "lang": file_ref.lang(),
-                "size": file_ref.inner.metadata().await?.len(),
-                "data": base64::encode(self.file.to_bytes().await?)
-            }
-        }))
+            gistit: GistitInner {
+                name: file_ref.name(),
+                lang: file_ref.lang().to_owned(),
+                size: file_ref.inner.metadata().await?.len(),
+                data: base64::encode(self.file.to_bytes().await?),
+            },
+        })
     }
 }
 
@@ -202,11 +204,10 @@ impl Dispatch for Action<'_> {
         if self.dry_run {
             return Ok(());
         }
-        let hash = config.hash().await?;
-        let json = config.into_json(&hash).await?;
+        let payload = config.into_payload().await?;
         let response: Response = reqwest::Client::new()
             .post(GISTIT_SERVER_LOAD_URL.to_string())
-            .json(&json)
+            .json(&payload)
             .send()
             .await?
             .json()
