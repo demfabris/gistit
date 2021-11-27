@@ -18,7 +18,7 @@ export function checkHash(hash: string): void {
       default:
         break;
     }
-  } else throw Error("invalid gistit hash format");
+  } else throw Error("Invalid gistit hash format");
 }
 
 /**
@@ -63,10 +63,10 @@ export function checkTimeDelta(timestamp: number, lifespan: number): void {
   const timeDelta = serverNow - Number(timestamp);
 
   if (Math.abs(timeDelta) > defs.TIMESTAMP_DELTA_LIMIT_MS)
-    throw Error("time delta beyond allowed limit, check your system time");
+    throw Error("Time delta beyond allowed limit, check your system time");
 
   if (paramValueInRange(defs.LIFESPAN_VALUE, lifespan)) return;
-  else throw Error("invalid lifespan parameter value");
+  else throw Error("Invalid lifespan parameter value");
 }
 
 interface RangeObj {

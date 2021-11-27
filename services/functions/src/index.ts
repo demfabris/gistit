@@ -6,6 +6,7 @@ import {
   checkTimeDelta,
   checkFileSize,
 } from "./checks";
+import { rscryptCompare } from "./rscrypt";
 
 __adm.initializeApp();
 const db = __adm.firestore();
@@ -55,7 +56,30 @@ export const load = __fn.https.onRequest(async (req, res) => {
     __fn.logger.info("added gistit: ", hash);
     res.send({ success: hash });
   } catch (err) {
-    __fn.logger.error(err);
+    res.status(400).send({ error: (err as Error).message });
+  }
+});
+
+type FetchPayload = {
+  hash: string;
+  secret?: string;
+};
+
+export const get = __fn.https.onRequest(async (req, res) => {
+  try {
+    const { hash, secret } = req.body as FetchPayload;
+    if (!secret) {
+      res.status(401).send({ error: "This gistit requires password" });
+      return;
+    }
+    const gistitRef = await db.collection("gistits").doc(hash).get();
+    const derivedKey = gistitRef.get("secret");
+
+    if (rscryptCompare(derivedKey, secret)) {
+      const gistit = gistitRef.data();
+      res.send({ success: { ...gistit, secret } });
+    }
+  } catch (err) {
     res.status(400).send({ error: (err as Error).message });
   }
 });
@@ -65,6 +89,7 @@ interface onChangeContext extends __fn.EventContext {
     hash: string;
   };
 }
+
 export const createReservedData = __fn.firestore
   .document("gistits/{hash}")
   .onCreate(async (snap, context) => {
@@ -107,7 +132,6 @@ export const scheduledCleanup = __fn.pubsub
       const hash = doc.id;
       await db.doc(`reserved/${hash}`).delete();
       await db.doc(`gistits/${hash}`).delete();
-      __fn.logger.info("deleted hash: ", hash);
     });
     return null;
   });

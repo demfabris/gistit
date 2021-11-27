@@ -8,17 +8,25 @@
   },
   "emulators": {
     "firestore": {
+      "host": "127.0.0.1",
       "port": 4000
     },
     "functions": {
+      "host": "127.0.0.1",
       "port": 4001
     },
     "pubsub": {
+      "host": "127.0.0.1",
       "port": 4002
     },
     "ui": {
+      "host": "127.0.0.1",
       "enabled": true,
       "port": 5000
     }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   }
 }

@@ -1,11 +1,11 @@
 {
-  "hash": "601fb4dc68ca629ec0e597c63c728b81",
+  "hash": "@8f0b3a68302b1282cfafdfd250085c38",
   "author": "fabricio7p",
   "description": "the first gistit",
   "colorscheme": "atomDark",
   "lifespan": 3600,
-  "timestamp": 1459361875337,
-  "secret": "gistit",
+  "timestamp": 1637977829963,
+  "secret": "$rscrypt$0$AggB$IVxu/qW/4EJd5v7/6yF3eA==$MomywtGiF1XHVLdH3UeyMtBYYgOckKG/j5urtck22rw=$",
   "gistit": {
     "name": "first.rs",
     "lang": "rust",
