@@ -22,7 +22,7 @@ use file::{File, FileReady};
 
 pub mod file;
 
-const SERVER_IDENTIFIER_CHAR: char = '@';
+const SERVER_IDENTIFIER_CHAR: char = '$';
 lazy_static! {
     static ref GISTIT_SERVER_LOAD_URL: Url = Url::parse(
         option_env!("GISTIT_SERVER_URL")
@@ -30,7 +30,7 @@ lazy_static! {
     )
     .expect("GISTIT_SERVER_URL env variable is not valid URL")
     .join("load")
-    .expect("to join load function URL");
+    .expect("to join 'load' function URL");
 }
 
 /// The Send action runtime parameters
