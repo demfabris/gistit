@@ -31,7 +31,7 @@ macro_rules! dispatch_from_args {
     }};
 }
 
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct GistitPayload {
     pub hash: String,
     pub author: Option<String>,
@@ -43,7 +43,7 @@ pub struct GistitPayload {
     pub gistit: GistitInner,
 }
 
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct GistitInner {
     pub name: String,
     pub lang: String,

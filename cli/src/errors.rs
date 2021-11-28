@@ -18,6 +18,8 @@ pub enum Error {
     IO(io::IoError),
     /// File encrypting/hashing errors
     Encryption(encryption::EncryptionError),
+    /// Gistit-fetch related errors
+    Fetch(fetch::FetchError),
     /// Argument parsing errors
     Argument,
 }
@@ -38,6 +40,9 @@ impl std::fmt::Debug for Error {
                 write!(f, "{}", err)
             }
             Self::IO(err) => {
+                write!(f, "{}", err)
+            }
+            Self::Fetch(err) => {
                 write!(f, "{}", err)
             }
             Self::Argument => {
@@ -311,8 +316,16 @@ pub mod io {
     impl std::fmt::Display for IoError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
-                Self::Other(err_string) | Self::Request(err_string) => {
+                Self::Other(err_string) => {
                     println!("{}", style("\u{274c} IoError").red().bold());
+                    write!(f, "\n{}", style(err_string).yellow())
+                }
+                Self::Request(err_string) => {
+                    println!(
+                        "{} {}",
+                        style("\u{274c} IoError").red().bold(),
+                        style("Request").red().bold()
+                    );
                     write!(f, "\n{}", style(err_string).yellow())
                 }
                 Self::ProcessWait(err_string)
@@ -342,9 +355,87 @@ pub mod io {
     }
 }
 
+/// Fetch module errors
+pub mod fetch {
+    use super::{style, Error};
+
+    #[derive(Clone)]
+    #[non_exhaustive]
+    pub enum FetchError {
+        /// Unable to get secret right after couple tries
+        ExaustedSecretRetries,
+        /// Gistit hash doesn't exist in the server
+        NotFoundServer,
+        /// Unexpected Response
+        UnexpectedResponse,
+        // /// Gistit hash doesn't exist in host
+        // NotFoundHost,
+    }
+
+    impl From<FetchError> for Error {
+        fn from(err: FetchError) -> Self {
+            Self::Fetch(err)
+        }
+    }
+
+    impl std::fmt::Display for FetchError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match &self {
+                Self::ExaustedSecretRetries => {
+                    println!("{}", style("\u{274c} ExaustedSecretRetries").red().bold());
+                    write!(
+                        f,
+                        r#"
+Provided secret was incorrect.
+                        "#
+                    )
+                }
+                Self::NotFoundServer => {
+                    println!("{}", style("\u{274c} NotFound").red().bold());
+                    write!(
+                        f,
+                        r#"
+This Gistit hash was not found in the server.
+It's lifespan might have expired.
+                        "#
+                    )
+                }
+                Self::UnexpectedResponse => {
+                    println!("{}", style("\u{274c} UnexpectedResponse").red().bold());
+                    write!(
+                        f,
+                        r#"
+We did not get a valid response from the host.
+                        "#
+                    )
+                }
+            }
+        }
+    }
+}
+
 /// Clipboard module errors
 pub mod clipboard {
     use super::{io, style, Error};
+
+    #[derive(Clone)]
+    pub enum ClipboardError {
+        /// Unsupported platform. android, ios...
+        UnknownPlatform,
+        /// Program binaries 'xclip' and 'xsel' not present
+        MissingX11ClipboardBin,
+        /// Program binary 'wl-copy' not present
+        MissingWaylandClipboardBin,
+        /// Program binary 'xauth' not present
+        MissingTtyClipboardBin,
+        /// Environment variable 'DISPLAY' is not set
+        MissingDisplayEnvSsh,
+        /// Program binary 'pbcopy' not present
+        #[cfg(all(target_os = "macos", target_os = "ios"))]
+        MissingMacosClipboardBin,
+        /// Program binary crashed during execution
+        BinExecution(io::IoError),
+    }
 
     impl From<ClipboardError> for Error {
         fn from(err: ClipboardError) -> Self {
@@ -507,24 +598,5 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 }
             }
         }
-    }
-
-    #[derive(Clone)]
-    pub enum ClipboardError {
-        /// Unsupported platform. android, ios...
-        UnknownPlatform,
-        /// Program binaries 'xclip' and 'xsel' not present
-        MissingX11ClipboardBin,
-        /// Program binary 'wl-copy' not present
-        MissingWaylandClipboardBin,
-        /// Program binary 'xauth' not present
-        MissingTtyClipboardBin,
-        /// Environment variable 'DISPLAY' is not set
-        MissingDisplayEnvSsh,
-        /// Program binary 'pbcopy' not present
-        #[cfg(all(target_os = "macos", target_os = "ios"))]
-        MissingMacosClipboardBin,
-        /// Program binary crashed during execution
-        BinExecution(io::IoError),
     }
 }

@@ -15,12 +15,9 @@ use crate::clipboard::Clipboard;
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::encrypt::{HashedSecret, Hasher, Secret};
 use crate::errors::io::IoError;
+use crate::file::{File, FileReady};
 use crate::params::{Params, SendParams};
 use crate::{Error, Result};
-
-use file::{File, FileReady};
-
-pub mod file;
 
 const SERVER_IDENTIFIER_CHAR: char = '$';
 lazy_static! {

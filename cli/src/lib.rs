@@ -25,6 +25,7 @@ pub mod cli;
 pub mod dispatch;
 pub mod encrypt;
 pub mod errors;
+pub mod file;
 pub mod params;
 pub mod send;
 
