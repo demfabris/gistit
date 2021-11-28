@@ -55,10 +55,10 @@ export function checkFileSize(size: number): void {
  * Check if timestamp is between margin of error
  * If it took more than 120s to reach server we refuse it
  * @function
- * @param {number} timestamp
+ * @param {string} timestamp
  * @param {number} lifespan
  */
-export function checkTimeDelta(timestamp: number, lifespan: number): void {
+export function checkTimeDelta(timestamp: string, lifespan: number): void {
   const serverNow = Date.now();
   const timeDelta = serverNow - Number(timestamp);
 

@@ -17,12 +17,13 @@ type GistitPayload = {
   description: string;
   colorscheme: string;
   lifespan: number;
-  timestamp: number;
+  timestamp: string;
   secret: string;
   gistit: {
     name: string;
     lang: string;
     data: string;
+    size: number;
   };
 };
 
@@ -50,8 +51,8 @@ export const load = __fn.https.onRequest(async (req, res) => {
       colorscheme,
       lifespan,
       secret,
-      timestamp,
-      gistit: { name, lang, data },
+      timestamp: timestamp.toString(),
+      gistit: { name, lang, data, size },
     });
     __fn.logger.info("added gistit: ", hash);
     res.send({ success: hash });
@@ -68,17 +69,24 @@ type FetchPayload = {
 export const get = __fn.https.onRequest(async (req, res) => {
   try {
     const { hash, secret } = req.body as FetchPayload;
-    if (!secret) {
-      res.status(401).send({ error: "This gistit requires password" });
+    const gistitRef = await db.collection("gistits").doc(hash).get();
+    if (!gistitRef.exists) {
+      res.status(404).send({ error: "Gistit does not exist" });
       return;
     }
-    const gistitRef = await db.collection("gistits").doc(hash).get();
     const derivedKey = gistitRef.get("secret");
-
-    if (rscryptCompare(derivedKey, secret)) {
-      const gistit = gistitRef.data();
-      res.send({ success: { ...gistit, secret } });
+    if (derivedKey !== null) {
+      if (!secret) {
+        res.status(401).send({ error: "This gistit requires a secret" });
+        return;
+      }
+      if (!rscryptCompare(derivedKey, secret)) {
+        res.status(401).send({ error: "The provided secret is invalid" });
+        return;
+      }
     }
+    const gistit = gistitRef.data();
+    res.send({ success: { ...gistit, secret, hash } });
   } catch (err) {
     res.status(400).send({ error: (err as Error).message });
   }
