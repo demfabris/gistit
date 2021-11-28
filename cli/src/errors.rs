@@ -234,6 +234,8 @@ pub mod file {
         UnsupportedType(String),
         /// File has weird extensions
         MissingExtension,
+        /// Invalid embedded hmac/padding
+        InvalidEncryptionPadding,
     }
 
     impl From<FileError> for Error {
@@ -288,6 +290,18 @@ min = {} max = {}
                         style(size_str).red().bold(),
                         style("20 bytes").yellow(),
                         style("200 kb").yellow()
+                    )
+                }
+                Self::InvalidEncryptionPadding => {
+                    println!(
+                        "{}",
+                        style("\u{274c} InvalidEncryptionPadding").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+Unable to parse encrypted data, hmac and/or padding are missplaced.
+                    "#
                     )
                 }
             }
@@ -364,12 +378,10 @@ pub mod fetch {
     pub enum FetchError {
         /// Unable to get secret right after couple tries
         ExaustedSecretRetries,
-        /// Gistit hash doesn't exist in the server
-        NotFoundServer,
+        /// Gistit hash doesn't exist in location
+        NotFound,
         /// Unexpected Response
         UnexpectedResponse,
-        // /// Gistit hash doesn't exist in host
-        // NotFoundHost,
     }
 
     impl From<FetchError> for Error {
@@ -390,13 +402,13 @@ Provided secret was incorrect.
                         "#
                     )
                 }
-                Self::NotFoundServer => {
+                Self::NotFound => {
                     println!("{}", style("\u{274c} NotFound").red().bold());
                     write!(
                         f,
                         r#"
-This Gistit hash was not found in the server.
-It's lifespan might have expired.
+This Gistit hash was not found in this location.
+It's lifespan might have expired or it's no longer being hosted.
                         "#
                     )
                 }

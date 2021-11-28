@@ -150,13 +150,13 @@ impl Dispatch for Action<'_> {
         match first_try.status() {
             StatusCode::OK => {
                 let response: Response = first_try.json().await?;
-                let gistit = response.into_inner()?;
-                let data = base64::decode(gistit.gistit.data).unwrap();
+                let gistit = response.into_inner()?.to_file().await?;
+                let data = gistit.bytes();
                 bat::PrettyPrinter::new()
                     .header(true)
                     .grid(true)
                     .line_numbers(true)
-                    .input_from_bytes(&data)
+                    .input_from_bytes(data)
                     .print()
                     .unwrap();
                 Ok(())
@@ -186,7 +186,7 @@ impl Dispatch for Action<'_> {
                     Err(Error::Fetch(FetchError::ExaustedSecretRetries))
                 }
             }
-            StatusCode::NOT_FOUND => Err(Error::Fetch(FetchError::NotFoundServer)),
+            StatusCode::NOT_FOUND => Err(Error::Fetch(FetchError::NotFound)),
             _ => Err(Error::Fetch(FetchError::UnexpectedResponse)),
         }
     }

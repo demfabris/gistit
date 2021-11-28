@@ -3,7 +3,9 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::Result;
+use crate::errors::io::IoError;
+use crate::file::{EncryptedFile, File, FileReady};
+use crate::{Error, Result};
 
 #[async_trait]
 pub trait Dispatch {
@@ -43,10 +45,43 @@ pub struct GistitPayload {
     pub gistit: GistitInner,
 }
 
+impl GistitPayload {
+    /// Gets a copy of payload data as base64 decoded bytes
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`IoError`]
+    pub async fn to_file(&self) -> Result<Box<dyn FileReady + Send + Sync>> {
+        if let Some(secret) = &self.secret {
+            Ok(Box::new(
+                EncryptedFile::from_bytes(self.gistit.to_data_decoded()?)
+                    .await?
+                    .into_decrypted(secret)
+                    .await?,
+            ))
+        } else {
+            Ok(Box::new(
+                File::from_bytes(self.gistit.to_data_decoded()?).await?,
+            ))
+        }
+    }
+}
+
+/// Type alias for a base64 encoded String
+pub type Base64String = String;
+
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct GistitInner {
     pub name: String,
     pub lang: String,
     pub size: u64,
-    pub data: String,
+    pub data: Base64String,
+}
+
+impl GistitInner {
+    /// # Errors
+    /// asd
+    pub fn to_data_decoded(&self) -> Result<Vec<u8>> {
+        base64::decode(self.data.clone()).map_err(|err| Error::IO(IoError::Other(err.to_string())))
+    }
 }

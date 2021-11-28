@@ -234,8 +234,14 @@ where
 
 /// Helper function to initialize [`Cryptor`]
 #[must_use]
-pub fn cryptor_simple(key: &str) -> Cryptor<'_, Uninitialized> {
-    Cryptor::begin(Uninitialized::default(), key.as_bytes())
+pub fn cryptor_simple(key: &str, init_vector: Option<InitVector>) -> Cryptor<'_, Uninitialized> {
+    let iv: InitVector = if let Some(iv) = init_vector {
+        iv
+    } else {
+        let mut rng = rand::thread_rng();
+        rand::Rng::gen(&mut rng)
+    };
+    Cryptor::begin(Uninitialized::default(), key.as_bytes(), iv)
 }
 
 impl<'k, S> Cryptor<'k, S>
@@ -243,9 +249,7 @@ where
     S: State + Default,
 {
     /// Constructs a [`Cryptor`] in [`Uninitialized`] state to begin operate
-    pub fn begin(state: S, key: &'k [u8]) -> Self {
-        let mut rng = rand::thread_rng();
-        let iv: InitVector = rand::Rng::gen(&mut rng);
+    pub fn begin(state: S, key: &'k [u8], iv: InitVector) -> Self {
         Self {
             state: Box::new(state),
             key,
@@ -373,6 +377,12 @@ impl<'k> Cryptor<'k, Done> {
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         self.state.output.as_ref()
+    }
+
+    /// Returns a reference to the initialization vector that was used during the encryption
+    /// process
+    pub fn init_vector(&self) -> &[u8] {
+        &self.iv
     }
 
     /// Returns a byte slice from a [`Hmac`] digested with algorithm `A`

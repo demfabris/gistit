@@ -1,19 +1,25 @@
 //! The file module
+use std::env::temp_dir;
 use std::ffi::{OsStr, OsString};
 use std::ops::RangeInclusive;
 use std::path::Path;
+use std::str;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use crypto::mac::Mac;
 use phf::{phf_map, Map};
-use tokio::io::AsyncSeekExt;
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 use crate::encrypt::cryptor_simple;
 use crate::errors::file::FileError;
-use crate::Result;
+use crate::{Error, Result};
 
 /// Allowed file size range in bytes
 const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=200_000;
+
+/// Expected encryption padding
+const ENCRYPTED_FILE_PADDING: &str = "####";
 
 /// Supported file extensions
 /// This is a compile time built hashmap to check incomming file extensions against.
@@ -275,49 +281,7 @@ const EXTENSION_TO_LANG_MAPPING: Map<&'static str, &'static str> = phf_map! {
 pub struct File {
     pub inner: tokio::fs::File,
     pub path: OsString,
-    pub bytes: Option<Vec<u8>>,
-}
-
-/// The file after encryption
-#[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub struct EncryptedFile {
-    pub hmac_raw: Vec<u8>,
     pub bytes: Vec<u8>,
-    pub prev: Box<File>,
-}
-
-#[async_trait]
-pub trait FileReady {
-    async fn to_bytes(&self) -> Result<Vec<u8>>;
-
-    fn inner(&self) -> &File;
-}
-
-#[async_trait]
-impl FileReady for EncryptedFile {
-    async fn to_bytes(&self) -> Result<Vec<u8>> {
-        Ok(self.bytes.clone())
-    }
-
-    fn inner(&self) -> &File {
-        &*self.prev
-    }
-}
-
-#[async_trait]
-impl FileReady for File {
-    async fn to_bytes(&self) -> Result<Vec<u8>> {
-        let mut buffer: Vec<u8> = Vec::new();
-        let mut file = self.inner.try_clone().await?;
-        file.rewind().await?;
-        let _bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buffer).await?;
-        Ok(buffer)
-    }
-
-    fn inner(&self) -> &File {
-        self
-    }
 }
 
 impl File {
@@ -328,11 +292,31 @@ impl File {
     /// Fails with [`std::io::Error`]
     pub async fn from_path(path: impl AsRef<OsStr> + Sync + Send) -> Result<Self> {
         let path_ref = path.as_ref();
-        let inner = tokio::fs::File::open(path_ref).await?;
+        let mut inner = tokio::fs::File::open(path_ref).await?;
+        let mut bytes: Vec<u8> = Vec::new();
+        let _bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut inner, &mut bytes).await?;
+        inner.rewind().await?;
+        println!("unencrypted bytes {:?}\n len {}", bytes, bytes.len());
         Ok(Self {
             inner,
             path: path_ref.to_os_string(),
-            bytes: None,
+            bytes,
+        })
+    }
+
+    /// Constructs a [`File`] from bytes
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
+    pub async fn from_bytes(bytes: impl AsRef<[u8]> + Send + Sync) -> Result<Self> {
+        let tmp_file = temp_dir().join(".gistit_unknown");
+        let mut inner = tokio::fs::File::create(&tmp_file).await?;
+        inner.write_all(bytes.as_ref()).await?;
+        Ok(Self {
+            inner,
+            path: tmp_file.into_os_string(),
+            bytes: bytes.as_ref().to_vec(),
         })
     }
 
@@ -365,18 +349,22 @@ impl File {
     ///
     /// Fails with [`Encryption`] with the encryption process goes wrong
     pub async fn into_encrypted(self, key: impl AsRef<str> + Sync + Send) -> Result<EncryptedFile> {
-        let file_buf = self.to_bytes().await?;
-        let encrypted = cryptor_simple(key.as_ref())
+        let encrypted = cryptor_simple(key.as_ref(), None)
             .into_encryptor()
-            .encrypt(&file_buf)?;
-        let (hmac_raw, bytes) = (
+            .encrypt(self.bytes())?;
+        let (hmac_raw, bytes, magic) = (
             encrypted.hmac_raw_default().result().code().to_owned(),
             encrypted.as_bytes().to_owned(),
+            encrypted.init_vector().to_vec(),
         );
+        println!("encrypted bytes client {:?} len {}", bytes, bytes.len());
+        println!("hmac client {:?} len {}", hmac_raw, hmac_raw.len());
+        println!("iv client {:?} len {}", magic, magic.len());
         Ok(EncryptedFile {
             hmac_raw,
+            prev: Some(Arc::new(self)),
             bytes,
-            prev: Box::new(self),
+            magic,
         })
     }
 
@@ -389,6 +377,117 @@ impl File {
         <Self as Check>::metadata(&self).await?;
         <Self as Check>::extension(&self)?;
         Ok(self)
+    }
+}
+
+/// The file after encryption
+#[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
+pub struct EncryptedFile {
+    pub hmac_raw: Vec<u8>,
+    pub magic: Vec<u8>,
+    pub bytes: Vec<u8>,
+    pub prev: Option<Arc<File>>,
+}
+
+impl EncryptedFile {
+    /// Create a [`EncryptedFile`] structure from encrypted bytes.
+    /// The embedded hmac is expected to be length 16 followed by 4 padding characters '#'
+    ///
+    /// # Errors
+    ///
+    /// Fails with read error
+    pub async fn from_bytes(bytes: impl AsRef<[u8]> + Send + Sync) -> Result<Self> {
+        let bytes = bytes.as_ref();
+        let (header, file_bytes) = bytes.split_at(40);
+        let hmac: [u8; 16] = header[0..16].try_into().expect("to read");
+        let first_padding: [u8; 4] = header[16..20].try_into().expect("to read");
+        let magic_iv: [u8; 16] = header[20..36].try_into().expect("to read");
+        let second_padding: [u8; 4] = header[36..].try_into().expect("to read");
+        println!("hmac server {:?} len {}", hmac, hmac.len());
+        println!("first_padding {:?}", first_padding);
+        println!("magic_iv {:?} len {}", magic_iv, magic_iv.len());
+        println!("second_padding {:?}", second_padding);
+        println!("encrypted bytes {:?} len {}", file_bytes, file_bytes.len());
+
+        if first_padding == ENCRYPTED_FILE_PADDING.as_bytes() && first_padding == second_padding {
+            Ok(Self {
+                hmac_raw: hmac.to_vec(),
+                bytes: file_bytes.to_vec(),
+                magic: magic_iv.to_vec(),
+                prev: None,
+            })
+        } else {
+            Err(Error::File(FileError::InvalidEncryptionPadding))
+        }
+    }
+
+    /// # Errors
+    /// asd
+    pub async fn into_decrypted(self, key: impl AsRef<str> + Sync + Send) -> Result<File> {
+        let iv: [u8; 16] = self.magic.clone().try_into().expect("To fit byte slice");
+        println!("iv {:?}", iv);
+        let decrypted = cryptor_simple(key.as_ref(), Some(iv))
+            .into_decryptor()
+            .decrypt(self.bytes())?;
+        println!("{:?}", decrypted.as_bytes());
+        if decrypted.verify(self.hmac_raw) {
+            println!("valid");
+        }
+        Ok(File::from_bytes(decrypted.as_bytes()).await?)
+    }
+}
+
+#[async_trait]
+pub trait FileReady {
+    async fn to_formatted(&self) -> Result<String>;
+
+    async fn inner(&self) -> Option<Arc<File>>;
+
+    fn bytes(&self) -> &[u8];
+}
+
+#[async_trait]
+impl FileReady for EncryptedFile {
+    async fn to_formatted(&self) -> Result<String> {
+        let mut bytes_prefixed = self.hmac_raw.clone();
+        // Encryption header
+        bytes_prefixed.extend(ENCRYPTED_FILE_PADDING.as_bytes());
+        bytes_prefixed.extend(self.magic.clone());
+        bytes_prefixed.extend(ENCRYPTED_FILE_PADDING.as_bytes());
+        bytes_prefixed.extend(self.bytes.clone());
+        Ok(base64::encode(bytes_prefixed))
+    }
+
+    async fn inner(&self) -> Option<Arc<File>> {
+        (&self.prev).clone()
+    }
+
+    fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+#[async_trait]
+impl FileReady for File {
+    async fn to_formatted(&self) -> Result<String> {
+        let mut buffer: Vec<u8> = Vec::new();
+        let mut file = self.inner.try_clone().await?;
+        file.rewind().await?;
+        let _bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buffer).await?;
+        Ok(base64::encode(buffer))
+    }
+
+    async fn inner(&self) -> Option<Arc<Self>> {
+        Some(Arc::new(Self {
+            inner: self.inner.try_clone().await.ok()?,
+            path: self.path.clone(),
+            bytes: self.bytes().to_vec(),
+        }))
+    }
+
+    fn bytes(&self) -> &[u8] {
+        &self.bytes
     }
 }
 

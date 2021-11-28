@@ -92,7 +92,7 @@ impl Hasheable for Config {
     ///
     /// Fails with [`std::io::Error`]
     async fn hash(&self) -> Result<String> {
-        let file_buf = self.file.to_bytes().await?;
+        let file_buf = self.file.bytes();
         let maybe_secret_str = self.maybe_secret.as_ref().map_or("", |s| s.to_str());
         // Digest and collect output
         let hash = Hasher::default()
@@ -125,7 +125,7 @@ impl Config {
     ///
     /// Fails with [`std::io::Error`]
     async fn into_payload(self) -> Result<GistitPayload> {
-        let file_ref = self.file.inner();
+        let file_ref = self.file.inner().await.expect("The file to be opened");
         Ok(GistitPayload {
             hash: self.hash().await?,
             author: self.params.author,
@@ -142,7 +142,7 @@ impl Config {
                 name: file_ref.name(),
                 lang: file_ref.lang().to_owned(),
                 size: file_ref.inner.metadata().await?.len(),
-                data: base64::encode(self.file.to_bytes().await?),
+                data: self.file.to_formatted().await?,
             },
         })
     }
