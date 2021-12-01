@@ -51,16 +51,20 @@ impl GistitPayload {
     ///
     /// Fails with [`IoError`]
     pub async fn to_file(&self) -> Result<Box<dyn FileReady + Send + Sync>> {
+        let name = self.gistit.name.clone();
         if let Some(secret) = &self.secret {
             Ok(Box::new(
-                EncryptedFile::from_bytes(&self.gistit.data.inner.as_bytes())
+                EncryptedFile::from_bytes(self.gistit.data.inner.as_bytes())
                     .await?
+                    .with_name(name)
                     .into_decrypted(secret)
                     .await?,
             ))
         } else {
             Ok(Box::new(
-                File::from_bytes(&self.gistit.data.inner.as_bytes()).await?,
+                File::from_bytes(self.gistit.data.inner.as_bytes())
+                    .await?
+                    .with_name(name),
             ))
         }
     }

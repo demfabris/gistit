@@ -301,6 +301,16 @@ pub struct File {
     path: PathBuf,
     /// Bytes read from file handler
     bytes: Vec<u8>,
+    /// A custom file name
+    name: Option<String>,
+}
+
+fn _name_from_path(path: &Path) -> String {
+    path.file_name()
+        // Checked previously
+        .expect("File name to be valid")
+        .to_string_lossy()
+        .to_string()
 }
 
 impl File {
@@ -319,6 +329,7 @@ impl File {
             handler,
             path: path.to_path_buf(),
             bytes,
+            name: Some(_name_from_path(path)),
         })
     }
 
@@ -337,19 +348,28 @@ impl File {
 
         Ok(Self {
             handler,
+            name: Some(_name_from_path(&path)),
             path,
             bytes: bytes.to_vec(),
         })
     }
 
-    /// Returns a reference to the file name
+    /// Set the file name, useful when creating a [`File`] using [`from_bytes`].
+    /// if the [`File`] was created using [`from_path`] it will use the provided file name.
+    #[allow(clippy::missing_const_for_fn)]
+    #[must_use]
+    pub fn with_name(self, name: String) -> Self {
+        Self {
+            name: Some(name),
+            ..self
+        }
+    }
+
+    /// Returns the file name
     pub fn name(&self) -> String {
-        self.path
-            .file_name()
-            // Checked previously
-            .expect("File name to be valid")
-            .to_string_lossy()
-            .to_string()
+        self.name
+            .clone()
+            .expect("Opened file to have at least temp name")
     }
 
     /// Returns the programming language that maps to this file extension
@@ -381,11 +401,13 @@ impl File {
     /// Will also error out if the provided key and nounce is incorrect.
     pub async fn into_encrypted(self, secret: &str) -> Result<EncryptedFile> {
         let (encrypted_bytes, nounce) = encrypt_aes256_u12nonce(secret.as_bytes(), self.data())?;
+        let name = self.name.clone();
 
         Ok(EncryptedFile {
             encrypted_bytes,
             nounce,
             prev: Some(Box::new(self)),
+            name,
         })
     }
 
@@ -414,6 +436,8 @@ pub struct EncryptedFile {
     nounce: Vec<u8>,
     /// Pointer to maybe the previous unencrypted
     prev: Option<Box<File>>,
+    /// Overwrite the random file name during decryption
+    name: Option<String>,
 }
 
 /// Extract and verify the encrypted file header which contains the `nounce` and a expected 8 bytes
@@ -458,7 +482,19 @@ impl EncryptedFile {
             encrypted_bytes,
             nounce,
             prev: None,
+            name: Some(_name_from_path(&path)),
         })
+    }
+
+    /// Set a file name, if attempt to decrypt without a file name this will be set to a random
+    /// string.
+    #[allow(clippy::missing_const_for_fn)]
+    #[must_use]
+    pub fn with_name(self, name: String) -> Self {
+        Self {
+            name: Some(name),
+            ..self
+        }
     }
 
     /// Converts [`Self`] into [`File`] handler by applying the decryption process with the
@@ -475,7 +511,10 @@ impl EncryptedFile {
             .expect("Shrink nounce to 12 bytes");
 
         let decrypted_bytes = decrypt_aes256_u12nonce(secret.as_bytes(), self.data(), &nounce)?;
-        Ok(File::from_bytes(&decrypted_bytes).await?)
+        let file = File::from_bytes(&decrypted_bytes)
+            .await?
+            .with_name(self.name.expect("Opened file to have at least temp name"));
+        Ok(file)
     }
 }
 

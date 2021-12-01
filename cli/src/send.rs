@@ -145,7 +145,7 @@ impl Config {
                 .as_millis()
                 .to_string(),
             gistit: GistitInner {
-                name: file_ref.name(),
+                name: file_ref.name().to_owned(),
                 lang: file_ref.lang().to_owned(),
                 size: file_ref.size().await,
                 data,

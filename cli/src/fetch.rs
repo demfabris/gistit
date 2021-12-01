@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use async_trait::async_trait;
 use clap::ArgMatches;
+use console::style;
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -15,6 +16,7 @@ use crate::encrypt::Secret;
 use crate::errors::fetch::FetchError;
 use crate::errors::io::IoError;
 use crate::errors::params::ParamsError;
+use crate::file::FileReady;
 use crate::params::{FetchParams, Params};
 use crate::{Error, Result};
 
@@ -151,14 +153,31 @@ impl Dispatch for Action<'_> {
         match first_try.status() {
             StatusCode::OK => {
                 let response: Response = first_try.json().await?;
-                let gistit = response.into_inner()?.to_file().await?;
-                let data = gistit.data();
+                let payload = response.into_inner()?;
+                let gistit = payload.to_file().await?;
+                let file = gistit.inner().await.expect("File to be open");
+
+                let mut header_string = style(file.name()).green().to_string();
+                if let Some(author) = payload.author {
+                    header_string.push_str(&format!(" | {}", style(author).blue().bold()));
+                }
+                if let Some(description) = payload.description {
+                    header_string.push_str(&format!(" | {}", style(description).italic()));
+                }
+
+                let input = bat::Input::from_reader(file.data())
+                    .name(file.name())
+                    .title(header_string);
 
                 bat::PrettyPrinter::new()
                     .header(true)
                     .grid(true)
+                    .input(input)
                     .line_numbers(true)
-                    .input_from_bytes(data)
+                    .language(&payload.gistit.lang)
+                    .theme(payload.colorscheme)
+                    .use_italics(true)
+                    .paging_mode(bat::PagingMode::QuitIfOneScreen)
                     .print()
                     .unwrap();
                 Ok(())
