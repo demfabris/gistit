@@ -1,7 +1,7 @@
 {
   "HASH_LENGTH": 33,
   "HASH_P2P_PREFIX": "@",
-  "HASH_SERVER_PREFIX": "$",
+  "HASH_SERVER_PREFIX": "#",
   "DESCRIPTION_CHAR_LENGTH": {
     "MIN": 10,
     "MAX": 100
