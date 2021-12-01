@@ -302,13 +302,13 @@ impl Check for FetchParams {
 
 /// Validates the hash format to match spec.
 /// - starts with '@': gistit is on another user pc
-/// - starts with '$': gistit is on the server
+/// - starts with '#': gistit is on the server
 ///
 /// # Errors
 /// Fails with [`InvalidHash`] error
 pub fn validate_hash(hash: &str) -> Result<()> {
     let valid =
-        (hash.starts_with('@') || hash.starts_with('$')) && hash.len() == GISTIT_HASH_CHAR_LENGTH;
+        (hash.starts_with('@') || hash.starts_with('#')) && hash.len() == GISTIT_HASH_CHAR_LENGTH;
     if !valid {
         return Err(ParamsError::InvalidHash(hash.to_owned()).into());
     }

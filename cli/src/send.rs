@@ -1,25 +1,26 @@
 //! The Send feature
 
 use std::ffi::OsStr;
+use std::path::Path;
+use std::str;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
-use crypto::digest::Digest;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use url::Url;
 
 use crate::clipboard::Clipboard;
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
-use crate::encrypt::{HashedSecret, Hasher, Secret};
+use crate::encrypt::{digest_md5_multi, HashedSecret, Secret};
 use crate::errors::io::IoError;
 use crate::file::{File, FileReady};
 use crate::params::{Params, SendParams};
 use crate::{Error, Result};
 
-const SERVER_IDENTIFIER_CHAR: char = '$';
+const SERVER_IDENTIFIER_CHAR: char = '#';
 lazy_static! {
     static ref GISTIT_SERVER_LOAD_URL: Url = Url::parse(
         option_env!("GISTIT_SERVER_URL")
@@ -91,16 +92,17 @@ impl Hasheable for Config {
     /// # Errors
     ///
     /// Fails with [`std::io::Error`]
-    async fn hash(&self) -> Result<String> {
-        let file_buf = self.file.bytes();
-        let maybe_secret_str = self.maybe_secret.as_ref().map_or("", |s| s.to_str());
+    fn hash(&self) -> String {
+        let file_data = self.file.data();
+        let maybe_secret_bytes = self
+            .maybe_secret
+            .as_ref()
+            .map_or("", |s| s.to_str())
+            .as_bytes();
+
         // Digest and collect output
-        let hash = Hasher::default()
-            .digest_buf(&file_buf)
-            .digest_str(maybe_secret_str)
-            .consume()
-            .result_str();
-        Ok(format!("{}{}", SERVER_IDENTIFIER_CHAR, hash))
+        let hash = digest_md5_multi(&[file_data, maybe_secret_bytes]);
+        format!("{}{}", SERVER_IDENTIFIER_CHAR, hash)
     }
 }
 
@@ -125,13 +127,17 @@ impl Config {
     ///
     /// Fails with [`std::io::Error`]
     async fn into_payload(self) -> Result<GistitPayload> {
+        let hash = self.hash();
+        let params = self.params;
+        let data = self.file.to_encoded_data();
         let file_ref = self.file.inner().await.expect("The file to be opened");
+
         Ok(GistitPayload {
-            hash: self.hash().await?,
-            author: self.params.author,
-            description: self.params.description,
-            colorscheme: self.params.colorscheme,
-            lifespan: self.params.lifespan,
+            hash,
+            author: params.author,
+            description: params.description,
+            colorscheme: params.colorscheme,
+            lifespan: params.lifespan,
             secret: self.maybe_secret.map(|t| t.to_str().to_owned()),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -141,8 +147,8 @@ impl Config {
             gistit: GistitInner {
                 name: file_ref.name(),
                 lang: file_ref.lang().to_owned(),
-                size: file_ref.inner.metadata().await?.len(),
-                data: self.file.to_formatted().await?,
+                size: file_ref.size().await,
+                data,
             },
         })
     }
@@ -183,12 +189,15 @@ impl Dispatch for Action<'_> {
     async fn prepare(&self) -> Result<Self::InnerData> {
         // Check params first and exit faster if there's a invalid input
         let params = Params::from_send(self)?.check_consume()?;
+
         let (file, maybe_hashed_secret): (Box<dyn FileReady + Send + Sync>, Option<HashedSecret>) = {
-            let file = File::from_path(self.file).await?.check_consume().await?;
+            let path = Path::new(self.file);
+            let file = File::from_path(path).await?.check_consume().await?;
+
             // If secret provided, hash it and encrypt file
             if let Some(secret_str) = self.secret {
                 let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
-                let encrypted_file = file.into_encrypted(hashed_secret.to_str()).await?;
+                let encrypted_file = file.into_encrypted(secret_str).await?;
                 (Box::new(encrypted_file), Some(hashed_secret))
             } else {
                 (Box::new(file), None)
@@ -201,6 +210,7 @@ impl Dispatch for Action<'_> {
         if self.dry_run {
             return Ok(());
         }
+
         let payload = config.into_payload().await?;
         let response: Response = reqwest::Client::new()
             .post(GISTIT_SERVER_LOAD_URL.to_string())
@@ -209,6 +219,7 @@ impl Dispatch for Action<'_> {
             .await?
             .json()
             .await?;
+
         let server_hash = response.into_inner()?;
         if self.clipboard {
             Clipboard::new(server_hash.clone())
@@ -216,6 +227,7 @@ impl Dispatch for Action<'_> {
                 .into_provider()
                 .set_contents()?;
         }
+
         println!(
             r#"{}
 

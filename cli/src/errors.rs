@@ -54,24 +54,33 @@ impl std::fmt::Debug for Error {
 
 /// Encryption module errors
 pub mod encryption {
+    use base64::DecodeError;
+
     use super::{style, Error};
-    use crypto::symmetriccipher::SymmetricCipherError;
 
     pub enum EncryptionError {
         SecretLength,
         /// Errors related to ciphering. Output from 'rust-crypto' crate symmetric cipher ops
-        CipherError(SymmetricCipherError),
-    }
-
-    impl From<SymmetricCipherError> for EncryptionError {
-        fn from(err: SymmetricCipherError) -> Self {
-            Self::CipherError(err)
-        }
+        Cipher(aes_gcm::Error),
+        /// Base64 de/encode errors
+        Encoding(DecodeError),
     }
 
     impl From<EncryptionError> for Error {
         fn from(err: EncryptionError) -> Self {
             Self::Encryption(err)
+        }
+    }
+
+    impl From<aes_gcm::Error> for Error {
+        fn from(err: aes_gcm::Error) -> Self {
+            Self::Encryption(EncryptionError::Cipher(err))
+        }
+    }
+
+    impl From<DecodeError> for Error {
+        fn from(err: DecodeError) -> Self {
+            Self::Encryption(EncryptionError::Encoding(err))
         }
     }
 
@@ -90,12 +99,24 @@ min = {} max = {}
                         style("50 chars").yellow()
                     )
                 }
-                EncryptionError::CipherError(err) => {
-                    println!("{}", style("\u{274c} CipherError").red().bold());
+                EncryptionError::Cipher(err) => {
+                    println!("{}", style("\u{274c} Cipher").red().bold());
                     write!(
                         f,
                         r#"
 The encryption process failed:
+
+{:?}
+                    "#,
+                        err
+                    )
+                }
+                EncryptionError::Encoding(err) => {
+                    println!("{}", style("\u{274c} Encoding").red().bold());
+                    write!(
+                        f,
+                        r#"
+The de/encoding process failed:
 
 {:?}
                     "#,
@@ -293,15 +314,10 @@ min = {} max = {}
                     )
                 }
                 Self::InvalidEncryptionPadding => {
-                    println!(
-                        "{}",
-                        style("\u{274c} InvalidEncryptionPadding").red().bold()
-                    );
+                    println!("{}", style("\u{274c} InvalidEncryptionHeader").red().bold());
                     write!(
                         f,
-                        r#"
-Unable to parse encrypted data, hmac and/or padding are missplaced.
-                    "#
+                        "Unable to parse encrypted data, nounce or padding are missplaced."
                     )
                 }
             }

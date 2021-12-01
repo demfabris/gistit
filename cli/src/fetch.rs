@@ -147,11 +147,13 @@ impl Dispatch for Action<'_> {
             .json(&json)
             .send()
             .await?;
+
         match first_try.status() {
             StatusCode::OK => {
                 let response: Response = first_try.json().await?;
                 let gistit = response.into_inner()?.to_file().await?;
-                let data = gistit.bytes();
+                let data = gistit.data();
+
                 bat::PrettyPrinter::new()
                     .header(true)
                     .grid(true)
@@ -162,7 +164,7 @@ impl Dispatch for Action<'_> {
                 Ok(())
             }
             StatusCode::UNAUTHORIZED => {
-                // Password is incorrect, or missing. Check retry counter
+                // Password is incorrect or missing. Check retry counter
                 let count = GISTIT_SECRET_RETRY_COUNT.fetch_add(1, Ordering::Relaxed);
                 if count <= 2 {
                     let prompt_msg = if self.secret.is_some() {
@@ -170,14 +172,17 @@ impl Dispatch for Action<'_> {
                     } else {
                         "A secret is required to fetch this Gistit".to_owned()
                     };
+
                     let new_secret = dialoguer::Password::new()
                         .with_prompt(prompt_msg)
                         .interact()
                         .map_err(|err| Error::IO(IoError::StdinWrite(err.to_string())))?;
                     drop(first_try);
+
                     // Rebuild the action object and recurse down the same path
                     let mut action = self.clone();
                     action.secret = Some(&new_secret);
+
                     let new_config = Dispatch::prepare(&action).await?;
                     Dispatch::dispatch(&action, new_config).await?;
                     Ok(())

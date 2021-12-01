@@ -3,9 +3,8 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::io::IoError;
-use crate::file::{EncryptedFile, File, FileReady};
-use crate::{Error, Result};
+use crate::file::{EncodedFileData, EncryptedFile, File, FileReady};
+use crate::Result;
 
 #[async_trait]
 pub trait Dispatch {
@@ -20,7 +19,7 @@ pub trait Dispatch {
 
 #[async_trait]
 pub trait Hasheable {
-    async fn hash(&self) -> Result<String>;
+    fn hash(&self) -> String;
 }
 
 #[macro_export]
@@ -54,34 +53,23 @@ impl GistitPayload {
     pub async fn to_file(&self) -> Result<Box<dyn FileReady + Send + Sync>> {
         if let Some(secret) = &self.secret {
             Ok(Box::new(
-                EncryptedFile::from_bytes(self.gistit.to_data_decoded()?)
+                EncryptedFile::from_bytes(&self.gistit.data.inner.as_bytes())
                     .await?
                     .into_decrypted(secret)
                     .await?,
             ))
         } else {
             Ok(Box::new(
-                File::from_bytes(self.gistit.to_data_decoded()?).await?,
+                File::from_bytes(&self.gistit.data.inner.as_bytes()).await?,
             ))
         }
     }
 }
-
-/// Type alias for a base64 encoded String
-pub type Base64String = String;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct GistitInner {
     pub name: String,
     pub lang: String,
     pub size: u64,
-    pub data: Base64String,
-}
-
-impl GistitInner {
-    /// # Errors
-    /// asd
-    pub fn to_data_decoded(&self) -> Result<Vec<u8>> {
-        base64::decode(self.data.clone()).map_err(|err| Error::IO(IoError::Other(err.to_string())))
-    }
+    pub data: EncodedFileData,
 }

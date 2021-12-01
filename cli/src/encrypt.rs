@@ -1,27 +1,27 @@
 //! The encryption module
 //!
-//! # Contents
+//! ## Hashing
 //!
-//! Here you'll find every entity related to secret parsing, hashing and encrypting operations.
-//! Some 'good enough' defaults were used to achieve ease to use with a hopefully scalable
-//! implementation in the event of this becomming a library as well.
+//! Md5 digestion algorithm was used to implement the Gistit payload hashing procedure since
+//! we just need a fast hash algorithm to uniquely identify our Gistits and here security is not
+//! an concern. Also, 128bits is fine and doesn't look too long of a hex-string when copying
+//! and sharing.
 //!
-//! ## Md5
+//! ## Secrets
 //!
-//! Md5 digestion algorithm was used to implement the payload hashing procedure since we just need
-//! a sensible hash to uniquely identify our Gistits and here security is not an concern. Also,
-//! 128bits is fine and doesn't look too long of a string when copying and sharing.
+//! Scrypt algorithm was used to hash the provided secret. The params values choosen
+//! `N = 2^2`, `R = 8`, and `P = 1` as discussed [here](https://blog.filippo.io/the-scrypt-parameters/).
 //!
-//! ## Scrypt
+//! ## Encryption
 //!
-//! Scrypt algorithm was used to hash the provided secret (aka password). The params values choosen
-//! `N = 2^20`, `R = 8`, and `P = 1` as discussed [here](https://blog.filippo.io/the-scrypt-parameters/).
+//! The encryption/decryption process relies on `AesGcm` algorithm with 256-bit key and 96-bit
+//! nounce. See [`aes_gcm`] for more info.
+
+use aes_gcm::aead::{Aead, NewAead};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
+
 use async_trait::async_trait;
-use crypto::aes;
-use crypto::buffer::{BufferResult, ReadBuffer, RefReadBuffer, RefWriteBuffer, WriteBuffer};
 use crypto::digest::Digest;
-use crypto::hmac::Hmac;
-use crypto::mac::{Mac, MacResult};
 use crypto::md5::Md5;
 use crypto::scrypt::{scrypt_simple, ScryptParams};
 
@@ -31,20 +31,16 @@ use crate::Result;
 /// Allowed secret character range
 const ALLOWED_SECRET_CHAR_LENGTH_RANGE: std::ops::RangeInclusive<usize> = 5..=50;
 
-#[doc(alias = "constants")]
+#[doc(hidden)]
 const SCRYPT_PARAM_P: u32 = 1;
-#[doc(alias = "constants")]
+
+#[doc(hidden)]
 const SCRYPT_PARAM_R: u32 = 8;
-#[doc(alias = "constants")]
+
+#[doc(hidden)]
 const SCRYPT_PARAM_LOG_N: u8 = 2;
 
-/// Initialization vector size
-const INIT_VECTOR_SIZE: usize = 16;
-
-/// The initialization vector type. Used in cbc encryption algorithm
-type InitVector = [u8; INIT_VECTOR_SIZE];
-
-/// The data structure to hold the provided secret and it's Scrypt generated hash
+/// The data structure to hold the provided secret
 #[derive(Clone, Default, Debug)]
 pub struct Secret {
     inner: String,
@@ -119,295 +115,60 @@ impl Check for Secret {
     }
 }
 
-/// The hasher structure, generic over the digest algorithm
-#[derive(Clone, Debug)]
-pub struct Hasher<A>
-where
-    A: Digest + Sync + Send,
-{
-    inner: A,
-    raw: Vec<u8>,
-}
-
-impl<A> Hasher<A>
-where
-    A: Digest + Sync + Send,
-{
-    /// Creates a new Hasher with digestion algorithm
-    pub fn new(digest: A) -> Self {
-        Self {
-            inner: digest,
-            raw: Vec::new(),
-        }
-    }
-
-    /// Parses a vector of bytes if non-zero length
-    pub fn digest_buf(mut self, buf: impl AsRef<[u8]>) -> Self {
-        let buf_ref = buf.as_ref();
-        if !buf_ref.is_empty() {
-            self.raw.extend(buf_ref);
-            Digest::input(&mut self.inner, buf_ref);
-        }
-        self
-    }
-
-    /// Parses a string slice if non-zero length
-    pub fn digest_str(mut self, string: impl AsRef<str>) -> Self {
-        let str_ref = string.as_ref();
-        if !str_ref.is_empty() {
-            self.raw.extend(str_ref.as_bytes());
-            Digest::input_str(&mut self.inner, str_ref);
-        }
-        self
-    }
-
-    /// Converts into [`Hmac`] and applies digested data (if any)
-    pub fn into_hmac(mut self, key: impl AsRef<[u8]>) -> Hmac<A> {
-        self.inner.reset();
-        let mut hmac = Hmac::new(self.inner, key.as_ref());
-        if !self.raw.is_empty() {
-            hmac.input(&self.raw);
-        }
-        hmac
-    }
-
-    /// Consumes self and return inner digestor
-    pub fn consume(self) -> A {
-        self.inner
-    }
-}
-
-// TODO: Branch the digestor into features
-impl Default for Hasher<Md5> {
-    /// Defaults to Md5 digestion algorithm
-    fn default() -> Self {
-        let md5 = Md5::new();
-        Self {
-            inner: md5,
-            raw: Vec::new(),
-        }
-    }
-}
-
-/// The first [`Cryptor`] state
-#[doc(hidden)]
-#[derive(Debug, Clone, Default)]
-pub struct Uninitialized;
-
-/// The encrypting [`Cryptor`] state
-#[doc(hidden)]
-pub struct Encrypting {
-    executor: Box<dyn crypto::symmetriccipher::Encryptor>,
-}
-
-/// The decrypting [`Cryptor`] state
-#[doc(hidden)]
-pub struct Decrypting {
-    executor: Box<dyn crypto::symmetriccipher::Decryptor>,
-}
-
-/// The done [`Cryptor`] state
-#[doc(hidden)]
-#[derive(Debug, Clone)]
-pub struct Done {
-    output: Vec<u8>,
-}
-
-/// Marker state trait
-pub trait State {}
-impl State for Uninitialized {}
-impl State for Encrypting {}
-impl State for Decrypting {}
-impl State for Done {}
-
-/// The encrypting/decrypting agent.
-/// Implemented using a type state machine to provide a safer and one-way API
-#[derive(Debug, Clone)]
-pub struct Cryptor<'k, S>
-where
-    S: State,
-{
-    state: Box<S>,
-    key: &'k [u8],
-    iv: InitVector,
-}
-
-/// Helper function to initialize [`Cryptor`]
+/// Digests a slice of byte arrays into [`Md5`] and outputs the resulting string
 #[must_use]
-pub fn cryptor_simple(key: &str, init_vector: Option<InitVector>) -> Cryptor<'_, Uninitialized> {
-    let iv: InitVector = if let Some(iv) = init_vector {
-        iv
-    } else {
-        let mut rng = rand::thread_rng();
-        rand::Rng::gen(&mut rng)
-    };
-    Cryptor::begin(Uninitialized::default(), key.as_bytes(), iv)
+pub fn digest_md5_multi(inputs: &[&[u8]]) -> String {
+    let mut hasher = Md5::new();
+    inputs.iter().for_each(|&i| hasher.input(i));
+    hasher.result_str()
 }
 
-impl<'k, S> Cryptor<'k, S>
-where
-    S: State + Default,
-{
-    /// Constructs a [`Cryptor`] in [`Uninitialized`] state to begin operate
-    pub fn begin(state: S, key: &'k [u8], iv: InitVector) -> Self {
-        Self {
-            state: Box::new(state),
-            key,
-            iv,
-        }
-    }
-
-    /// Converts self into [`Cryptor`] in [`Encrypting`] state
-    #[must_use]
-    pub fn into_encryptor(self) -> Cryptor<'k, Encrypting> {
-        let executor = aes::cbc_encryptor(
-            crypto::aes::KeySize::KeySize256,
-            self.key,
-            &self.iv,
-            crypto::blockmodes::PkcsPadding,
-        );
-        Cryptor {
-            state: Box::new(Encrypting { executor }),
-            key: self.key,
-            iv: self.iv,
-        }
-    }
-
-    /// Converts self into [`Cryptor`] in [`Decrypting`] state
-    #[must_use]
-    pub fn into_decryptor(self) -> Cryptor<'k, Decrypting> {
-        let executor = aes::cbc_decryptor(
-            crypto::aes::KeySize::KeySize256,
-            self.key,
-            &self.iv,
-            crypto::blockmodes::PkcsPadding,
-        );
-        Cryptor {
-            state: Box::new(Decrypting { executor }),
-            key: self.key,
-            iv: self.iv,
-        }
-    }
+/// Digests a single byte array into [`Md5`] and outputs the resulting string
+#[must_use]
+pub fn digest_md5(input: &[u8]) -> String {
+    let mut hasher = Md5::new();
+    hasher.input(input);
+    hasher.result_str()
 }
 
-impl<'k> Cryptor<'k, Encrypting> {
-    /// Encrypts the input and returns [`Cryptor`] in [`Done`] state or fails
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`Encryption`] error which is derived from [`SymmetricCipherError`]
-    pub fn encrypt(&mut self, input: &[u8]) -> Result<Cryptor<'k, Done>> {
-        let mut read_buf = RefReadBuffer::new(input);
-        let mut buffer = [0; 4096];
-        let mut write_buf = RefWriteBuffer::new(&mut buffer);
-        let mut output: Vec<u8> = Vec::new();
-        loop {
-            let result = self
-                .state
-                .executor
-                .encrypt(&mut read_buf, &mut write_buf, true)
-                .map_err(EncryptionError::CipherError)?;
-            output.extend(
-                write_buf
-                    .take_read_buffer()
-                    .take_remaining()
-                    .iter()
-                    .copied(),
-            );
-            if let BufferResult::BufferUnderflow = result {
-                break;
-            }
-        }
-        Ok(Cryptor {
-            state: Box::new(Done { output }),
-            key: self.key,
-            iv: self.iv,
-        })
-    }
+/// Encrypts `raw_data` with a randomly generated `nounce` and a Md5 hash of the provided secret
+///
+/// # Errors
+///
+/// Fails with [`EncryptionError`] if the encryption parameters are of unexpected sizes/ranges.
+pub fn encrypt_aes256_u12nonce(secret: &[u8], raw_data: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+    let hashed_key = digest_md5(secret);
+    let key = Key::from_slice(hashed_key.as_bytes());
+    let cipher = Aes256Gcm::new(key);
+    let magic: [u8; 12] = rand::random();
+    let nonce = Nonce::from_slice(&magic);
+
+    let encrypted = cipher
+        .encrypt(nonce, raw_data.as_ref())
+        .map_err(EncryptionError::Cipher)?;
+
+    Ok((encrypted, nonce.to_vec()))
 }
 
-impl<'k> Cryptor<'k, Decrypting> {
-    /// Decrypts the input and returns [`Cryptor`] in [`Done`] state or fails
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`Encryption`] error which is derived from [`SymmetricCipherError`]
-    pub fn decrypt(&mut self, input: &[u8]) -> Result<Cryptor<'k, Done>> {
-        let mut read_buf = RefReadBuffer::new(input);
-        let mut buffer = [0; 4096];
-        let mut write_buf = RefWriteBuffer::new(&mut buffer);
-        let mut output: Vec<u8> = Vec::new();
-        loop {
-            let result = self
-                .state
-                .executor
-                .decrypt(&mut read_buf, &mut write_buf, true)
-                .map_err(EncryptionError::CipherError)?;
-            output.extend(
-                write_buf
-                    .take_read_buffer()
-                    .take_remaining()
-                    .iter()
-                    .copied(),
-            );
-            if let BufferResult::BufferUnderflow = result {
-                break;
-            }
-        }
-        Ok(Cryptor {
-            state: Box::new(Done { output }),
-            key: self.key,
-            iv: self.iv,
-        })
-    }
-}
+/// Decrypts `encrypted_data` given the `magic` and a Md5 hash of the provided secret.
+/// Expects the same `nounce` (`magic`) and `secret` as given in the encryption process.
+///
+/// # Errors
+///
+/// Fails with [`EncryptionError`] if the parameters are invalid or incorrect.
+pub fn decrypt_aes256_u12nonce(
+    secret: &[u8],
+    encrypted_data: &[u8],
+    magic: &[u8; 12],
+) -> Result<Vec<u8>> {
+    let hashed_key = digest_md5(secret);
+    let key = Key::from_slice(hashed_key.as_bytes());
+    let cipher = Aes256Gcm::new(key);
+    let nonce = Nonce::from_slice(magic);
 
-impl<'k> Cryptor<'k, Done> {
-    /// Reset [`Cryptor`] state to [`Uninitialized`] keeping the key
-    #[must_use]
-    pub fn reset(&self) -> Cryptor<'k, Uninitialized> {
-        Cryptor {
-            state: Box::new(Uninitialized {}),
-            key: self.key,
-            iv: self.iv,
-        }
-    }
+    let decrypted = cipher
+        .decrypt(nonce, encrypted_data.as_ref())
+        .map_err(EncryptionError::Cipher)?;
 
-    /// Returns a reference to the encrypted/decrypted data
-    #[must_use]
-    pub fn as_bytes(&self) -> &[u8] {
-        self.state.output.as_ref()
-    }
-
-    /// Returns a reference to the initialization vector that was used during the encryption
-    /// process
-    pub fn init_vector(&self) -> &[u8] {
-        &self.iv
-    }
-
-    /// Returns a byte slice from a [`Hmac`] digested with algorithm `A`
-    #[must_use]
-    pub fn into_hmac_with<A>(&self, digestor: A) -> Hmac<A>
-    where
-        A: Digest + Send + Sync,
-    {
-        Hasher::new(digestor)
-            .digest_buf(self.as_bytes())
-            .into_hmac(self.key)
-    }
-
-    /// Returns a byte slice from a [`Hmac`] digested with default [`Md5`] algorithm
-    #[must_use]
-    pub fn hmac_raw_default(&self) -> Hmac<Md5> {
-        Hasher::default()
-            .digest_buf(self.as_bytes())
-            .into_hmac(self.key)
-    }
-
-    /// Compares a raw hmac bytes with the expected
-    pub fn verify(&self, rhs: impl AsRef<[u8]>) -> bool {
-        let expected = self.hmac_raw_default().result();
-        let provided = MacResult::new(rhs.as_ref());
-        expected == provided
-    }
+    Ok(decrypted)
 }

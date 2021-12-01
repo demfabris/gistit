@@ -1,25 +1,41 @@
 //! The file module
+//!
+//! Here we define file structures and methods. It is implemented using [`tokio`] so we don't block
+//! progress output during the process.
+
 use std::env::temp_dir;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::ops::RangeInclusive;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str;
-use std::sync::Arc;
 
 use async_trait::async_trait;
-use crypto::mac::Mac;
 use phf::{phf_map, Map};
-use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+use rand::{distributions::Alphanumeric, Rng};
+use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
 
-use crate::encrypt::cryptor_simple;
+use crate::encrypt::{decrypt_aes256_u12nonce, encrypt_aes256_u12nonce};
 use crate::errors::file::FileError;
 use crate::{Error, Result};
+
+#[cfg(doc)]
+use crate::errors::{encryption::EncryptionError, file::FileError, io::IoError};
 
 /// Allowed file size range in bytes
 const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=200_000;
 
-/// Expected encryption padding
-const ENCRYPTED_FILE_PADDING: &str = "####";
+/// The expected file header encryption padding
+const FILE_HEADER_ENCRYPTION_PADDING: &str = "########";
+
+/// Type alias for a base64 encoded and AES256 encrypted file with embedded header
+pub type HeadfulEncryptedB64String = String;
+
+/// Type alias for the fully processed file data
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct EncodedFileData {
+    pub inner: HeadfulEncryptedB64String,
+}
 
 /// Supported file extensions
 /// This is a compile time built hashmap to check incomming file extensions against.
@@ -276,95 +292,100 @@ const EXTENSION_TO_LANG_MAPPING: Map<&'static str, &'static str> = phf_map! {
     // "" => "zig",
 };
 
-/// The file structure that holds data to be checked/dispatched.
+/// Represents a gistit file handler and some extra data
 #[derive(Debug)]
 pub struct File {
-    pub inner: tokio::fs::File,
-    pub path: OsString,
-    pub bytes: Vec<u8>,
+    /// Opened file handler
+    handler: tokio::fs::File,
+    /// Path in system
+    path: PathBuf,
+    /// Bytes read from file handler
+    bytes: Vec<u8>,
 }
 
 impl File {
-    /// Constructs a [`File`] from a reference to [`super::Action`]
+    /// Opens a file from the given `path` and returns a [`File`] handler.
     ///
     /// # Errors
     ///
-    /// Fails with [`std::io::Error`]
-    pub async fn from_path(path: impl AsRef<OsStr> + Sync + Send) -> Result<Self> {
-        let path_ref = path.as_ref();
-        let mut inner = tokio::fs::File::open(path_ref).await?;
+    /// Fails with [`IoError`] if the file can't be opened, which probably means the file doesn't
+    /// exist, path is invalid, or file handler is blocked.
+    pub async fn from_path(path: &Path) -> Result<Self> {
+        let mut handler = tokio::fs::File::open(path).await?;
         let mut bytes: Vec<u8> = Vec::new();
-        let _bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut inner, &mut bytes).await?;
-        inner.rewind().await?;
-        println!("unencrypted bytes {:?}\n len {}", bytes, bytes.len());
+        tokio::io::AsyncReadExt::read_to_end(&mut handler, &mut bytes).await?;
+
         Ok(Self {
-            inner,
-            path: path_ref.to_os_string(),
+            handler,
+            path: path.to_path_buf(),
             bytes,
         })
     }
 
-    /// Constructs a [`File`] from bytes
+    /// Creates a new file in your system `temp` with a random name and writes provided `bytes`
+    /// into it. Returns the new [`File`] handler
     ///
     /// # Errors
     ///
-    /// Fails with [`std::io::Error`]
-    pub async fn from_bytes(bytes: impl AsRef<[u8]> + Send + Sync) -> Result<Self> {
-        let tmp_file = temp_dir().join(".gistit_unknown");
-        let mut inner = tokio::fs::File::create(&tmp_file).await?;
-        inner.write_all(bytes.as_ref()).await?;
+    /// Fails with [`IoError`] if the file can't be created for some reason. Also if it can't be
+    /// written to.
+    pub async fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let path = rng_temp_file();
+
+        let mut handler = tokio::fs::File::create(&path).await?;
+        handler.write_all(bytes).await?;
+
         Ok(Self {
-            inner,
-            path: tmp_file.into_os_string(),
-            bytes: bytes.as_ref().to_vec(),
+            handler,
+            path,
+            bytes: bytes.to_vec(),
         })
     }
 
     /// Returns a reference to the file name
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`FileError`]
     pub fn name(&self) -> String {
-        Path::new(&self.path)
+        self.path
             .file_name()
-            .expect("to be valid")
+            // Checked previously
+            .expect("File name to be valid")
             .to_string_lossy()
             .to_string()
     }
 
     /// Returns the programming language that maps to this file extension
     pub fn lang(&self) -> &str {
-        Path::new(self.path.as_os_str())
+        self.path
             .extension()
             .and_then(OsStr::to_str)
             .map(|t| EXTENSION_TO_LANG_MAPPING.get(t))
-            .expect("to be valid")
-            .expect("to be valid")
+            // Checked previously
+            .expect("Valid file extension")
+            .expect("Extension to be supported")
     }
 
-    /// Encrypts the file and return it as a byte vector
+    /// Returns the file size in bytes, not encoded.
+    pub async fn size(&self) -> u64 {
+        self.handler
+            .metadata()
+            .await
+            .expect("The file to be open")
+            .len()
+    }
+
+    /// Consumes the [`File`] encrypting it and returning a new instance of [`EncryptedFile`]
     ///
     /// # Errors
     ///
-    /// Fails with [`Encryption`] with the encryption process goes wrong
-    pub async fn into_encrypted(self, key: impl AsRef<str> + Sync + Send) -> Result<EncryptedFile> {
-        let encrypted = cryptor_simple(key.as_ref(), None)
-            .into_encryptor()
-            .encrypt(self.bytes())?;
-        let (hmac_raw, bytes, magic) = (
-            encrypted.hmac_raw_default().result().code().to_owned(),
-            encrypted.as_bytes().to_owned(),
-            encrypted.init_vector().to_vec(),
-        );
-        println!("encrypted bytes client {:?} len {}", bytes, bytes.len());
-        println!("hmac client {:?} len {}", hmac_raw, hmac_raw.len());
-        println!("iv client {:?} len {}", magic, magic.len());
+    /// Fails with [`EncryptionError`] if something goes wrong during the encryption process. This
+    /// includes unexpected sizes of the nounce, hashed key.
+    /// Will also error out if the provided key and nounce is incorrect.
+    pub async fn into_encrypted(self, secret: &str) -> Result<EncryptedFile> {
+        let (encrypted_bytes, nounce) = encrypt_aes256_u12nonce(secret.as_bytes(), self.data())?;
+
         Ok(EncryptedFile {
-            hmac_raw,
-            prev: Some(Arc::new(self)),
-            bytes,
-            magic,
+            encrypted_bytes,
+            nounce,
+            prev: Some(Box::new(self)),
         })
     }
 
@@ -372,122 +393,154 @@ impl File {
     ///
     /// # Errors
     ///
-    /// Fails with [`UnsuportedFile`]
+    /// Fails with [`FileError`] if user input isn't valid
     pub async fn check_consume(self) -> Result<Self> {
         <Self as Check>::metadata(&self).await?;
         <Self as Check>::extension(&self)?;
+
         Ok(self)
     }
 }
 
-/// The file after encryption
+/// Represents a encrypted gistit file data.
+/// This data structure is expected to hold encrypted but not encoded bytes in `encrypted_bytes`, the `nounce`
+/// which is a 12 bytes randomly generated byte array, and a pointer to the previous unencrypted [`File`]
+/// handler.
 #[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
 pub struct EncryptedFile {
-    pub hmac_raw: Vec<u8>,
-    pub magic: Vec<u8>,
-    pub bytes: Vec<u8>,
-    pub prev: Option<Arc<File>>,
+    /// The encrypted bytes
+    encrypted_bytes: Vec<u8>,
+    /// The random sequence used to encrypt
+    nounce: Vec<u8>,
+    /// Pointer to maybe the previous unencrypted
+    prev: Option<Box<File>>,
+}
+
+/// Extract and verify the encrypted file header which contains the `nounce` and a expected 8 bytes
+/// long padding defined in [`FILE_HEADER_ENCRYPTION_PADDING`].
+///
+/// # Errors
+///
+/// Fails with [`FileError`] if the padding is invalid or the `nounce` is incorrectly sized.
+fn parse_encryption_header(bytes: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
+    let (header, rest) = bytes.split_at(20);
+    let (nounce, padding) = header.split_at(12);
+
+    if padding == FILE_HEADER_ENCRYPTION_PADDING.as_bytes() {
+        Ok((nounce.to_vec(), rest.to_vec()))
+    } else {
+        Err(Error::File(FileError::InvalidEncryptionPadding))
+    }
 }
 
 impl EncryptedFile {
-    /// Create a [`EncryptedFile`] structure from encrypted bytes.
-    /// The embedded hmac is expected to be length 16 followed by 4 padding characters '#'
+    /// Creates a new [`EncryptedFile`] handler from encrypted and **encoded** byte array.
+    /// That means it should contain the expected encryption header and be base64 encoded.
+    ///
+    /// Will create a new temporary file in your system `temp` directory and write **decoded** and
+    /// still encrypted contents into it.
+    ///
+    /// **note** that there is no `prev` unencrypted [`File`] handler
     ///
     /// # Errors
     ///
-    /// Fails with read error
-    pub async fn from_bytes(bytes: impl AsRef<[u8]> + Send + Sync) -> Result<Self> {
-        let bytes = bytes.as_ref();
-        let (header, file_bytes) = bytes.split_at(40);
-        let hmac: [u8; 16] = header[0..16].try_into().expect("to read");
-        let first_padding: [u8; 4] = header[16..20].try_into().expect("to read");
-        let magic_iv: [u8; 16] = header[20..36].try_into().expect("to read");
-        let second_padding: [u8; 4] = header[36..].try_into().expect("to read");
-        println!("hmac server {:?} len {}", hmac, hmac.len());
-        println!("first_padding {:?}", first_padding);
-        println!("magic_iv {:?} len {}", magic_iv, magic_iv.len());
-        println!("second_padding {:?}", second_padding);
-        println!("encrypted bytes {:?} len {}", file_bytes, file_bytes.len());
+    /// Fails with [`IoError`] if can't create or write to the file handler.
+    /// Fails with [`FileError`] if the encryption header is invalid.
+    pub async fn from_bytes(encoded_bytes: &[u8]) -> Result<Self> {
+        let decoded_bytes = base64::decode(encoded_bytes)?;
+        let path = rng_temp_file();
 
-        if first_padding == ENCRYPTED_FILE_PADDING.as_bytes() && first_padding == second_padding {
-            Ok(Self {
-                hmac_raw: hmac.to_vec(),
-                bytes: file_bytes.to_vec(),
-                magic: magic_iv.to_vec(),
-                prev: None,
-            })
-        } else {
-            Err(Error::File(FileError::InvalidEncryptionPadding))
-        }
+        let (nounce, encrypted_bytes) = parse_encryption_header(&decoded_bytes)?;
+        let mut handler = tokio::fs::File::create(&path).await?;
+        handler.write_all(&encrypted_bytes).await?;
+
+        Ok(Self {
+            encrypted_bytes,
+            nounce,
+            prev: None,
+        })
     }
 
+    /// Converts [`Self`] into [`File`] handler by applying the decryption process with the
+    /// provided secret.
+    ///
     /// # Errors
-    /// asd
-    pub async fn into_decrypted(self, key: impl AsRef<str> + Sync + Send) -> Result<File> {
-        let iv: [u8; 16] = self.magic.clone().try_into().expect("To fit byte slice");
-        println!("iv {:?}", iv);
-        let decrypted = cryptor_simple(key.as_ref(), Some(iv))
-            .into_decryptor()
-            .decrypt(self.bytes())?;
-        println!("{:?}", decrypted.as_bytes());
-        if decrypted.verify(self.hmac_raw) {
-            println!("valid");
-        }
-        Ok(File::from_bytes(decrypted.as_bytes()).await?)
+    ///
+    /// Fails with [`EncryptionError`] if `nonce` or `secret` is incorrect
+    pub async fn into_decrypted(self, secret: &str) -> Result<File> {
+        let nounce: [u8; 12] = self
+            .nounce
+            .clone()
+            .try_into()
+            .expect("Shrink nounce to 12 bytes");
+
+        let decrypted_bytes = decrypt_aes256_u12nonce(secret.as_bytes(), self.data(), &nounce)?;
+        Ok(File::from_bytes(&decrypted_bytes).await?)
     }
 }
 
+/// Returns a new randomnly generated file path in your system `temp` directory
+fn rng_temp_file() -> PathBuf {
+    let rng_string: String = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(8)
+        .map(char::from)
+        .collect();
+
+    let mut rng_file_name = "__gistit_tmp_".to_owned();
+    rng_file_name.push_str(&rng_string);
+
+    temp_dir().join(&rng_file_name)
+}
+
+/// Represents the opened file handler
 #[async_trait]
 pub trait FileReady {
-    async fn to_formatted(&self) -> Result<String>;
+    /// Returns a reference to the original [`File`] handler if any.
+    async fn inner(self: Box<Self>) -> Option<Box<File>>;
 
-    async fn inner(&self) -> Option<Arc<File>>;
+    /// Returns a reference to the underlying data. Can be encrypted depending on the source
+    fn data(&self) -> &[u8];
 
-    fn bytes(&self) -> &[u8];
+    /// Converts [`Self`] into the sendable form of the data
+    fn to_encoded_data(&self) -> EncodedFileData;
 }
 
 #[async_trait]
 impl FileReady for EncryptedFile {
-    async fn to_formatted(&self) -> Result<String> {
-        let mut bytes_prefixed = self.hmac_raw.clone();
-        // Encryption header
-        bytes_prefixed.extend(ENCRYPTED_FILE_PADDING.as_bytes());
-        bytes_prefixed.extend(self.magic.clone());
-        bytes_prefixed.extend(ENCRYPTED_FILE_PADDING.as_bytes());
-        bytes_prefixed.extend(self.bytes.clone());
-        Ok(base64::encode(bytes_prefixed))
+    async fn inner(self: Box<Self>) -> Option<Box<File>> {
+        self.prev
     }
 
-    async fn inner(&self) -> Option<Arc<File>> {
-        (&self.prev).clone()
+    fn data(&self) -> &[u8] {
+        &self.encrypted_bytes
     }
 
-    fn bytes(&self) -> &[u8] {
-        &self.bytes
+    fn to_encoded_data(&self) -> EncodedFileData {
+        let mut headful_data = self.nounce.clone();
+        headful_data.extend(FILE_HEADER_ENCRYPTION_PADDING.as_bytes());
+        headful_data.extend_from_slice(&self.encrypted_bytes);
+
+        EncodedFileData {
+            inner: base64::encode(headful_data),
+        }
     }
 }
 
 #[async_trait]
 impl FileReady for File {
-    async fn to_formatted(&self) -> Result<String> {
-        let mut buffer: Vec<u8> = Vec::new();
-        let mut file = self.inner.try_clone().await?;
-        file.rewind().await?;
-        let _bytes_read = tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buffer).await?;
-        Ok(base64::encode(buffer))
+    async fn inner(self: Box<Self>) -> Option<Box<Self>> {
+        Some(self)
     }
 
-    async fn inner(&self) -> Option<Arc<Self>> {
-        Some(Arc::new(Self {
-            inner: self.inner.try_clone().await.ok()?,
-            path: self.path.clone(),
-            bytes: self.bytes().to_vec(),
-        }))
-    }
-
-    fn bytes(&self) -> &[u8] {
+    fn data(&self) -> &[u8] {
         &self.bytes
+    }
+
+    fn to_encoded_data(&self) -> EncodedFileData {
+        EncodedFileData {
+            inner: base64::encode(&self.bytes),
+        }
     }
 }
 
@@ -511,7 +564,7 @@ trait Check {
 #[async_trait]
 impl Check for File {
     async fn metadata(&self) -> Result<()> {
-        let attr = self.inner.metadata().await?;
+        let attr = self.handler.metadata().await?;
         let size_allowed = ALLOWED_FILE_SIZE_RANGE.contains(&attr.len());
         let type_allowed = attr.is_file();
 
