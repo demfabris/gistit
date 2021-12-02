@@ -23,7 +23,7 @@ use crate::{Error, Result};
 use crate::errors::{encryption::EncryptionError, file::FileError, io::IoError};
 
 /// Allowed file size range in bytes
-const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=200_000;
+const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=50_000;
 
 /// The expected file header encryption padding
 const FILE_HEADER_ENCRYPTION_PADDING: &str = "########";
@@ -323,7 +323,26 @@ impl File {
     pub async fn from_path(path: &Path) -> Result<Self> {
         let mut handler = tokio::fs::File::open(path).await?;
         let mut bytes: Vec<u8> = Vec::new();
-        tokio::io::AsyncReadExt::read_to_end(&mut handler, &mut bytes).await?;
+
+        tokio::io::AsyncReadExt::read_to_end(&mut handler, &mut bytes)
+            .await
+            .map_err(|err| {
+                // Intercept OS error 21 (EISDIR), meaning we can't write to a directory
+                #[cfg(target_family = "unix")]
+                if let Some(21) = err.raw_os_error() {
+                    Error::File(FileError::NotAFile(_name_from_path(path)))
+                } else {
+                    Error::from(err)
+                }
+
+                // TODO: This needs testing
+                #[cfg(target_os = "windows")]
+                if let Some(1003) = err.raw_os_error() {
+                    Error::File(FileError::NotAFile(_name_from_path(path)))
+                } else {
+                    Error::from(err)
+                }
+            })?;
 
         Ok(Self {
             handler,
@@ -610,7 +629,7 @@ impl Check for File {
         if !size_allowed {
             return Err(FileError::UnsupportedSize(attr.len()).into());
         } else if !type_allowed {
-            return Err(FileError::UnsupportedType(self.path.to_string_lossy().to_string()).into());
+            return Err(FileError::NotAFile(self.path.to_string_lossy().to_string()).into());
         }
         Ok(())
     }
