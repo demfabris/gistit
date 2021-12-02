@@ -18,7 +18,7 @@ use crate::errors::io::IoError;
 use crate::errors::params::ParamsError;
 use crate::file::FileReady;
 use crate::params::{FetchParams, Params};
-use crate::{Error, Result};
+use crate::{gistit_warn, Error, Result};
 
 lazy_static! {
     static ref GISTIT_SECRET_RETRY_COUNT: AtomicU8 = AtomicU8::new(0);
@@ -187,9 +187,13 @@ impl Dispatch for Action<'_> {
                 let count = GISTIT_SECRET_RETRY_COUNT.fetch_add(1, Ordering::Relaxed);
                 if count <= 2 {
                     let prompt_msg = if self.secret.is_some() {
-                        "Secret is incorrect, try again".to_owned()
+                        gistit_warn!(style("\u{1f512}Secret is invalid").yellow().bold());
+                        style("\ntry again").bold().to_string()
                     } else {
-                        "A secret is required to fetch this Gistit".to_owned()
+                        gistit_warn!(style("\u{1f512}A secret is required for this Gistit")
+                            .yellow()
+                            .bold());
+                        style("\nsecret").bold().to_string()
                     };
 
                     let new_secret = dialoguer::Password::new()
