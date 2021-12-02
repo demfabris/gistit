@@ -92,11 +92,16 @@ pub mod encryption {
                     write!(
                         f,
                         r#"
-Invalid secret character length.
-min = {} max = {}
+PARAM:
+    {}
+
+CAUSE:
+    invalid secret character length.
+    min = {} max = {}
                     "#,
+                        style("--secret <secret>").red().bold(),
                         style("5 chars").yellow(),
-                        style("50 chars").yellow()
+                        style("50 chars").yellow(),
                     )
                 }
                 EncryptionError::Cipher(err) => {
@@ -104,11 +109,13 @@ min = {} max = {}
                     write!(
                         f,
                         r#"
-The encryption process failed:
+CAUSE:
+    the encryption process failed.
+    {:?}
 
-{:?}
+This is unlikely to be caused by a misuse of the application, check your program version.
                     "#,
-                        err
+                        style(err).yellow()
                     )
                 }
                 EncryptionError::Encoding(err) => {
@@ -116,11 +123,13 @@ The encryption process failed:
                     write!(
                         f,
                         r#"
-The de/encoding process failed:
+CAUSE:
+    the encoding/decoding process failed, data might be inconsistent/corrupted.
+    {:?}
 
-{:?}
+This is unlikely to be caused by a misuse of the application, check your program version.
                     "#,
-                        err
+                        style(err).yellow()
                     )
                 }
             }
@@ -149,6 +158,7 @@ pub mod params {
     }
 
     impl std::fmt::Display for ParamsError {
+        #[allow(clippy::too_many_lines)]
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 ParamsError::DescriptionCharRange => {
@@ -156,8 +166,9 @@ pub mod params {
                     write!(
                         f,
                         r#"
-Invalid description character length.
-min = {} max = {}
+CAUSE:
+    invalid description character length.
+    min = {} max = {}
                     "#,
                         style("10 chars").yellow(),
                         style("100 chars").yellow()
@@ -168,8 +179,9 @@ min = {} max = {}
                     write!(
                         f,
                         r#"
-Invalid author character length.
-min = {} max = {}
+CAUSE:
+    invalid author character length.
+    min = {} max = {}
                     "#,
                         style("3 chars").yellow(),
                         style("30 chars").yellow()
@@ -183,10 +195,15 @@ min = {} max = {}
                     write!(
                         f,
                         r#"
-Invalid colorscheme parameter.
-Run '{}' to list supported colorschemes.{}
+PARAM:
+    {}
+
+CAUSE:
+    invalid colorscheme parameter.
+    run '{}' to list supported colorschemes.{}
                     "#,
-                        style("gistit --colorschemes").green(),
+                        style("--colorscheme <colorscheme>").red().bold(),
+                        style("gistit --colorschemes").bold(),
                         suggest.unwrap_or_else(|| "".to_string())
                     )
                 }
@@ -195,9 +212,14 @@ Run '{}' to list supported colorschemes.{}
                     write!(
                         f,
                         r#"
-Invalid lifespan parameter value range.
-min = {} max = {}
+PARAM:
+    {}
+
+CAUSE:
+    invalid lifespan parameter value range.
+    min = {} max = {}
                     "#,
+                        style("--lifespan <lifespan>").red().bold(),
                         style("300s").yellow(),
                         style("3600s (default)").yellow()
                     )
@@ -207,9 +229,13 @@ min = {} max = {}
                     write!(
                         f,
                         r#"
-Invalid lifespan parameter.
-Input is not a positive number
+PARAM:
+    {}
+
+CAUSE:
+    invalid lifespan parameter, input is not a positive number.
                     "#,
+                        style("--lifespan <lifespan>").red().bold(),
                     )
                 }
                 ParamsError::InvalidUrl(err) => {
@@ -217,10 +243,14 @@ Input is not a positive number
                     write!(
                         f,
                         r#"
-Input is not a valid URL:
+PARAM:
+    {}
 
-{}
+CAUSE:
+    input is not a valid URL.
+    {}
                     "#,
+                        style("--url <url>").red().bold(),
                         style(err).yellow()
                     )
                 }
@@ -229,10 +259,13 @@ Input is not a valid URL:
                     write!(
                         f,
                         r#"
-Input is not a valid gistit hash
+PARAM:
+    {}
 
-got: {}
+CAUSE:
+    input "{}" is not a valid gistit hash.
                     "#,
+                        style("--hash <hash>").red().bold(),
                         style(hash_captured).yellow()
                     )
                 }
@@ -252,7 +285,7 @@ pub mod file {
         /// File size is outside allowed range
         UnsupportedSize(u64),
         /// File is not a file
-        UnsupportedType(String),
+        NotAFile(String),
         /// File has weird extensions
         MissingExtension,
         /// Invalid embedded hmac/padding
@@ -273,10 +306,15 @@ pub mod file {
                     write!(
                         f,
                         r#"
-Input file must have an extension.
-see supported file extensions here: {}
+PARAM:
+    {}
+
+CAUSE:
+    input file must have an extension.
+    see supported file extensions here: {}
                     "#,
-                        style("https://rust-lang.org").blue()
+                        style("--file <file>").red().bold(),
+                        style("[redacted]").blue()
                     )
                 }
                 Self::UnsupportedExtension(ext) => {
@@ -284,16 +322,32 @@ see supported file extensions here: {}
                     write!(
                         f,
                         r#"
-File extension not currently supported: '{}'
-see supported file extensions here: {}
+PARAM:
+    {}
+
+CAUSE:
+    file extension not currently supported: '{}'
+    see supported file extensions here: {}
                     "#,
-                        style(ext).cyan(),
-                        style("https://rust-lang.org").blue()
+                        style("--file <file>").red().bold(),
+                        style(ext).yellow(),
+                        style("[redacted]").blue()
                     )
                 }
-                Self::UnsupportedType(name) => {
-                    println!("{}", style("\u{274c} UnsupportedType").red().bold());
-                    write!(f, "Input '{}' is not a file", style(name).cyan())
+                Self::NotAFile(name) => {
+                    println!("{}", style("\u{274c} NotAFile").red().bold());
+                    write!(
+                        f,
+                        r#"
+PARAM:
+    {}
+
+CAUSE:
+    input '{}' is not a file
+    "#,
+                        style("--file <file>").red().bold(),
+                        style(name).yellow()
+                    )
                 }
                 Self::UnsupportedSize(size) => {
                     println!("{}", style("\u{274c} UnsupportedSize").red().bold());
@@ -305,19 +359,27 @@ see supported file extensions here: {}
                     write!(
                         f,
                         r#"
-File size is not in allowed range. ({})
-min = {} max = {}
+PARAM:
+    {}
+
+CAUSE:
+    file size is not in allowed range. ({})
+    min = {} max = {}
                     "#,
+                        style("--file <file>").red().bold(),
                         style(size_str).red().bold(),
-                        style("20 bytes").yellow(),
-                        style("200 kb").yellow()
+                        style("20 B").yellow(),
+                        style("50 KiB").yellow()
                     )
                 }
                 Self::InvalidEncryptionPadding => {
                     println!("{}", style("\u{274c} InvalidEncryptionHeader").red().bold());
                     write!(
                         f,
-                        "Unable to parse encrypted data, nounce or padding are missplaced."
+                        r#"
+CAUSE:
+    unable to parse encrypted data, nounce or padding are missplaced.
+                    "#,
                     )
                 }
             }
@@ -348,15 +410,29 @@ pub mod io {
             match &self {
                 Self::Other(err_string) => {
                     println!("{}", style("\u{274c} IoError").red().bold());
-                    write!(f, "\n{}", style(err_string).yellow())
+                    write!(
+                        f,
+                        r#"
+CAUSE:
+    {}
+                    "#,
+                        style(err_string).yellow()
+                    )
                 }
                 Self::Request(err_string) => {
                     println!(
                         "{} {}",
                         style("\u{274c} IoError").red().bold(),
-                        style("Request").red().bold()
+                        style("\u{274c} Request").red().bold()
                     );
-                    write!(f, "\n{}", style(err_string).yellow())
+                    write!(
+                        f,
+                        r#"
+CAUSE:
+    {}
+                    "#,
+                        style(err_string).yellow()
+                    )
                 }
                 Self::ProcessWait(err_string)
                 | Self::StdinWrite(err_string)
@@ -366,7 +442,14 @@ pub mod io {
                         style("\u{274c} IoError").red().bold(),
                         style("\u{274c} Process").red().bold()
                     );
-                    write!(f, "\n{}", style(err_string).yellow())
+                    write!(
+                        f,
+                        r#"
+CAUSE:
+    {}
+                    "#,
+                        style(err_string).yellow()
+                    )
                 }
             }
         }
@@ -414,8 +497,13 @@ pub mod fetch {
                     write!(
                         f,
                         r#"
-Provided secret was incorrect.
-                        "#
+PARAM:
+    {}
+
+CAUSE:
+    provided secret was incorrect too many times.
+                        "#,
+                        style("--secret <secret>").red().bold(),
                     )
                 }
                 Self::NotFound => {
@@ -423,9 +511,16 @@ Provided secret was incorrect.
                     write!(
                         f,
                         r#"
-This Gistit hash was not found in this location.
-It's lifespan might have expired or it's no longer being hosted.
-                        "#
+PARAM:
+    {}
+    {}
+
+CAUSE:
+    gistit hash could not be found.
+    it's lifespan might have expired or it's no longer being hosted.
+                        "#,
+                        style("--hash <hash>").red().bold(),
+                        style("--url <url>").red().bold(),
                     )
                 }
                 Self::UnexpectedResponse => {
@@ -433,7 +528,11 @@ It's lifespan might have expired or it's no longer being hosted.
                     write!(
                         f,
                         r#"
-We did not get a valid response from the host.
+CAUSE:
+    fetch destination returned an unexpected response.
+
+This is unlikely to be caused by a misuse of the application.
+The host location is missbehaving or trying to be evil.
                         "#
                     )
                 }
@@ -478,114 +577,153 @@ pub mod clipboard {
                 Self::UnknownPlatform => {
                     println!(
                         "{} {}",
-                        style("Clipboard").blue().bold(),
+                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
                         style("\u{274c} UnknownPlatform").red().bold()
                     );
                     write!(
                         f,
                         r#"
-Could not enable clipboard feature under this platform.
-supported platforms: Linux, BSD, Windows, MacOs.
-                    "#
+PARAM:
+    {}
+
+CAUSE:
+    could not enable clipboard feature under this platform.
+    supported platforms: Linux, BSD, Windows, MacOs.
+                    "#,
+                        style("--clipboard").red().bold()
                     )
                 }
                 Self::MissingX11ClipboardBin => {
                     println!(
                         "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
-                        style("MissingX11ClipboardBin").yellow().bold()
+                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
+                        style("\u{26a0}\u{fe0f} MissingX11ClipboardBin")
+                            .yellow()
+                            .bold()
                     );
                     write!(
                         f,
                         r#"
-Could not find any X11 clipboard program binaries. ('xclip', 'xsel')
-Please consider installing of the above programs to have more reliable results.
+PARAM:
+    {}
+
+CAUSE:
+    could not find any X11 clipboard program binaries. ('xclip', 'xsel')
+    please consider installing of the above programs to have more reliable results.
 
 This is not a fatal error, application will attempt the fallback OSC52 clipboard escape sequence.
                     "#,
+                        style("--clipboard").yellow().bold()
                     )
                 }
                 Self::MissingWaylandClipboardBin => {
                     println!(
                         "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
-                        style("MissingWaylandClipboardBin").yellow().bold()
+                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
+                        style("\u{26a0}\u{fe0f} MissingWaylandClipboardBin")
+                            .yellow()
+                            .bold()
                     );
                     write!(
                         f,
                         r#"
-Could not find Wayland clipboard program binary. ('wl-copy').
-Please consider installing 'wl-clipboard' on your system to have more reliable results.
+PARAM:
+    {}
+
+CAUSE:
+    could not find Wayland clipboard program binary. ('wl-copy').
+    please consider installing 'wl-clipboard' on your system to have more reliable results.
 
 This is not a fatal error, application will attempt the fallback OSC52 clipboard escape sequence.
                     "#,
+                        style("--clipboard").yellow().bold()
                     )
                 }
                 Self::MissingTtyClipboardBin => {
                     println!(
                         "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
-                        style("MissingTtyClipboardBin").yellow().bold()
+                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
+                        style("\u{26a0}\u{fe0f} MissingTtyClipboardBin")
+                            .yellow()
+                            .bold()
                     );
                     write!(
                         f,
                         r#"
-Could not find the installation for 'xauth' program.
-This likely means that display passthrough under SSH is not working properly.
+PARAM:
+    {}
+
+CAUSE:
+    could not find the installation for 'xauth' program.
+    this likely means that display passthrough under SSH is not working properly.
 
 This is not a fatal error, application will attempt the fallback OSC52 clipboard escape sequence.
                     "#,
+                        style("--clipboard").yellow().bold()
                     )
                 }
                 Self::MissingDisplayEnvSsh => {
                     println!(
                         "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
-                        style("MissingDisplayEnvSsh").yellow().bold()
+                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
+                        style("\u{26a0}\u{fe0f} MissingDisplayEnvSsh")
+                            .yellow()
+                            .bold()
                     );
                     write!(
                         f,
                         r#"
-The environment variable 'DISPLAY' is not set.
-This likely means that display passthrough under SSH is not working properly.
+PARAM:
+    {}
+
+CAUSE:
+    the environment variable 'DISPLAY' is not set.
+    this likely means that display passthrough under SSH is not working properly.
 
 This is not a fatal error, application will attempt the fallback OSC52 clipboard escape sequence.
                     "#,
+                        style("--clipboard").yellow().bold()
                     )
                 }
                 Self::BinExecution(io_err) => match io_err {
                     io::IoError::ProcessSpawn(output) => {
                         println!(
                             "{} {}",
-                            style("Clipboard").blue().bold(),
-                            style("\u{274c} BinExecution").red().bold()
+                            style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
+                            style("\u{274c}BinExecution").red().bold()
                         );
                         write!(
                             f,
                             r#"
-Could not spawn the clipboard program process.
-This is not expected, check if you have permission to execute programs.
+PARAM:
+    {}
 
-{}
+CAUSE:
+    could not spawn the clipboard program process.
+    {}
                             "#,
-                            output
+                            style("--clipboard").red().bold(),
+                            style(output).yellow()
                         )
                     }
                     io::IoError::StdinWrite(output) => {
                         println!(
                             "{} {}",
-                            style("Clipboard").blue().bold(),
+                            style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
                             style("\u{274c} BinExecution").red().bold()
                         );
                         write!(
                             f,
                             r#"
-Could not write to the stdin of the matched clipboard program process.
-This is not expected, check if your clipboard program installation is healthy.
+PARAM:
+    {}
 
-{} 
+CAUSE:
+    could not write to the stdin of the matched clipboard program process.
+    {} 
                             "#,
-                            output
+                            style("--clipboard").red().bold(),
+                            style(output).yellow()
                         )
                     }
                     io::IoError::ProcessWait(output)
@@ -593,17 +731,21 @@ This is not expected, check if your clipboard program installation is healthy.
                     | io::IoError::Request(output) => {
                         println!(
                             "{} {}",
-                            style("Clipboard").blue().bold(),
-                            style("\u{274c} BinExecution").red().bold()
+                            style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
+                            style("\u{274c}BinExecution").red().bold()
                         );
                         write!(
                             f,
                             r#"
-The clipboard program process crashed:
+PARAM:
+    {}
 
-{}
+CAUSE:
+    the clipboard program process crashed:
+    {}
                             "#,
-                            output
+                            style("--clipboard").red().bold(),
+                            style(output).yellow()
                         )
                     }
                 },
@@ -611,17 +753,24 @@ The clipboard program process crashed:
                 Self::MissingMacosClipboardBin => {
                     println!(
                         "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
-                        style("MissingMacosClipboardBin").yellow().bold()
+                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
+                        style("\u{26a0}\u{fe0f} MissingMacosClipboardBin")
+                            .yellow()
+                            .bold()
                     );
                     write!(
                         f,
                         r#"
-Could not find Macos clipboard program binary. ('pbcopy').
-Please consider installing 'pbcopy' on your system to have more reliable results.
+PARAM:
+    {}
+
+CAUSE:
+    could not find Macos clipboard program binary. ('pbcopy').
+    please consider installing 'pbcopy' on your system to have more reliable results.
 
 This is not a fatal error, application will attempt the fallback OSC52 clipboard escape sequence.
                     "#,
+                        style("--clipboard").yellow().bold(),
                     )
                 }
             }
