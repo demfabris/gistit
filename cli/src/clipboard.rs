@@ -231,6 +231,7 @@ impl ClipboardProvider for BinClipboard {
         let mut process = command
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
             .map_err(|err| ClipboardError::BinExecution(IoError::ProcessSpawn(err.to_string())))?;
 
