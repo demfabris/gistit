@@ -10,6 +10,9 @@ readme = "README.md"
 repository = "https://github.com/gistit.git"
 version = "0.1.0"
 
+[lib]
+name = "lib_gistit"
+
 [features]
 default = ["clipboard", "fetch"]
 clipboard = ["which"]
@@ -32,6 +35,7 @@ serde_json = "1.0.59"
 base64 = "0.13.0"
 directories = "4.0.1"
 aes-gcm = "0.9.4"
+once_cell = "1.8.0"
 which = { version = "4.2.2", optional = true }
 dialoguer = { version = "0.9.0", default-features = false, features = ["password"] }
 bat = { version = "0.18.3", optional = true, default-features = false, features = ["atty", "regex-onig", "paging"] }

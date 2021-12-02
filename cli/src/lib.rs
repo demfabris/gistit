@@ -37,3 +37,38 @@ pub mod clipboard;
 
 use errors::Error;
 pub type Result<T> = std::result::Result<T, Error>;
+
+use once_cell::sync::OnceCell;
+pub static CURRENT_ACTION: OnceCell<String> = OnceCell::new();
+
+#[macro_export]
+macro_rules! gistit_error {
+    ($err:expr) => {{
+        use crate::CURRENT_ACTION;
+        eprintln!(
+            "{}: Something went wrong during {}{}: \n    {:?}",
+            style("error").red().bold(),
+            style("gistit-").green().bold(),
+            style(CURRENT_ACTION.get().expect("Internal error"))
+                .green()
+                .bold(),
+            $err
+        )
+    }};
+}
+
+#[macro_export]
+macro_rules! gistit_warn {
+    ($warn:expr) => {{
+        use crate::CURRENT_ACTION;
+        eprintln!(
+            "{}: Something went wrong during {}{}: \n    {}",
+            style("warn").yellow().bold(),
+            style("gistit-").green().bold(),
+            style(CURRENT_ACTION.get().expect("Internal error"))
+                .green()
+                .bold(),
+            $warn
+        )
+    }};
+}
