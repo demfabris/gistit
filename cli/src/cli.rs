@@ -71,7 +71,7 @@ pub fn app() -> App<'static, 'static> {
                     Arg::with_name("theme")
                         .long("theme")
                         .short("t")
-                        .default_value("atomDark")
+                        .default_value("GitHub")
                         .requires("file")
                         .takes_value(true)
                         .help("The color scheme to apply syntax highlighting")
@@ -130,7 +130,6 @@ This is our best efforts at persisting the hash into the system clipboard after 
                     Arg::with_name("theme")
                         .long("theme")
                         .short("t")
-                        .default_value("atomDark")
                         .takes_value(true)
                         .help("The color scheme to apply syntax highlighting")
                         .long_help(

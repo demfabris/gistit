@@ -22,49 +22,38 @@ const ALLOWED_LIFESPAN_VALUE_RANGE: RangeInclusive<u16> = 300..=3600;
 /// Valid hash length
 const GISTIT_HASH_CHAR_LENGTH: usize = 33;
 
-/// A [`phf::Set`] with all the supported colorschemes
-const SUPPORTED_COLORSCHEMES: Set<&'static str> = phf_set![
-    "coy",
-    "dark",
-    "funky",
-    "okaidia",
-    "solarizedlight",
-    "tomorrow",
-    "twilight",
-    "prism",
-    "a11yDark",
-    "atomDark",
-    "base16AteliersulphurpoolLight",
-    "cb",
-    "coldarkCold",
-    "coldarkDark",
-    "coyWithoutShadows",
-    "darcula",
-    "dracula",
-    "duotoneDark",
-    "duotoneEarth",
-    "duotoneForest",
-    "duotoneLight",
-    "duotoneSea",
-    "duotoneSpace",
-    "ghcolors",
-    "hopscotch",
-    "materialDark",
-    "materialLight",
-    "materialOceanic",
-    "nord",
-    "pojoaque",
-    "shadesOfPurple",
-    "synthwave84",
-    "vs",
-    "vscDarkPlus",
-    "xonokai",
+/// A [`phf::Set`] with bat supported colorschemes
+const SUPPORTED_BAT_COLORSCHEMES: Set<&'static str> = phf_set![
+    "1337",
+    "Coldark-Cold",
+    "Coldark-Dark",
+    "DarkNeon",
+    "Dracula",
+    "GitHub",
+    "Monokai Extended",
+    "Monokai Extended Bright",
+    "Monokai Extended Light",
+    "Monokai Extended Origin",
+    "Nord",
+    "OneHalfDark",
+    "OneHalfLight",
+    "Solarized (dark)",
+    "Solarized (light)",
+    "Sublime Snazzy",
+    "TwoDark",
+    "Visual Studio Dark+",
+    "ansi",
+    "base16",
+    "base16-256",
+    "gruvbox-dark",
+    "gruvbox-light",
+    "zenburn",
 ];
 
 lazy_static! {
-    /// A [`ngrammatic::Corpus`] constructed against [`SUPPORTED_COLORSCHEMES`] set
+    /// A [`ngrammatic::Corpus`] constructed against [`SUPPORTED_BAT_COLORSCHEMES`] set
     /// to fuzzy match user colorscheme incorrect attempts.
-    static ref FUZZY_MATCH: Corpus = SUPPORTED_COLORSCHEMES.iter().fold(
+    static ref FUZZY_MATCH: Corpus = SUPPORTED_BAT_COLORSCHEMES.iter().fold(
         CorpusBuilder::new().arity(2).pad_full(Pad::Auto).finish(),
         |mut corpus, &t| {
             corpus.add_text(t);
@@ -95,7 +84,7 @@ impl FetchArgs for FetchParams {}
 pub struct FetchParams {
     pub hash: Option<String>,
     pub url: Option<String>,
-    pub colorscheme: String,
+    pub colorscheme: Option<String>,
 }
 
 impl SendParams {
@@ -154,7 +143,7 @@ impl Params {
         Ok(FetchParams {
             hash: action.hash.map(ToOwned::to_owned),
             url: action.url.map(ToOwned::to_owned),
-            colorscheme: action.colorscheme.to_owned(),
+            colorscheme: action.colorscheme.map(ToOwned::to_owned),
         })
     }
 }
@@ -233,7 +222,7 @@ trait Check {
 #[async_trait]
 impl Check for SendParams {
     fn colorscheme(&self) -> Result<()> {
-        try_match_colorscheme(&self.colorscheme)
+        try_match_colorscheme(Some(&self.colorscheme))
     }
     fn lifespan(&self) -> Result<()>
     where
@@ -280,7 +269,7 @@ impl Check for SendParams {
 #[async_trait]
 impl Check for FetchParams {
     fn colorscheme(&self) -> Result<()> {
-        try_match_colorscheme(&self.colorscheme)
+        try_match_colorscheme(self.colorscheme.as_deref())
     }
     fn hash(&self) -> Result<()> {
         if let Some(hash) = &self.hash {
@@ -321,16 +310,18 @@ pub fn validate_hash(hash: &str) -> Result<()> {
 ///
 /// Fails with [`InvalidParams`] if colorscheme isn't named properly.
 /// Prompts the user with a suggestion if it fuzzy matches agains't a probability.
-pub fn try_match_colorscheme(value: &(impl AsRef<str> + Send)) -> Result<()> {
-    if SUPPORTED_COLORSCHEMES.contains(value.as_ref()) {
-        Ok(())
-    } else {
-        let fuzzy_matches = FUZZY_MATCH.search(value.as_ref(), 0.25);
-        let maybe_match = fuzzy_matches.first();
+pub fn try_match_colorscheme(maybe_value: Option<&str>) -> Result<()> {
+    maybe_value.map_or(Ok(()), |value| {
+        if SUPPORTED_BAT_COLORSCHEMES.contains(value) {
+            Ok(())
+        } else {
+            let fuzzy_matches = FUZZY_MATCH.search(value, 0.25);
+            let maybe_match = fuzzy_matches.first();
 
-        maybe_match.map_or_else(
-            || Err(ParamsError::Colorscheme(None).into()),
-            |top_match| Err(ParamsError::Colorscheme(Some(top_match.text.clone())).into()),
-        )
-    }
+            maybe_match.map_or_else(
+                || Err(ParamsError::Colorscheme(None).into()),
+                |top_match| Err(ParamsError::Colorscheme(Some(top_match.text.clone())).into()),
+            )
+        }
+    })
 }

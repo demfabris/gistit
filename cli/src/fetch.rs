@@ -36,7 +36,7 @@ pub struct Action<'a> {
     pub hash: Option<&'a str>,
     pub url: Option<&'a str>,
     pub secret: Option<&'a str>,
-    pub colorscheme: &'a str,
+    pub colorscheme: Option<&'a str>,
     pub no_syntax_highlighting: bool,
 }
 
@@ -53,7 +53,7 @@ impl<'act, 'args> Action<'act> {
             hash: args.value_of("hash"),
             url: args.value_of("url"),
             secret: args.value_of("secret"),
-            colorscheme: args.value_of("theme").ok_or(Error::Argument)?,
+            colorscheme: args.value_of("theme"),
             no_syntax_highlighting: args.is_present("no-syntax-highlighting"),
         }))
     }
@@ -143,7 +143,7 @@ impl Dispatch for Action<'_> {
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let json = config.into_json()?;
-        // TODO: branch this into '$' and '@'
+        // TODO: branch this into '#' and '@'
         let first_try = reqwest::Client::new()
             .post(GISTIT_SERVER_GET_URL.to_string())
             .json(&json)
@@ -164,6 +164,10 @@ impl Dispatch for Action<'_> {
                 if let Some(description) = payload.description {
                     header_string.push_str(&format!(" | {}", style(description).italic()));
                 }
+                // If user provided colorscheme we overwrite the stored one
+                let colorscheme = self
+                    .colorscheme
+                    .unwrap_or_else(|| payload.colorscheme.as_str());
 
                 let input = bat::Input::from_reader(file.data())
                     .name(file.name())
@@ -174,8 +178,8 @@ impl Dispatch for Action<'_> {
                     .grid(true)
                     .input(input)
                     .line_numbers(true)
-                    .language(&payload.gistit.lang)
-                    .theme(payload.colorscheme)
+                    // .language(&payload.gistit.lang)
+                    .theme(colorscheme)
                     .use_italics(true)
                     .paging_mode(bat::PagingMode::QuitIfOneScreen)
                     .print()
