@@ -23,6 +23,7 @@ pub fn app() -> App<'static, 'static> {
         )
         .subcommand(
             SubCommand::with_name("send")
+                .alias("s")
                 .about("Send the gistit to the cloud")
                 .arg(
                     Arg::with_name("file")
@@ -103,6 +104,7 @@ This is our best efforts at persisting the hash into the system clipboard after 
         )
         .subcommand(
             SubCommand::with_name("fetch")
+                .alias("f")
                 .about("Fetch a gistit wherever it is")
                 .arg(
                     Arg::with_name("hash")
