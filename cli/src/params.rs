@@ -23,7 +23,7 @@ const ALLOWED_LIFESPAN_VALUE_RANGE: RangeInclusive<u16> = 300..=3600;
 const GISTIT_HASH_CHAR_LENGTH: usize = 33;
 
 /// A [`phf::Set`] with bat supported colorschemes
-const SUPPORTED_BAT_COLORSCHEMES: Set<&'static str> = phf_set![
+pub const SUPPORTED_BAT_COLORSCHEMES: Set<&'static str> = phf_set![
     "1337",
     "Coldark-Cold",
     "Coldark-Dark",

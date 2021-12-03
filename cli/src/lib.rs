@@ -35,6 +35,7 @@ pub mod fetch;
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
 
+use console::style;
 use errors::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -45,6 +46,8 @@ pub static CURRENT_ACTION: OnceCell<String> = OnceCell::new();
 macro_rules! gistit_error {
     ($err:expr) => {{
         use crate::CURRENT_ACTION;
+        use console::style;
+
         eprintln!(
             "{}: Something went wrong during {}{}: \n    {:?}",
             style("error").red().bold(),
@@ -61,6 +64,8 @@ macro_rules! gistit_error {
 macro_rules! gistit_warn {
     ($warn:expr) => {{
         use crate::CURRENT_ACTION;
+        use console::style;
+
         eprintln!(
             "{}: Something went wrong during {}{}: \n    {}",
             style("warn").yellow().bold(),
@@ -71,4 +76,22 @@ macro_rules! gistit_warn {
             $warn
         )
     }};
+}
+
+pub fn list_bat_colorschemes() {
+    println!("{}", style("Supported colorschemes: \n").green().bold());
+    crate::params::SUPPORTED_BAT_COLORSCHEMES
+        .iter()
+        .for_each(|&c| {
+            println!("    {}", style(c).yellow());
+        });
+    println!(
+        r#"
+This application uses '{}' to view gistits inside your terminal.
+For more information please visit:
+{}
+        "#,
+        style("bat").bold().blue(),
+        style("https://github.com/sharkdp/bat").cyan()
+    );
 }
