@@ -7,7 +7,6 @@ async fn run() -> Result<()> {
     CURRENT_ACTION
         .set(matches.subcommand().0.to_string())
         .expect("Internal error");
-    println!("{:?}", matches);
     match matches.subcommand() {
         ("send", Some(args)) => dispatch_from_args!(lib_gistit::send, args),
         ("fetch", Some(args)) => dispatch_from_args!(lib_gistit::fetch, args),

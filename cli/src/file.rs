@@ -675,16 +675,17 @@ impl File {
     /// Fails with [`IoError`] if the file can't be created for some reason. Also if it can't be
     /// written to.
     pub async fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let decoded_bytes = base64::decode(bytes)?;
         let path = rng_temp_file();
 
         let mut handler = tokio::fs::File::create(&path).await?;
-        handler.write_all(bytes).await?;
+        handler.write_all(&decoded_bytes).await?;
 
         Ok(Self {
             handler,
             name: Some(_name_from_path(&path)),
             path,
-            bytes: bytes.to_vec(),
+            bytes: decoded_bytes,
         })
     }
 
