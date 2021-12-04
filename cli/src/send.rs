@@ -16,9 +16,9 @@ use crate::clipboard::Clipboard;
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::encrypt::{digest_md5_multi, HashedSecret, Secret};
 use crate::errors::io::IoError;
-use crate::file::{File, FileReady};
+use crate::file::{name_from_path, File, FileReady};
 use crate::params::{Params, SendParams};
-use crate::{Error, Result};
+use crate::{gistit_line_out, Error, Result};
 
 const SERVER_IDENTIFIER_CHAR: char = '#';
 lazy_static! {
@@ -61,8 +61,15 @@ impl<'act, 'args> Action<'act> {
     pub fn from_args(
         args: &'act ArgMatches<'args>,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + 'act>> {
+        let file = args.value_of_os("file").ok_or(Error::Argument)?;
+        gistit_line_out!(format!(
+            "{} {}",
+            style("Preparing gistit:").bold(),
+            style(name_from_path(Path::new(file))).green()
+        ));
+
         Ok(Box::new(Self {
-            file: args.value_of_os("file").ok_or(Error::Argument)?,
+            file,
             description: args.value_of("description"),
             author: args.value_of("author"),
             theme: args.value_of("theme").ok_or(Error::Argument)?,
@@ -197,6 +204,7 @@ impl Dispatch for Action<'_> {
             // If secret provided, hash it and encrypt file
             if let Some(secret_str) = self.secret {
                 let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
+                gistit_line_out!("Encrypting...");
                 let encrypted_file = file.into_encrypted(secret_str).await?;
                 (Box::new(encrypted_file), Some(hashed_secret))
             } else {
@@ -210,6 +218,7 @@ impl Dispatch for Action<'_> {
         if self.dry_run {
             return Ok(());
         }
+        gistit_line_out!("Uploading to server...");
 
         let payload = config.into_payload().await?;
         let response: Response = reqwest::Client::new()
@@ -229,14 +238,20 @@ impl Dispatch for Action<'_> {
         }
 
         println!(
-            r#"{}
-
-Gistit hash: {}
-Gistit url: {}
+            r#"
+{}:
+    hash: {} {}
+    url: {}{}
             "#,
-            style("Success").green().bold(),
-            style(server_hash).blue(),
-            style("https://foo.bar").blue()
+            style("SUCCESS").green(),
+            style(&server_hash).yellow(),
+            if self.clipboard {
+                style("(copied to clipboard)").italic().to_string()
+            } else {
+                "".to_string()
+            },
+            style("https://gistit.vercel.app/").cyan(),
+            style(&server_hash).cyan()
         );
         Ok(())
     }

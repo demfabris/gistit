@@ -620,7 +620,8 @@ pub struct File {
     name: Option<String>,
 }
 
-fn _name_from_path(path: &Path) -> String {
+#[must_use]
+pub fn name_from_path(path: &Path) -> String {
     path.file_name()
         // Checked previously
         .expect("File name to be valid")
@@ -652,7 +653,7 @@ impl File {
                 // Intercept OS error 21 (EISDIR), meaning we can't write to a directory
                 #[cfg(target_family = "unix")]
                 if let Some(21) = err.raw_os_error() {
-                    Error::File(FileError::NotAFile(_name_from_path(path)))
+                    Error::File(FileError::NotAFile(name_from_path(path)))
                 } else {
                     Error::from(err)
                 }
@@ -660,7 +661,7 @@ impl File {
                 // TODO: This needs testing
                 #[cfg(target_os = "windows")]
                 if let Some(1003) = err.raw_os_error() {
-                    Error::File(FileError::NotAFile(_name_from_path(path)))
+                    Error::File(FileError::NotAFile(name_from_path(path)))
                 } else {
                     Error::from(err)
                 }
@@ -670,7 +671,7 @@ impl File {
             handler,
             path: path.to_path_buf(),
             bytes,
-            name: Some(_name_from_path(path)),
+            name: Some(name_from_path(path)),
         })
     }
 
@@ -687,7 +688,7 @@ impl File {
 
         Ok(Self {
             handler,
-            name: Some(_name_from_path(&path)),
+            name: Some(name_from_path(&path)),
             path,
             bytes: decoded_bytes,
         })
@@ -704,7 +705,7 @@ impl File {
 
         Ok(Self {
             handler,
-            name: Some(_name_from_path(&path)),
+            name: Some(name_from_path(&path)),
             path,
             bytes: decoded_bytes.to_vec(),
         })
@@ -838,7 +839,7 @@ impl EncryptedFile {
             encrypted_bytes,
             nounce,
             prev: None,
-            name: Some(_name_from_path(&path)),
+            name: Some(name_from_path(&path)),
         })
     }
 

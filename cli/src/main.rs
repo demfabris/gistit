@@ -1,6 +1,10 @@
+use std::sync::atomic::Ordering;
+
 use lib_gistit::cli::app;
 use lib_gistit::dispatch::Dispatch;
-use lib_gistit::{dispatch_from_args, gistit_error, list_bat_colorschemes, Result, CURRENT_ACTION};
+use lib_gistit::{
+    dispatch_from_args, gistit_error, list_bat_colorschemes, Result, CURRENT_ACTION, OMIT_STDOUT,
+};
 
 async fn run() -> Result<()> {
     let matches = app().get_matches();
@@ -17,8 +21,7 @@ async fn run() -> Result<()> {
                 std::process::exit(0);
             }
             if matches.is_present("silent") {
-                println!("WIP");
-                std::process::exit(0);
+                OMIT_STDOUT.store(true, Ordering::Relaxed);
             }
             app().print_help().expect("Couldn't write to stdout");
         }
@@ -28,9 +31,10 @@ async fn run() -> Result<()> {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     // Top level error output
     if let Err(err) = run().await {
         gistit_error!(err);
     };
+    Ok(())
 }

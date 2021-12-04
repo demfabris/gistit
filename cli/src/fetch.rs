@@ -191,13 +191,13 @@ impl Dispatch for Action<'_> {
                 let count = GISTIT_SECRET_RETRY_COUNT.fetch_add(1, Ordering::Relaxed);
                 if count <= 2 {
                     let prompt_msg = if self.secret.is_some() {
-                        gistit_warn!(style("\u{1f512}Secret is invalid").yellow().bold());
-                        style("\ntry again").bold().to_string()
+                        gistit_warn!(style("\u{1f512}Secret is invalid").yellow());
+                        style("\nTry again").bold().to_string()
                     } else {
-                        gistit_warn!(style("\u{1f512}A secret is required for this Gistit")
-                            .yellow()
-                            .bold());
-                        style("\nsecret").bold().to_string()
+                        gistit_warn!(
+                            style("\u{1f512}A secret is required for this Gistit").yellow()
+                        );
+                        style("\nSecret").bold().to_string()
                     };
 
                     let new_secret = dialoguer::Password::new()
