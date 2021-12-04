@@ -90,7 +90,7 @@ pub mod encryption {
                 EncryptionError::SecretLength => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("SecretLength").red().bold()
                     );
                     write!(
@@ -111,7 +111,7 @@ CAUSE:
                 EncryptionError::Cipher(err) => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("Cipher").red().bold()
                     );
                     write!(
@@ -129,7 +129,7 @@ This is unlikely to be caused by a misuse of the application, check your program
                 EncryptionError::Encoding(err) => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("Encoding").red().bold()
                     );
                     write!(
@@ -176,7 +176,7 @@ pub mod params {
                 ParamsError::DescriptionCharRange => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("DescriptionCharLength").red().bold()
                     );
                     write!(
@@ -193,7 +193,7 @@ CAUSE:
                 ParamsError::AuthorCharRange => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("AuthorCharRange").red().bold()
                     );
                     write!(
@@ -213,7 +213,7 @@ CAUSE:
                     });
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("Colorscheme").red().bold()
                     );
                     write!(
@@ -234,7 +234,7 @@ CAUSE:
                 ParamsError::LifespanRange => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("LifespanRange").red().bold()
                     );
                     write!(
@@ -255,7 +255,7 @@ CAUSE:
                 ParamsError::InvalidLifespan => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("InvalidLifespan").red().bold()
                     );
                     write!(
@@ -273,7 +273,7 @@ CAUSE:
                 ParamsError::InvalidUrl(err) => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("InvalidUrl").red().bold()
                     );
                     write!(
@@ -293,7 +293,7 @@ CAUSE:
                 ParamsError::InvalidHash(hash_captured) => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("InvalidHash").red().bold()
                     );
                     write!(
@@ -344,7 +344,7 @@ pub mod file {
                 Self::MissingExtension => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("MissingFileExtension").red().bold()
                     );
                     write!(
@@ -364,7 +364,7 @@ CAUSE:
                 Self::UnsupportedExtension(ext) => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("UnsupportedExtension").red().bold()
                     );
                     write!(
@@ -385,7 +385,7 @@ CAUSE:
                 Self::NotAFile(name) => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("NotAFile").red().bold()
                     );
                     write!(
@@ -404,7 +404,7 @@ CAUSE:
                 Self::UnsupportedSize(size) => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("UnsupportedSize").red().bold()
                     );
                     let size_str = if size > &1 {
@@ -431,7 +431,7 @@ CAUSE:
                 Self::InvalidEncryptionPadding => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("InvalidEncryptionHeader").red().bold()
                     );
                     write!(
@@ -457,6 +457,8 @@ pub mod io {
         ProcessSpawn(String),
         /// Failed to write to stdin of a process
         StdinWrite(String),
+        /// Failed to write to stdout
+        StdoutWrite(String),
         /// Process hanged/can't close
         ProcessWait(String),
         /// Something wrong happened during a request
@@ -471,7 +473,7 @@ pub mod io {
                 Self::Other(err_string) => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("IoError").red().bold()
                     );
                     write!(
@@ -486,9 +488,9 @@ CAUSE:
                 Self::Request(err_string) => {
                     println!(
                         "{}{} {}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("IoError").red().bold(),
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("Request").red().bold()
                     );
                     write!(
@@ -500,14 +502,32 @@ CAUSE:
                         style(err_string).yellow()
                     )
                 }
+                Self::StdoutWrite(err_string) => {
+                    println!(
+                        "{}{} {}{}",
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("IoError").red().bold(),
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("StdoutWrite").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+CAUSE:
+    failed to write to stdout.
+    {}
+                    "#,
+                        style(err_string).yellow()
+                    )
+                }
                 Self::ProcessWait(err_string)
                 | Self::StdinWrite(err_string)
                 | Self::ProcessSpawn(err_string) => {
                     println!(
                         "{}{} {}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("IoError").red().bold(),
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("Process").red().bold()
                     );
                     write!(
@@ -563,7 +583,7 @@ pub mod fetch {
                 Self::ExaustedSecretRetries => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("ExaustedSecretRetries").red().bold()
                     );
                     write!(
@@ -581,7 +601,7 @@ CAUSE:
                 Self::NotFound => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("NotFound").red().bold()
                     );
                     write!(
@@ -602,7 +622,7 @@ CAUSE:
                 Self::UnexpectedResponse => {
                     println!(
                         "{}{}",
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("UnexpectedResponse").red().bold()
                     );
                     write!(
@@ -657,9 +677,9 @@ pub mod clipboard {
                 Self::UnknownPlatform => {
                     println!(
                         "{}{} {}{}",
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("Clipboard").yellow().bold(),
-                        style(Emoji("\u{274c}", "X")).red(),
+                        style(Emoji("\u{274c} ", "X")).red(),
                         style("UnknownPlatform").red().bold()
                     );
                     write!(
@@ -678,9 +698,9 @@ CAUSE:
                 Self::MissingX11ClipboardBin => {
                     println!(
                         "{}{} {}{}",
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("Clipboard").yellow().bold(),
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("MissingX11ClipboardBin").yellow().bold()
                     );
                     write!(
@@ -701,9 +721,9 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 Self::MissingWaylandClipboardBin => {
                     println!(
                         "{}{} {}{}",
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("Clipboard").yellow().bold(),
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("MissingWaylandClipboardBin").yellow().bold()
                     );
                     write!(
@@ -724,9 +744,9 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 Self::MissingTtyClipboardBin => {
                     println!(
                         "{}{} {}{}",
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("Clipboard").yellow().bold(),
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("MissingTtyClipboardBin").yellow().bold()
                     );
                     write!(
@@ -747,9 +767,9 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 Self::MissingDisplayEnvSsh => {
                     println!(
                         "{}{} {}{}",
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("Clipboard").yellow().bold(),
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("MissingDisplayEnvSsh").yellow().bold()
                     );
                     write!(
@@ -771,9 +791,9 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                     io::IoError::ProcessSpawn(output) => {
                         println!(
                             "{}{} {}{}",
-                            style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                            style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                             style("Clipboard").yellow().bold(),
-                            style(Emoji("\u{274c}", "X")).red(),
+                            style(Emoji("\u{274c} ", "X")).red(),
                             style("BinExecution").red().bold()
                         );
                         write!(
@@ -793,9 +813,9 @@ CAUSE:
                     io::IoError::StdinWrite(output) => {
                         println!(
                             "{}{} {}{}",
-                            style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                            style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                             style("Clipboard").blue().bold(),
-                            style(Emoji("\u{274c}", "X")).red(),
+                            style(Emoji("\u{274c} ", "X")).red(),
                             style("BinExecution").red().bold()
                         );
                         write!(
@@ -814,12 +834,13 @@ CAUSE:
                     }
                     io::IoError::ProcessWait(output)
                     | io::IoError::Other(output)
+                    | io::IoError::StdoutWrite(output)
                     | io::IoError::Request(output) => {
                         println!(
                             "{}{} {}{}",
-                            style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                            style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                             style("Clipboard").yellow().bold(),
-                            style(Emoji("\u{274c}", "X")).red(),
+                            style(Emoji("\u{274c} ", "X")).red(),
                             style("BinExecution").red().bold()
                         );
                         write!(
@@ -841,9 +862,9 @@ CAUSE:
                 Self::MissingMacosClipboardBin => {
                     println!(
                         "{}{} {}{}",
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("Clipboard").yellow().bold(),
-                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style(Emoji("\u{26a0}\u{fe0f}  ", "!")).yellow(),
                         style("MissingMacosClipboardBin").yellow().bold()
                     );
                     write!(
