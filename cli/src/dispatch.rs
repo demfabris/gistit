@@ -54,7 +54,7 @@ impl GistitPayload {
         let name = self.gistit.name.clone();
         if let Some(secret) = &self.secret {
             Ok(Box::new(
-                EncryptedFile::from_bytes(self.gistit.data.inner.as_bytes())
+                EncryptedFile::from_bytes_encoded(self.gistit.data.inner.as_bytes())
                     .await?
                     .with_name(name)
                     .into_decrypted(secret)
@@ -62,7 +62,7 @@ impl GistitPayload {
             ))
         } else {
             Ok(Box::new(
-                File::from_bytes(self.gistit.data.inner.as_bytes())
+                File::from_bytes_encoded(self.gistit.data.inner.as_bytes())
                     .await?
                     .with_name(name),
             ))

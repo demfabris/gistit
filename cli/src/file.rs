@@ -628,6 +628,13 @@ fn _name_from_path(path: &Path) -> String {
         .to_string()
 }
 
+async fn spawn_and_write_file(bytes: &[u8]) -> Result<(tokio::fs::File, PathBuf)> {
+    let path = rng_temp_file();
+    let mut handler = tokio::fs::File::create(&path).await?;
+    handler.write_all(bytes).await?;
+    Ok((handler, path))
+}
+
 impl File {
     /// Opens a file from the given `path` and returns a [`File`] handler.
     ///
@@ -674,18 +681,32 @@ impl File {
     ///
     /// Fails with [`IoError`] if the file can't be created for some reason. Also if it can't be
     /// written to.
-    pub async fn from_bytes(bytes: &[u8]) -> Result<Self> {
+    pub async fn from_bytes_encoded(bytes: &[u8]) -> Result<Self> {
         let decoded_bytes = base64::decode(bytes)?;
-        let path = rng_temp_file();
-
-        let mut handler = tokio::fs::File::create(&path).await?;
-        handler.write_all(&decoded_bytes).await?;
+        let (handler, path) = spawn_and_write_file(&decoded_bytes).await?;
 
         Ok(Self {
             handler,
             name: Some(_name_from_path(&path)),
             path,
             bytes: decoded_bytes,
+        })
+    }
+
+    /// Same as [`from_bytes_encoded`] but doesn't expect encoded bytes
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`IoError`] if the file can't be created for some reason. Also if it can't be
+    /// written to.
+    pub async fn from_bytes(decoded_bytes: &[u8]) -> Result<Self> {
+        let (handler, path) = spawn_and_write_file(decoded_bytes).await?;
+
+        Ok(Self {
+            handler,
+            name: Some(_name_from_path(&path)),
+            path,
+            bytes: decoded_bytes.to_vec(),
         })
     }
 
@@ -805,7 +826,7 @@ impl EncryptedFile {
     ///
     /// Fails with [`IoError`] if can't create or write to the file handler.
     /// Fails with [`FileError`] if the encryption header is invalid.
-    pub async fn from_bytes(encoded_bytes: &[u8]) -> Result<Self> {
+    pub async fn from_bytes_encoded(encoded_bytes: &[u8]) -> Result<Self> {
         let decoded_bytes = base64::decode(encoded_bytes)?;
         let path = rng_temp_file();
 
