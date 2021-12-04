@@ -3,7 +3,7 @@
 //! Here we define all errors (fatal and non-fatal) that gistit can output
 //! We moved to manual implementation of the errors to allow for prettier and colorized output
 //! Every error should convert to top level [`Error`] in the end.
-use console::style;
+use console::{style, Emoji};
 
 /// The top level error structure
 pub enum Error {
@@ -56,7 +56,7 @@ impl std::fmt::Debug for Error {
 pub mod encryption {
     use base64::DecodeError;
 
-    use super::{style, Error};
+    use super::{style, Emoji, Error};
 
     pub enum EncryptionError {
         SecretLength,
@@ -88,7 +88,11 @@ pub mod encryption {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 EncryptionError::SecretLength => {
-                    println!("{}", style("\u{274c} SecretLength").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("SecretLength").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -105,7 +109,11 @@ CAUSE:
                     )
                 }
                 EncryptionError::Cipher(err) => {
-                    println!("{}", style("\u{274c} Cipher").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("Cipher").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -119,7 +127,11 @@ This is unlikely to be caused by a misuse of the application, check your program
                     )
                 }
                 EncryptionError::Encoding(err) => {
-                    println!("{}", style("\u{274c} Encoding").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("Encoding").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -139,7 +151,7 @@ This is unlikely to be caused by a misuse of the application, check your program
 
 /// Params module errors
 pub mod params {
-    use super::{style, Error};
+    use super::{style, Emoji, Error};
 
     pub enum ParamsError {
         DescriptionCharRange,
@@ -162,7 +174,11 @@ pub mod params {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 ParamsError::DescriptionCharRange => {
-                    println!("{}", style("\u{274c} DescriptionCharLength").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("DescriptionCharLength").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -175,7 +191,11 @@ CAUSE:
                     )
                 }
                 ParamsError::AuthorCharRange => {
-                    println!("{}", style("\u{274c} AuthorCharRange").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("AuthorCharRange").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -191,7 +211,11 @@ CAUSE:
                     let suggest = maybe_close_match.as_ref().map(|close_match| {
                         format!("\n\nDid you mean: '{}'?", style(close_match).blue())
                     });
-                    println!("{}", style("\u{274c} Colorscheme").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("Colorscheme").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -208,7 +232,11 @@ CAUSE:
                     )
                 }
                 ParamsError::LifespanRange => {
-                    println!("{}", style("\u{274c} LifespanRange").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("LifespanRange").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -225,7 +253,11 @@ CAUSE:
                     )
                 }
                 ParamsError::InvalidLifespan => {
-                    println!("{}", style("\u{274c} InvalidLifespan").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("InvalidLifespan").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -239,7 +271,11 @@ CAUSE:
                     )
                 }
                 ParamsError::InvalidUrl(err) => {
-                    println!("{}", style("\u{274c} InvalidUrl").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("InvalidUrl").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -255,7 +291,11 @@ CAUSE:
                     )
                 }
                 ParamsError::InvalidHash(hash_captured) => {
-                    println!("{}", style("\u{274c} InvalidHash").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("InvalidHash").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -276,7 +316,7 @@ CAUSE:
 
 /// File module errors
 pub mod file {
-    use super::{style, Error};
+    use super::{style, Emoji, Error};
 
     #[derive(Clone)]
     pub enum FileError {
@@ -302,7 +342,11 @@ pub mod file {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 Self::MissingExtension => {
-                    println!("{}", style("\u{274c} MissingFileExtension").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("MissingFileExtension").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -318,7 +362,11 @@ CAUSE:
                     )
                 }
                 Self::UnsupportedExtension(ext) => {
-                    println!("{}", style("\u{274c} UnsupportedExtension").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("UnsupportedExtension").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -335,7 +383,11 @@ CAUSE:
                     )
                 }
                 Self::NotAFile(name) => {
-                    println!("{}", style("\u{274c} NotAFile").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("NotAFile").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -350,7 +402,11 @@ CAUSE:
                     )
                 }
                 Self::UnsupportedSize(size) => {
-                    println!("{}", style("\u{274c} UnsupportedSize").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("UnsupportedSize").red().bold()
+                    );
                     let size_str = if size > &1 {
                         format!("{} bytes", size.to_string())
                     } else {
@@ -373,7 +429,11 @@ CAUSE:
                     )
                 }
                 Self::InvalidEncryptionPadding => {
-                    println!("{}", style("\u{274c} InvalidEncryptionHeader").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("InvalidEncryptionHeader").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -389,7 +449,7 @@ CAUSE:
 
 /// I/O operations error
 pub mod io {
-    use super::{style, Error};
+    use super::{style, Emoji, Error};
 
     #[derive(Clone)]
     pub enum IoError {
@@ -409,7 +469,11 @@ pub mod io {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 Self::Other(err_string) => {
-                    println!("{}", style("\u{274c} IoError").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("IoError").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -421,9 +485,11 @@ CAUSE:
                 }
                 Self::Request(err_string) => {
                     println!(
-                        "{} {}",
-                        style("\u{274c} IoError").red().bold(),
-                        style("\u{274c} Request").red().bold()
+                        "{}{} {}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("IoError").red().bold(),
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("Request").red().bold()
                     );
                     write!(
                         f,
@@ -438,9 +504,11 @@ CAUSE:
                 | Self::StdinWrite(err_string)
                 | Self::ProcessSpawn(err_string) => {
                     println!(
-                        "{} {}",
-                        style("\u{274c} IoError").red().bold(),
-                        style("\u{274c} Process").red().bold()
+                        "{}{} {}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("IoError").red().bold(),
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("Process").red().bold()
                     );
                     write!(
                         f,
@@ -470,7 +538,7 @@ CAUSE:
 
 /// Fetch module errors
 pub mod fetch {
-    use super::{style, Error};
+    use super::{style, Emoji, Error};
 
     #[derive(Clone)]
     #[non_exhaustive]
@@ -493,7 +561,11 @@ pub mod fetch {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
                 Self::ExaustedSecretRetries => {
-                    println!("{}", style("\u{274c} ExaustedSecretRetries").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("ExaustedSecretRetries").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -507,7 +579,11 @@ CAUSE:
                     )
                 }
                 Self::NotFound => {
-                    println!("{}", style("\u{274c} NotFound").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("NotFound").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -524,7 +600,11 @@ CAUSE:
                     )
                 }
                 Self::UnexpectedResponse => {
-                    println!("{}", style("\u{274c} UnexpectedResponse").red().bold());
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("UnexpectedResponse").red().bold()
+                    );
                     write!(
                         f,
                         r#"
@@ -543,7 +623,7 @@ The host location is missbehaving or trying to be evil.
 
 /// Clipboard module errors
 pub mod clipboard {
-    use super::{io, style, Error};
+    use super::{io, style, Emoji, Error};
 
     #[derive(Clone)]
     pub enum ClipboardError {
@@ -576,9 +656,11 @@ pub mod clipboard {
             match &self {
                 Self::UnknownPlatform => {
                     println!(
-                        "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
-                        style("\u{274c} UnknownPlatform").red().bold()
+                        "{}{} {}{}",
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("Clipboard").yellow().bold(),
+                        style(Emoji("\u{274c}", "X")).red(),
+                        style("UnknownPlatform").red().bold()
                     );
                     write!(
                         f,
@@ -595,11 +677,11 @@ CAUSE:
                 }
                 Self::MissingX11ClipboardBin => {
                     println!(
-                        "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
-                        style("\u{26a0}\u{fe0f} MissingX11ClipboardBin")
-                            .yellow()
-                            .bold()
+                        "{}{} {}{}",
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("Clipboard").yellow().bold(),
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("MissingX11ClipboardBin").yellow().bold()
                     );
                     write!(
                         f,
@@ -618,11 +700,11 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 }
                 Self::MissingWaylandClipboardBin => {
                     println!(
-                        "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
-                        style("\u{26a0}\u{fe0f} MissingWaylandClipboardBin")
-                            .yellow()
-                            .bold()
+                        "{}{} {}{}",
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("Clipboard").yellow().bold(),
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("MissingWaylandClipboardBin").yellow().bold()
                     );
                     write!(
                         f,
@@ -641,11 +723,11 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 }
                 Self::MissingTtyClipboardBin => {
                     println!(
-                        "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
-                        style("\u{26a0}\u{fe0f} MissingTtyClipboardBin")
-                            .yellow()
-                            .bold()
+                        "{}{} {}{}",
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("Clipboard").yellow().bold(),
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("MissingTtyClipboardBin").yellow().bold()
                     );
                     write!(
                         f,
@@ -664,11 +746,11 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 }
                 Self::MissingDisplayEnvSsh => {
                     println!(
-                        "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
-                        style("\u{26a0}\u{fe0f} MissingDisplayEnvSsh")
-                            .yellow()
-                            .bold()
+                        "{}{} {}{}",
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("Clipboard").yellow().bold(),
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("MissingDisplayEnvSsh").yellow().bold()
                     );
                     write!(
                         f,
@@ -688,9 +770,11 @@ This is not a fatal error, application will attempt the fallback OSC52 clipboard
                 Self::BinExecution(io_err) => match io_err {
                     io::IoError::ProcessSpawn(output) => {
                         println!(
-                            "{} {}",
-                            style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
-                            style("\u{274c}BinExecution").red().bold()
+                            "{}{} {}{}",
+                            style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                            style("Clipboard").yellow().bold(),
+                            style(Emoji("\u{274c}", "X")).red(),
+                            style("BinExecution").red().bold()
                         );
                         write!(
                             f,
@@ -708,9 +792,11 @@ CAUSE:
                     }
                     io::IoError::StdinWrite(output) => {
                         println!(
-                            "{} {}",
-                            style("\u{26a0}\u{fe0f} Clipboard").blue().bold(),
-                            style("\u{274c} BinExecution").red().bold()
+                            "{}{} {}{}",
+                            style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                            style("Clipboard").blue().bold(),
+                            style(Emoji("\u{274c}", "X")).red(),
+                            style("BinExecution").red().bold()
                         );
                         write!(
                             f,
@@ -730,9 +816,11 @@ CAUSE:
                     | io::IoError::Other(output)
                     | io::IoError::Request(output) => {
                         println!(
-                            "{} {}",
-                            style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
-                            style("\u{274c}BinExecution").red().bold()
+                            "{}{} {}{}",
+                            style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                            style("Clipboard").yellow().bold(),
+                            style(Emoji("\u{274c}", "X")).red(),
+                            style("BinExecution").red().bold()
                         );
                         write!(
                             f,
@@ -752,11 +840,11 @@ CAUSE:
                 #[cfg(all(target_os = "macos", target_os = "ios"))]
                 Self::MissingMacosClipboardBin => {
                     println!(
-                        "{} {}",
-                        style("\u{26a0}\u{fe0f} Clipboard").yellow().bold(),
-                        style("\u{26a0}\u{fe0f} MissingMacosClipboardBin")
-                            .yellow()
-                            .bold()
+                        "{}{} {}{}",
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("Clipboard").yellow().bold(),
+                        style(Emoji("\u{26a0}\u{fe0f}", "!")).yellow(),
+                        style("MissingMacosClipboardBin").yellow().bold()
                     );
                     write!(
                         f,
