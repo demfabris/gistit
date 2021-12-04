@@ -850,7 +850,7 @@ PARAM:
     {}
 
 CAUSE:
-    the clipboard program process crashed:
+    the clipboard program process crashed.
     {}
                             "#,
                             style("--clipboard").red().bold(),
