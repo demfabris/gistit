@@ -71,7 +71,7 @@ pub fn app() -> App<'static, 'static> {
                     Arg::with_name("theme")
                         .long("theme")
                         .short("t")
-                        .default_value("GitHub")
+                        .default_value("ansi")
                         .requires("file")
                         .takes_value(true)
                         .help("The color scheme to apply syntax highlighting")
