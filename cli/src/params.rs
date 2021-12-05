@@ -70,9 +70,9 @@ impl SendArgs for SendParams {}
 /// The data structure that holds data to be checked/dispatched during a [`SendAction`]
 #[derive(Clone, Default, Debug)]
 pub struct SendParams {
-    pub author: String,
-    pub description: Option<String>,
-    pub colorscheme: String,
+    pub author: &'static str,
+    pub description: Option<&'static str>,
+    pub colorscheme: &'static str,
     pub lifespan: u16,
 }
 
@@ -82,9 +82,9 @@ impl FetchArgs for FetchParams {}
 /// The data structure that holds data to be checked/dispatched during a [`FetchAction`]
 #[derive(Clone, Default, Debug)]
 pub struct FetchParams {
-    pub hash: Option<String>,
-    pub url: Option<String>,
-    pub colorscheme: Option<String>,
+    pub hash: Option<&'static str>,
+    pub url: Option<&'static str>,
+    pub colorscheme: Option<&'static str>,
 }
 
 impl SendParams {
@@ -124,9 +124,9 @@ impl Params {
     /// Fails with [`InvalidParams`] error
     pub fn from_send(action: &SendAction) -> Result<SendParams> {
         Ok(SendParams {
-            author: action.author.to_owned(),
-            description: action.description.map(ToOwned::to_owned),
-            colorscheme: action.theme.to_owned(),
+            author: action.author,
+            description: action.description,
+            colorscheme: action.theme,
             lifespan: action
                 .lifespan
                 .parse::<u16>()
@@ -139,11 +139,11 @@ impl Params {
     /// # Errors
     ///
     /// Fails with [`InvalidParams`] error
-    pub fn from_fetch(action: &FetchAction) -> Result<FetchParams> {
+    pub const fn from_fetch(action: &FetchAction) -> Result<FetchParams> {
         Ok(FetchParams {
-            hash: action.hash.map(ToOwned::to_owned),
-            url: action.url.map(ToOwned::to_owned),
-            colorscheme: action.colorscheme.map(ToOwned::to_owned),
+            hash: action.hash,
+            url: action.url,
+            colorscheme: action.colorscheme,
         })
     }
 }
@@ -222,7 +222,7 @@ trait Check {
 #[async_trait]
 impl Check for SendParams {
     fn colorscheme(&self) -> Result<()> {
-        try_match_colorscheme(Some(&self.colorscheme))
+        try_match_colorscheme(Some(self.colorscheme))
     }
     fn lifespan(&self) -> Result<()>
     where
@@ -273,7 +273,7 @@ impl Check for FetchParams {
         Ok(())
     }
     fn url(&self) -> Result<()> {
-        if let Some(ref url) = self.url {
+        if let Some(url) = self.url {
             let url = Url::parse(url).map_err(|err| ParamsError::InvalidUrl(err.to_string()))?;
             let (_, hash) = url.path().split_at(1);
             validate_hash(hash)?;

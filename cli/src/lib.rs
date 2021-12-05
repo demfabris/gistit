@@ -7,6 +7,8 @@
 #![allow(clippy::module_name_repetitions)]
 // Not my fault
 #![allow(clippy::multiple_crate_versions)]
+// Boring
+#![allow(clippy::missing_panics_doc)]
 // Test env should be chill
 #![cfg_attr(
     test,
@@ -28,6 +30,7 @@ pub mod errors;
 pub mod file;
 pub mod params;
 pub mod send;
+pub mod settings;
 
 #[cfg(feature = "fetch")]
 pub mod fetch;

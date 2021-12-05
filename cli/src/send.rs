@@ -32,19 +32,19 @@ lazy_static! {
 }
 
 /// The Send action runtime parameters
-pub struct Action<'a> {
+pub struct Action {
     /// The file to be sent.
-    pub file: &'a OsStr,
+    pub file: &'static OsStr,
     /// The description of this Gistit.
-    pub description: Option<&'a str>,
+    pub description: Option<&'static str>,
     /// The author information.
-    pub author: &'a str,
+    pub author: &'static str,
     /// The colorscheme to be displayed.
-    pub theme: &'a str,
+    pub theme: &'static str,
     /// The password to encrypt.
-    pub secret: Option<&'a str>,
+    pub secret: Option<&'static str>,
     /// The custom lifespan of a Gistit snippet.
-    pub lifespan: &'a str,
+    pub lifespan: &'static str,
     /// Whether or not to copy successfully sent gistit hash to clipboard.
     pub clipboard: bool,
     /// dry_run
@@ -52,15 +52,15 @@ pub struct Action<'a> {
     pub dry_run: bool,
 }
 
-impl<'act, 'args> Action<'act> {
+impl<'args> Action {
     /// Parse [`ArgMatches`] into the dispatchable Send action
     ///
     /// # Errors
     ///
     /// Fails with argument errors
     pub fn from_args(
-        args: &'act ArgMatches<'args>,
-    ) -> Result<Box<dyn Dispatch<InnerData = Config> + 'act>> {
+        args: &'static ArgMatches<'args>,
+    ) -> Result<Box<dyn Dispatch<InnerData = Config> + 'static>> {
         let file = args.value_of_os("file").ok_or(Error::Argument)?;
         gistit_line_out!(format!(
             "{} {}",
@@ -141,9 +141,9 @@ impl Config {
 
         Ok(GistitPayload {
             hash,
-            author: params.author,
-            description: params.description,
-            colorscheme: params.colorscheme,
+            author: params.author.to_owned(),
+            description: params.description.map(ToOwned::to_owned),
+            colorscheme: params.colorscheme.to_owned(),
             lifespan: params.lifespan,
             secret: self.maybe_secret.map(|t| t.to_str().to_owned()),
             timestamp: SystemTime::now()
@@ -186,7 +186,7 @@ impl Response {
 
 /// The dispatch implementation for Send action
 #[async_trait]
-impl Dispatch for Action<'_> {
+impl Dispatch for Action {
     type InnerData = Config;
     /// Build each top level entity and run inner checks concurrently to assert valid input and
     /// output data.

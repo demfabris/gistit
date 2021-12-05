@@ -32,25 +32,25 @@ lazy_static! {
 }
 
 #[derive(Clone)]
-pub struct Action<'a> {
-    pub hash: Option<&'a str>,
-    pub url: Option<&'a str>,
-    pub secret: Option<&'a str>,
-    pub colorscheme: Option<&'a str>,
+pub struct Action {
+    pub hash: Option<&'static str>,
+    pub url: Option<&'static str>,
+    pub secret: Option<&'static str>,
+    pub colorscheme: Option<&'static str>,
     pub no_syntax_highlighting: bool,
     pub preview: bool,
     pub save: bool,
 }
 
-impl<'act, 'args> Action<'act> {
+impl<'args> Action {
     /// Parse [`ArgMatches`] into the dispatchable Fetch action
     ///
     /// # Errors
     ///
     /// Fails with argument errors
     pub fn from_args(
-        args: &'act ArgMatches<'args>,
-    ) -> Result<Box<dyn Dispatch<InnerData = Config> + 'act>> {
+        args: &'static ArgMatches<'args>,
+    ) -> Result<Box<dyn Dispatch<InnerData = Config> + 'static>> {
         Ok(Box::new(Self {
             hash: args.value_of("hash"),
             url: args.value_of("url"),
@@ -89,7 +89,7 @@ impl Config {
         let final_hash = match &self.params {
             FetchParams {
                 hash: Some(hash), ..
-            } => hash.clone(),
+            } => (*hash).to_string(),
             FetchParams {
                 url: Some(url),
                 hash: None,
@@ -133,7 +133,7 @@ impl Response {
 }
 
 #[async_trait]
-impl Dispatch for Action<'_> {
+impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
@@ -213,7 +213,7 @@ impl Dispatch for Action<'_> {
 
                     // Rebuild the action object and recurse down the same path
                     let mut action = self.clone();
-                    action.secret = Some(&new_secret);
+                    action.secret = Some(Box::leak(Box::new(new_secret)));
 
                     let new_config = Dispatch::prepare(&action).await?;
                     Dispatch::dispatch(&action, new_config).await?;

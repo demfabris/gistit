@@ -7,7 +7,7 @@ use lib_gistit::{
 };
 
 async fn run() -> Result<()> {
-    let matches = app().get_matches();
+    let matches = Box::leak(Box::new(app().get_matches()));
     CURRENT_ACTION
         .set(matches.subcommand().0.to_string())
         .expect("Internal error");

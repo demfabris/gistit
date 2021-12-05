@@ -44,8 +44,8 @@ pub struct EncodedFileData {
 ///
 /// `Bat` does autodetection so this doesn't affect it.
 ///
-/// Filled with https://gist.github.com/ppisarczyk/43962d06686722d26d176fad46879d41 and some google
-/// help
+/// Filled with [Programming languages](https://gist.github.com/ppisarczyk/43962d06686722d26d176fad46879d41)
+/// and some google help.
 const EXTENSION_TO_LANG_MAPPING: Map<&'static str, &'static str> = phf_map! {
     "abap" => "abap",
     "as" => "actionscript",
