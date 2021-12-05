@@ -1,4 +1,10 @@
-//! The Send feature
+//! The send feature.
+//!
+//! This module comes by default when building `gistit` cli application.
+//! Here we parse and check user input to give better UX feedback. Most of these checks are
+//! repeated in the server.
+//!
+//! In this module we pack a gistit, generate a hash, and send to a centralized server
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -12,15 +18,19 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use url::Url;
 
-use crate::clipboard::Clipboard;
+use lib_gistit::clipboard::Clipboard;
+use lib_gistit::encrypt::{digest_md5_multi, HashedSecret, Secret};
+use lib_gistit::errors::io::IoError;
+use lib_gistit::file::{name_from_path, File, FileReady};
+use lib_gistit::{Error, Result};
+
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
-use crate::encrypt::{digest_md5_multi, HashedSecret, Secret};
-use crate::errors::io::IoError;
-use crate::file::{name_from_path, File, FileReady};
-use crate::params::{Params, SendParams};
-use crate::{gistit_line_out, Error, Result};
+use crate::gistit_line_out;
+use crate::params::Params;
+use crate::params::SendParams;
 
 const SERVER_IDENTIFIER_CHAR: char = '#';
+
 lazy_static! {
     static ref GISTIT_SERVER_LOAD_URL: Url = Url::parse(
         option_env!("GISTIT_SERVER_URL")
@@ -41,14 +51,13 @@ pub struct Action {
     pub author: &'static str,
     /// The colorscheme to be displayed.
     pub theme: &'static str,
-    /// The password to encrypt.
+    /// The secret key to encrypt.
     pub secret: Option<&'static str>,
     /// The custom lifespan of a Gistit snippet.
     pub lifespan: &'static str,
     /// Whether or not to copy successfully sent gistit hash to clipboard.
     pub clipboard: bool,
-    /// dry_run
-    #[doc(hidden)]
+    /// Dry run. Prepare without dispatching
     pub dry_run: bool,
 }
 
@@ -205,6 +214,7 @@ impl Dispatch for Action {
             if let Some(secret_str) = self.secret {
                 let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
                 gistit_line_out!("Encrypting...");
+
                 let encrypted_file = file.into_encrypted(secret_str).await?;
                 (Box::new(encrypted_file), Some(hashed_secret))
             } else {

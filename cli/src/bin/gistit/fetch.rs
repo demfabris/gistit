@@ -11,14 +11,16 @@ use serde::Deserialize;
 use serde_json::json;
 use url::Url;
 
+use lib_gistit::encrypt::Secret;
+use lib_gistit::errors::fetch::FetchError;
+use lib_gistit::errors::io::IoError;
+use lib_gistit::errors::params::ParamsError;
+use lib_gistit::file::FileReady;
+use lib_gistit::{Error, Result};
+
 use crate::dispatch::{Dispatch, GistitPayload};
-use crate::encrypt::Secret;
-use crate::errors::fetch::FetchError;
-use crate::errors::io::IoError;
-use crate::errors::params::ParamsError;
-use crate::file::FileReady;
 use crate::params::{FetchParams, Params};
-use crate::{gistit_line_out, gistit_warn, Error, Result};
+use crate::{gistit_line_out, gistit_warn};
 
 lazy_static! {
     static ref GISTIT_SECRET_RETRY_COUNT: AtomicU8 = AtomicU8::new(0);

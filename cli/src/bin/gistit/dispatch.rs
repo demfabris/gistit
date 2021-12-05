@@ -1,10 +1,12 @@
-//! The Dispatch trait
+//! The Dispatch module
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::file::{EncodedFileData, EncryptedFile, File, FileReady};
-use crate::{gistit_line_out, Result};
+use lib_gistit::file::{EncodedFileData, EncryptedFile, File, FileReady};
+use lib_gistit::Result;
+
+use crate::gistit_line_out;
 
 #[async_trait]
 pub trait Dispatch {
@@ -20,16 +22,6 @@ pub trait Dispatch {
 #[async_trait]
 pub trait Hasheable {
     fn hash(&self) -> String;
-}
-
-#[macro_export]
-macro_rules! dispatch_from_args {
-    ($mod:path, $args:expr) => {{
-        use $mod as module;
-        let action = module::Action::from_args($args)?;
-        let payload = Dispatch::prepare(&*action).await?;
-        Dispatch::dispatch(&*action, payload).await?;
-    }};
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]

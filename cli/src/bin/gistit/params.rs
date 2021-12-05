@@ -8,10 +8,11 @@ use url::Url;
 use std::borrow::ToOwned;
 use std::ops::RangeInclusive;
 
-use crate::errors::params::ParamsError;
 use crate::fetch::Action as FetchAction;
 use crate::send::Action as SendAction;
-use crate::Result;
+
+use lib_gistit::errors::params::ParamsError;
+use lib_gistit::Result;
 
 /// Allowed description length
 const ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE: RangeInclusive<usize> = 10..=100;
