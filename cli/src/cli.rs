@@ -46,8 +46,11 @@ pub fn app() -> App<'static, 'static> {
                     Arg::with_name("author")
                         .long("author")
                         .short("a")
-                        .help("With author information")
+                        .help("With author information. Defaults to a random generated name")
                         .takes_value(true)
+                        .default_value(Box::leak(Box::new(
+                            names::Generator::default().next().unwrap(),
+                        )))
                         .requires("file"),
                 )
                 .arg(

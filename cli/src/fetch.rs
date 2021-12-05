@@ -163,9 +163,8 @@ impl Dispatch for Action<'_> {
                 let file = gistit.inner().await.expect("File to be open");
 
                 let mut header_string = style(file.name()).green().to_string();
-                if let Some(author) = payload.author {
-                    header_string.push_str(&format!(" | {}", style(author).blue().bold()));
-                }
+                header_string.push_str(&format!(" | {}", style(payload.author).blue().bold()));
+
                 if let Some(description) = payload.description {
                     header_string.push_str(&format!(" | {}", style(description).italic()));
                 }

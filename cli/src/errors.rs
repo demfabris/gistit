@@ -455,12 +455,12 @@ pub mod io {
     pub enum IoError {
         /// Failed to spawn a process
         ProcessSpawn(String),
+        /// Process hanged/can't close
+        ProcessWait(String),
         /// Failed to write to stdin of a process
         StdinWrite(String),
         /// Failed to write to stdout
         StdoutWrite(String),
-        /// Process hanged/can't close
-        ProcessWait(String),
         /// Something wrong happened during a request
         Request(String),
         /// Unknown

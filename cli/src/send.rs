@@ -38,7 +38,7 @@ pub struct Action<'a> {
     /// The description of this Gistit.
     pub description: Option<&'a str>,
     /// The author information.
-    pub author: Option<&'a str>,
+    pub author: &'a str,
     /// The colorscheme to be displayed.
     pub theme: &'a str,
     /// The password to encrypt.
@@ -71,7 +71,7 @@ impl<'act, 'args> Action<'act> {
         Ok(Box::new(Self {
             file,
             description: args.value_of("description"),
-            author: args.value_of("author"),
+            author: args.value_of("author").ok_or(Error::Argument)?,
             theme: args.value_of("theme").ok_or(Error::Argument)?,
             secret: args.value_of("secret"),
             lifespan: args.value_of("lifespan").ok_or(Error::Argument)?,

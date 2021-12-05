@@ -35,7 +35,7 @@ macro_rules! dispatch_from_args {
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct GistitPayload {
     pub hash: String,
-    pub author: Option<String>,
+    pub author: String,
     pub description: Option<String>,
     pub colorscheme: String,
     pub lifespan: u16,

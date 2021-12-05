@@ -70,7 +70,7 @@ impl SendArgs for SendParams {}
 /// The data structure that holds data to be checked/dispatched during a [`SendAction`]
 #[derive(Clone, Default, Debug)]
 pub struct SendParams {
-    pub author: Option<String>,
+    pub author: String,
     pub description: Option<String>,
     pub colorscheme: String,
     pub lifespan: u16,
@@ -124,7 +124,7 @@ impl Params {
     /// Fails with [`InvalidParams`] error
     pub fn from_send(action: &SendAction) -> Result<SendParams> {
         Ok(SendParams {
-            author: action.author.map(ToOwned::to_owned),
+            author: action.author.to_owned(),
             description: action.description.map(ToOwned::to_owned),
             colorscheme: action.theme.to_owned(),
             lifespan: action
@@ -253,16 +253,11 @@ impl Check for SendParams {
     where
         Self: SendArgs,
     {
-        self.author.as_ref().map_or_else(
-            || Ok(()),
-            |value| {
-                if ALLOWED_AUTHOR_CHAR_LENGTH_RANGE.contains(&value.len()) {
-                    Ok(())
-                } else {
-                    Err(ParamsError::AuthorCharRange.into())
-                }
-            },
-        )
+        if ALLOWED_AUTHOR_CHAR_LENGTH_RANGE.contains(&self.author.len()) {
+            Ok(())
+        } else {
+            Err(ParamsError::AuthorCharRange.into())
+        }
     }
 }
 
