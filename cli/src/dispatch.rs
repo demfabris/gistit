@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::file::{EncodedFileData, EncryptedFile, File, FileReady};
-use crate::Result;
+use crate::{gistit_line_out, Result};
 
 #[async_trait]
 pub trait Dispatch {
@@ -52,6 +52,7 @@ impl GistitPayload {
     /// Fails with [`IoError`]
     pub async fn to_file(&self) -> Result<Box<dyn FileReady + Send + Sync>> {
         let name = self.gistit.name.clone();
+        gistit_line_out!("Decrypting...");
         if let Some(secret) = &self.secret {
             Ok(Box::new(
                 EncryptedFile::from_bytes_encoded(self.gistit.data.inner.as_bytes())

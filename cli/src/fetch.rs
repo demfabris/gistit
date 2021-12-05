@@ -18,7 +18,7 @@ use crate::errors::io::IoError;
 use crate::errors::params::ParamsError;
 use crate::file::FileReady;
 use crate::params::{FetchParams, Params};
-use crate::{gistit_warn, Error, Result};
+use crate::{gistit_line_out, gistit_warn, Error, Result};
 
 lazy_static! {
     static ref GISTIT_SECRET_RETRY_COUNT: AtomicU8 = AtomicU8::new(0);
@@ -38,6 +38,8 @@ pub struct Action<'a> {
     pub secret: Option<&'a str>,
     pub colorscheme: Option<&'a str>,
     pub no_syntax_highlighting: bool,
+    pub preview: bool,
+    pub save: bool,
 }
 
 impl<'act, 'args> Action<'act> {
@@ -55,6 +57,8 @@ impl<'act, 'args> Action<'act> {
             secret: args.value_of("secret"),
             colorscheme: args.value_of("theme"),
             no_syntax_highlighting: args.is_present("no-syntax-highlighting"),
+            preview: args.is_present("preview"),
+            save: args.is_present("save"),
         }))
     }
 }
@@ -144,6 +148,7 @@ impl Dispatch for Action<'_> {
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let json = config.into_json()?;
         // TODO: branch this into '#' and '@'
+        gistit_line_out!("Contacting host...");
         let first_try = reqwest::Client::new()
             .post(GISTIT_SERVER_GET_URL.to_string())
             .json(&json)
@@ -169,6 +174,7 @@ impl Dispatch for Action<'_> {
                     .colorscheme
                     .unwrap_or_else(|| payload.colorscheme.as_str());
 
+                // TODO: branch into preview or save it local fs. wait for flags to be ready
                 let input = bat::Input::from_reader(file.data())
                     .name(file.name())
                     .title(header_string);

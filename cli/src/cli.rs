@@ -114,6 +114,21 @@ This is our best efforts at persisting the hash into the system clipboard after 
                         .takes_value(true),
                 )
                 .arg(
+                    Arg::with_name("preview")
+                        .long("preview")
+                        .help("Immediately preview the gistit after successfully fetching"),
+                )
+                .arg(
+                    Arg::with_name("save")
+                        .long("save")
+                        .help("Save the gistit to local fs after successfully fetching")
+                        .long_help(
+                            "Save the gistit to local fs after successfully fetching.
+Target directory defaults to 'XDG user directory' on Linux, 'Known Folder' system on Windows,
+and 'Standard Directories' on MacOS.",
+                        ),
+                )
+                .arg(
                     Arg::with_name("url")
                         .short("u")
                         .required_unless("hash")
