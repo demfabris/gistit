@@ -52,7 +52,7 @@ impl<'args> Action {
     /// Fails with argument errors
     pub fn from_args(
         args: &'static ArgMatches<'args>,
-    ) -> Result<Box<dyn Dispatch<InnerData = Config> + 'static>> {
+    ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         Ok(Box::new(Self {
             hash: args.value_of("hash"),
             url: args.value_of("url"),

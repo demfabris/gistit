@@ -69,7 +69,7 @@ impl<'args> Action {
     /// Fails with argument errors
     pub fn from_args(
         args: &'static ArgMatches<'args>,
-    ) -> Result<Box<dyn Dispatch<InnerData = Config> + 'static>> {
+    ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         let file = args.value_of_os("file").ok_or(Error::Argument)?;
         gistit_line_out!(format!(
             "{} {}",
