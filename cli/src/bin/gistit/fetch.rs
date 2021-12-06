@@ -13,6 +13,7 @@ use url::Url;
 
 use lib_gistit::encrypt::Secret;
 use lib_gistit::errors::fetch::FetchError;
+use lib_gistit::errors::internal::InternalError;
 use lib_gistit::errors::io::IoError;
 use lib_gistit::errors::params::ParamsError;
 use lib_gistit::file::FileReady;
@@ -20,7 +21,8 @@ use lib_gistit::{Error, Result};
 
 use crate::dispatch::{Dispatch, GistitPayload};
 use crate::params::{FetchParams, Params};
-use crate::{gistit_line_out, gistit_warn};
+use crate::settings::{GistitFetch, Mergeable};
+use crate::{gistit_line_out, gistit_warn, LOCALFS_SETTINGS};
 
 lazy_static! {
     static ref GISTIT_SECRET_RETRY_COUNT: AtomicU8 = AtomicU8::new(0);
@@ -33,19 +35,29 @@ lazy_static! {
     .expect("to join 'get' function URL");
 }
 
-#[derive(Clone)]
+/// The Fetch action runtime parameters
+#[derive(Debug, Clone)]
 pub struct Action {
+    /// The hash to fetch
     pub hash: Option<&'static str>,
+    /// The gistit url
     pub url: Option<&'static str>,
+    /// The secret key to fetch and decrypt a gistit
     pub secret: Option<&'static str>,
+    /// The colorscheme to highlight in preview
     pub colorscheme: Option<&'static str>,
+    /// Preview with no syntax highlighting
     pub no_syntax_highlighting: bool,
+    /// Immediately preview the file
     pub preview: bool,
+    /// Immediately save the file to local fs
     pub save: bool,
 }
 
 impl<'args> Action {
     /// Parse [`ArgMatches`] into the dispatchable Fetch action
+    /// Here we also merge user settings while keeping this order of priority:
+    /// arguments > local settings file > app defaults
     ///
     /// # Errors
     ///
@@ -53,14 +65,33 @@ impl<'args> Action {
     pub fn from_args(
         args: &'static ArgMatches<'args>,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
+        let rhs_settings = LOCALFS_SETTINGS
+            .get()
+            .ok_or_else(|| Error::Internal(InternalError::Memory("-".to_owned())))?
+            .gistit_fetch
+            .clone();
+
+        let lhs_settings = Box::new(GistitFetch {
+            colorscheme: args.value_of("theme").map(ToOwned::to_owned),
+            preview: Some(args.is_present("preview")),
+            save: Some(args.is_present("save")),
+        });
+
+        let merged = lhs_settings.merge(rhs_settings);
+        let (colorscheme, preview, save) = (
+            merged.colorscheme.ok_or(Error::Argument)?,
+            merged.preview.ok_or(Error::Argument)?,
+            merged.save.ok_or(Error::Argument)?,
+        );
+
         Ok(Box::new(Self {
             hash: args.value_of("hash"),
             url: args.value_of("url"),
             secret: args.value_of("secret"),
-            colorscheme: args.value_of("theme"),
             no_syntax_highlighting: args.is_present("no-syntax-highlighting"),
-            preview: args.is_present("preview"),
-            save: args.is_present("save"),
+            colorscheme: Some(Box::leak(Box::new(colorscheme))),
+            preview,
+            save,
         }))
     }
 }

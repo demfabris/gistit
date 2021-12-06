@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
 use lazy_static::lazy_static;
+use lib_gistit::errors::internal::InternalError;
 use serde::Deserialize;
 use url::Url;
 
@@ -25,9 +26,10 @@ use lib_gistit::file::{name_from_path, File, FileReady};
 use lib_gistit::{Error, Result};
 
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
-use crate::gistit_line_out;
 use crate::params::Params;
 use crate::params::SendParams;
+use crate::settings::{GistitSend, Mergeable};
+use crate::{gistit_line_out, LOCALFS_SETTINGS};
 
 const SERVER_IDENTIFIER_CHAR: char = '#';
 
@@ -42,6 +44,7 @@ lazy_static! {
 }
 
 /// The Send action runtime parameters
+#[derive(Debug, Clone)]
 pub struct Action {
     /// The file to be sent.
     pub file: &'static OsStr,
@@ -62,7 +65,9 @@ pub struct Action {
 }
 
 impl<'args> Action {
-    /// Parse [`ArgMatches`] into the dispatchable Send action
+    /// Parse [`ArgMatches`] into the dispatchable Send action.
+    /// Here we also merge user settings while keeping this order of priority:
+    /// arguments > local settings file > app defaults
     ///
     /// # Errors
     ///
@@ -77,14 +82,35 @@ impl<'args> Action {
             style(name_from_path(Path::new(file))).green()
         ));
 
+        let rhs_settings = LOCALFS_SETTINGS
+            .get()
+            .ok_or_else(|| Error::Internal(InternalError::Memory("-".to_owned())))?
+            .gistit_send
+            .clone();
+
+        let lhs_settings = Box::new(GistitSend {
+            colorscheme: args.value_of("theme").map(ToOwned::to_owned),
+            author: args.value_of("author").map(ToOwned::to_owned),
+            lifespan: args.value_of("lifespan").map(ToOwned::to_owned),
+            clipboard: Some(args.is_present("clipboard")),
+        });
+
+        let merged = lhs_settings.merge(rhs_settings);
+        let (author, theme, lifespan, clipboard) = (
+            merged.author.ok_or(Error::Argument)?,
+            merged.colorscheme.ok_or(Error::Argument)?,
+            merged.lifespan.ok_or(Error::Argument)?,
+            merged.clipboard.ok_or(Error::Argument)?,
+        );
+
         Ok(Box::new(Self {
             file,
             description: args.value_of("description"),
-            author: args.value_of("author").ok_or(Error::Argument)?,
-            theme: args.value_of("theme").ok_or(Error::Argument)?,
+            author: Box::leak(Box::new(author)),
+            theme: Box::leak(Box::new(theme)),
             secret: args.value_of("secret"),
-            lifespan: args.value_of("lifespan").ok_or(Error::Argument)?,
-            clipboard: args.is_present("clipboard"),
+            lifespan: Box::leak(Box::new(lifespan)),
+            clipboard,
             dry_run: args.is_present("dry-run"),
         }))
     }
@@ -260,8 +286,8 @@ impl Dispatch for Action {
             } else {
                 "".to_string()
             },
-            style("https://gistit.vercel.app/").cyan(),
-            style(&server_hash).cyan()
+            style("https://gistit.vercel.app/").blue(),
+            style(&server_hash).blue()
         );
         Ok(())
     }

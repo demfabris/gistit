@@ -22,6 +22,8 @@ pub enum Error {
     Fetch(fetch::FetchError),
     /// Argument parsing errors
     Argument,
+    /// Unrecoverable/unexpected errors
+    Internal(internal::InternalError),
 }
 
 impl std::fmt::Debug for Error {
@@ -43,6 +45,9 @@ impl std::fmt::Debug for Error {
                 write!(f, "{}", err)
             }
             Self::Fetch(err) => {
+                write!(f, "{}", err)
+            }
+            Self::Internal(err) => {
                 write!(f, "{}", err)
             }
             Self::Argument => {
@@ -140,6 +145,48 @@ CAUSE:
     {:?}
 
 This is unlikely to be caused by a misuse of the application, check your program version.
+                    "#,
+                        style(err).yellow()
+                    )
+                }
+            }
+        }
+    }
+}
+
+pub mod internal {
+    use super::{style, Emoji, Error};
+
+    pub enum InternalError {
+        Memory(String),
+    }
+
+    impl From<InternalError> for Error {
+        fn from(err: InternalError) -> Self {
+            Self::Internal(err)
+        }
+    }
+
+    impl std::fmt::Display for InternalError {
+        #[allow(clippy::too_many_lines)]
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match &self {
+                InternalError::Memory(err) => {
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("MemoryRead").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+CAUSE:
+    couldn't read/write to memory
+
+SYSTEM:
+    {}
+
+This is unlikely to be caused by a misuse of the application.
                     "#,
                         style(err).yellow()
                     )

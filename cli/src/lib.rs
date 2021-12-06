@@ -31,7 +31,6 @@
 pub mod encrypt;
 pub mod errors;
 pub mod file;
-pub mod settings;
 
 #[cfg(feature = "clipboard")]
 pub mod clipboard;

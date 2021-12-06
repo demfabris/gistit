@@ -32,6 +32,7 @@ pub mod cli;
 pub mod dispatch;
 pub mod params;
 pub mod send;
+pub mod settings;
 
 #[cfg(feature = "fetch")]
 pub mod fetch;
@@ -39,21 +40,30 @@ pub mod fetch;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use console::style;
-use lib_gistit::Result;
 use once_cell::sync::OnceCell;
 
-use cli::app;
+use lib_gistit::errors::{internal::InternalError, io::IoError};
+use lib_gistit::{Error, Result};
+
+use crate::cli::app;
+use crate::settings::Settings;
 
 /// Stores the current command executed
 pub static CURRENT_ACTION: OnceCell<String> = OnceCell::new();
 /// Stores wether or not to omit stdout
 pub static OMIT_STDOUT: AtomicBool = AtomicBool::new(false);
+/// Local config file
+pub static LOCALFS_SETTINGS: OnceCell<Settings> = OnceCell::new();
 
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(app().get_matches()));
     CURRENT_ACTION
         .set(matches.subcommand().0.to_string())
-        .expect("Internal error");
+        .map_err(|err| Error::Internal(InternalError::Memory(err)))?;
+    LOCALFS_SETTINGS
+        .set(Settings::default().merge_local().await?)
+        .map_err(|err| Error::Internal(InternalError::Memory(err.to_string())))?;
+
     match matches.subcommand() {
         ("send", Some(args)) => dispatch_from_args!(send, args),
         ("fetch", Some(args)) => dispatch_from_args!(fetch, args),
@@ -66,7 +76,9 @@ async fn run() -> Result<()> {
             if matches.is_present("silent") {
                 OMIT_STDOUT.store(true, Ordering::Relaxed);
             }
-            app().print_help().expect("Couldn't write to stdout");
+            app()
+                .print_help()
+                .map_err(|err| Error::IO(IoError::StdoutWrite(err.to_string())))?;
         }
         _ => (),
     };
@@ -101,7 +113,7 @@ For more information please visit:
 {}
         "#,
         style("bat").bold().blue(),
-        style("https://github.com/sharkdp/bat").cyan()
+        style("https://github.com/sharkdp/bat").blue()
     );
 }
 
