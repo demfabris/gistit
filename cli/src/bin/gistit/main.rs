@@ -162,7 +162,7 @@ macro_rules! gistit_warn {
 
         if !omit_stdout {
             eprintln!(
-                "{}: Something went wrong during {}{}: \n    {}",
+                "{}: Important message in {}{}: \n    {}",
                 style("warn").yellow().bold(),
                 style("gistit-").green().bold(),
                 style(CURRENT_ACTION.get().expect("Internal error"))
