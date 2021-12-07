@@ -44,8 +44,8 @@ impl GistitPayload {
     /// Fails with [`IoError`]
     pub async fn to_file(&self) -> Result<Box<dyn FileReady + Send + Sync>> {
         let name = self.gistit.name.clone();
-        gistit_line_out!("Decrypting...");
         if let Some(secret) = &self.secret {
+            gistit_line_out!("Decrypting...");
             Ok(Box::new(
                 EncryptedFile::from_bytes_encoded(self.gistit.data.inner.as_bytes())
                     .await?
