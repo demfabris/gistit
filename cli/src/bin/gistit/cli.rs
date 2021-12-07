@@ -118,6 +118,7 @@ This is our best efforts at persisting the hash into the system clipboard after 
                 .about("Fetch a gistit wherever it is")
                 .arg(
                     Arg::with_name("hash")
+                        .long("hash")
                         .short("h")
                         .help("Fetch a gistit via it's hash")
                         .required_unless("url")
@@ -140,6 +141,7 @@ and 'Standard Directories' on MacOS.",
                 )
                 .arg(
                     Arg::with_name("url")
+                        .long("url")
                         .short("u")
                         .required_unless("hash")
                         .help("Fetch and open a gistit on your default browser")
@@ -147,6 +149,7 @@ and 'Standard Directories' on MacOS.",
                 )
                 .arg(
                     Arg::with_name("secret")
+                        .long("secret")
                         .short("s")
                         .help("The secret to decrypt the fetched gistit")
                         .takes_value(true),
