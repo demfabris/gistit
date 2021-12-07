@@ -39,11 +39,11 @@ A hash based `code` snippet sharing tool focused on ease of use and simplicity.
 
 **Gistit** aspires to be a more robust platform with peer to peer features in the future.
 
-## What can Gistit do today?
+## ⭐ Project components
 
- <h3><a href="https://github.com/fabricio7p/gistit/tree/master/cli">💻 gistit-cli</a></h3>
+ <h4><a href="https://github.com/fabricio7p/gistit/tree/master/cli">gistit-cli</a></h4>
 
-_simple command line program written in Rust 🦀_
+#### Simple command line tool. Written in Rust 🦀
 
 <ul>
   <li>&nbsp;&nbsp;Send/upload code snippets file temporarily</li>
@@ -53,11 +53,23 @@ _simple command line program written in Rust 🦀_
   <li>&nbsp;&nbsp;Auto clipboard, encryption, and more handy features...</li>
 </ul>
 
-<h3><a href="https://github.com/fabricio7p/gistit/tree/master/app">🌐 gistit-app</a></h3>
+<h4><a href="https://github.com/fabricio7p/gistit/tree/master/app">gistit-app</a></h4>
 
-_web application to find and preview gistits_
+#### Web application to find and preview gistits 🌐
 
 <ul>
   <li>&nbsp;&nbsp;Preview snippets with syntax highlighting</li>
   <li>&nbsp;&nbsp;Search for gistits online</li>
 </ul>
+
+## 🚀 Using gistit
+Head to [gistit-cli](https://github.com/fabricio7p/gistit/tree/master/cli) to start sharing!
+
+Also, visit the live website: [gistit.io](https://gistit.vercel.app)
+
+## 👩‍💻 Contributing
+Contributors please head to [Project](https://github.com/fabricio7p/gistit/projects) section
+
+## 📃 License
+
+[MIT](https://choosealicense.com/licenses/mit)
