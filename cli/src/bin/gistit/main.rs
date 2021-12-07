@@ -44,7 +44,6 @@ use once_cell::sync::OnceCell;
 
 use lib_gistit::errors::{internal::InternalError, io::IoError};
 use lib_gistit::{Error, Result};
-use settings::get_runtime_settings;
 
 use crate::cli::app;
 use crate::settings::Settings;
@@ -76,6 +75,11 @@ async fn run() -> Result<()> {
             }
             if matches.is_present("silent") {
                 OMIT_STDOUT.store(true, Ordering::Relaxed);
+            }
+            if matches.is_present("config-init") {
+                Settings::save_new().await?;
+                gistit_line_out!("Settings.yaml created!");
+                std::process::exit(0);
             }
             app()
                 .print_help()

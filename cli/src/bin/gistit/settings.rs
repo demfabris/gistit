@@ -211,7 +211,6 @@ impl Settings {
         if let Ok(handler) = File::from_path(&path).await {
             // Checking Md5Sum is quicker than matching fields one by one
             if user_has_default_settings(handler.data()) {
-                println!("USER HAS DEFAULT CONF");
                 return Ok(self);
             }
 
@@ -261,8 +260,7 @@ fn user_has_default_settings(theirs: &[u8]) -> bool {
 }
 
 /// Default settings file content as str
-const SETTINGS_FILE_TEMPLATE: &str = r#"
----
+const SETTINGS_FILE_TEMPLATE: &str = r#"---
 gistit_global:
   # The place to save gistits, defaults to project data directory, e.g:
   #

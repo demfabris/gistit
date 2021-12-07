@@ -15,7 +15,6 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
 use lazy_static::lazy_static;
-use lib_gistit::errors::internal::InternalError;
 use serde::Deserialize;
 use url::Url;
 
@@ -26,10 +25,10 @@ use lib_gistit::file::{name_from_path, File, FileReady};
 use lib_gistit::{Error, Result};
 
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
+use crate::gistit_line_out;
 use crate::params::Params;
 use crate::params::SendParams;
 use crate::settings::{get_runtime_settings, GistitSend, Mergeable};
-use crate::{gistit_line_out, LOCALFS_SETTINGS};
 
 const SERVER_IDENTIFIER_CHAR: char = '#';
 
@@ -174,7 +173,7 @@ impl Config {
             hash,
             author: params.author.to_owned(),
             description: params.description.map(ToOwned::to_owned),
-            colorscheme: params.colorscheme.to_owned(),
+            colorscheme: params.colorscheme.clone(),
             lifespan: params.lifespan,
             secret: self.maybe_secret.map(|t| t.to_str().to_owned()),
             timestamp: SystemTime::now()

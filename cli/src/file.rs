@@ -17,7 +17,6 @@ use tokio::io::AsyncWriteExt;
 
 use crate::encrypt::{decrypt_aes256_u12nonce, encrypt_aes256_u12nonce};
 use crate::errors::file::FileError;
-use crate::errors::io::IoError;
 use crate::{Error, Result};
 
 #[cfg(doc)]

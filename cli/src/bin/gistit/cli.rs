@@ -21,6 +21,17 @@ pub fn app() -> App<'static, 'static> {
                 .help("Silent mode, omit stdout")
                 .global(true),
         )
+        .arg(
+            Arg::with_name("config-init")
+                .long("config-init")
+                .help("Initialize the default settings.yaml file into the project config directory")
+                .long_help(
+                    "Initialize the default settings.yaml file into the project config directory.
+This flag can be also used to reset settings to default.
+Beware to mistakenly overwriting your settings.",
+                )
+                .global(true),
+        )
         .subcommand(
             SubCommand::with_name("send")
                 .alias("s")
