@@ -44,6 +44,7 @@ use once_cell::sync::OnceCell;
 
 use lib_gistit::errors::{internal::InternalError, io::IoError};
 use lib_gistit::{Error, Result};
+use settings::get_runtime_settings;
 
 use crate::cli::app;
 use crate::settings::Settings;

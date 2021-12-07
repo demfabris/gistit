@@ -12,7 +12,7 @@ use crate::fetch::Action as FetchAction;
 use crate::send::Action as SendAction;
 
 use lib_gistit::errors::params::ParamsError;
-use lib_gistit::Result;
+use lib_gistit::{Error, Result};
 
 /// Allowed description length
 const ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE: RangeInclusive<usize> = 10..=100;
@@ -73,7 +73,7 @@ impl SendArgs for SendParams {}
 pub struct SendParams {
     pub author: &'static str,
     pub description: Option<&'static str>,
-    pub colorscheme: &'static str,
+    pub colorscheme: String,
     pub lifespan: u16,
 }
 
@@ -127,7 +127,7 @@ impl Params {
         Ok(SendParams {
             author: action.author,
             description: action.description,
-            colorscheme: action.theme,
+            colorscheme: action.theme.clone().ok_or(Error::Argument)?,
             lifespan: action
                 .lifespan
                 .parse::<u16>()
@@ -223,7 +223,7 @@ trait Check {
 #[async_trait]
 impl Check for SendParams {
     fn colorscheme(&self) -> Result<()> {
-        try_match_colorscheme(Some(self.colorscheme))
+        try_match_colorscheme(Some(&self.colorscheme))
     }
     fn lifespan(&self) -> Result<()>
     where

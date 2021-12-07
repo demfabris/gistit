@@ -28,7 +28,7 @@ use lib_gistit::{Error, Result};
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::params::Params;
 use crate::params::SendParams;
-use crate::settings::{GistitSend, Mergeable};
+use crate::settings::{get_runtime_settings, GistitSend, Mergeable};
 use crate::{gistit_line_out, LOCALFS_SETTINGS};
 
 const SERVER_IDENTIFIER_CHAR: char = '#';
@@ -53,7 +53,7 @@ pub struct Action {
     /// The author information.
     pub author: &'static str,
     /// The colorscheme to be displayed.
-    pub theme: &'static str,
+    pub theme: Option<String>,
     /// The secret key to encrypt.
     pub secret: Option<&'static str>,
     /// The custom lifespan of a Gistit snippet.
@@ -82,11 +82,7 @@ impl<'args> Action {
             style(name_from_path(Path::new(file))).green()
         ));
 
-        let rhs_settings = LOCALFS_SETTINGS
-            .get()
-            .ok_or_else(|| Error::Internal(InternalError::Memory("-".to_owned())))?
-            .gistit_send
-            .clone();
+        let rhs_settings = get_runtime_settings()?.gistit_send.clone();
 
         let lhs_settings = Box::new(GistitSend {
             colorscheme: args.value_of("theme").map(ToOwned::to_owned),
@@ -98,7 +94,7 @@ impl<'args> Action {
         let merged = lhs_settings.merge(rhs_settings);
         let (author, theme, lifespan, clipboard) = (
             merged.author.ok_or(Error::Argument)?,
-            merged.colorscheme.ok_or(Error::Argument)?,
+            merged.colorscheme,
             merged.lifespan.ok_or(Error::Argument)?,
             merged.clipboard.ok_or(Error::Argument)?,
         );
@@ -107,7 +103,7 @@ impl<'args> Action {
             file,
             description: args.value_of("description"),
             author: Box::leak(Box::new(author)),
-            theme: Box::leak(Box::new(theme)),
+            theme,
             secret: args.value_of("secret"),
             lifespan: Box::leak(Box::new(lifespan)),
             clipboard,

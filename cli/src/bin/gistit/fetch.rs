@@ -5,7 +5,9 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
+use dialoguer::{theme::ColorfulTheme, Password, Select};
 use lazy_static::lazy_static;
+use lib_gistit::errors::internal::InternalError;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
@@ -13,16 +15,15 @@ use url::Url;
 
 use lib_gistit::encrypt::Secret;
 use lib_gistit::errors::fetch::FetchError;
-use lib_gistit::errors::internal::InternalError;
 use lib_gistit::errors::io::IoError;
 use lib_gistit::errors::params::ParamsError;
-use lib_gistit::file::FileReady;
+use lib_gistit::file::{File, FileReady};
 use lib_gistit::{Error, Result};
 
 use crate::dispatch::{Dispatch, GistitPayload};
 use crate::params::{FetchParams, Params};
-use crate::settings::{GistitFetch, Mergeable};
-use crate::{gistit_line_out, gistit_warn, LOCALFS_SETTINGS};
+use crate::settings::{get_runtime_settings, GistitFetch, Mergeable};
+use crate::{gistit_line_out, gistit_warn};
 
 lazy_static! {
     static ref GISTIT_SECRET_RETRY_COUNT: AtomicU8 = AtomicU8::new(0);
@@ -65,11 +66,7 @@ impl<'args> Action {
     pub fn from_args(
         args: &'static ArgMatches<'args>,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        let rhs_settings = LOCALFS_SETTINGS
-            .get()
-            .ok_or_else(|| Error::Internal(InternalError::Memory("-".to_owned())))?
-            .gistit_fetch
-            .clone();
+        let rhs_settings = get_runtime_settings()?.gistit_fetch.clone();
 
         let lhs_settings = Box::new(GistitFetch {
             colorscheme: args.value_of("theme").map(ToOwned::to_owned),
@@ -165,6 +162,71 @@ impl Response {
     }
 }
 
+fn preview_gistit(action: &Action, payload: &GistitPayload, file: &File) -> Result<bool> {
+    let mut header_string = style(file.name()).green().to_string();
+    header_string.push_str(&format!(
+        " | {}",
+        style(payload.author.clone()).blue().bold()
+    ));
+
+    if let Some(description) = payload.description.clone() {
+        header_string.push_str(&format!(" | {}", style(description).italic()));
+    }
+    // If user provided colorscheme we overwrite the stored one
+    let colorscheme = action
+        .colorscheme
+        .unwrap_or_else(|| payload.colorscheme.as_str());
+
+    let input = bat::Input::from_reader(file.data())
+        .name(file.name())
+        .title(header_string);
+
+    Ok(bat::PrettyPrinter::new()
+        .header(true)
+        .grid(true)
+        .input(input)
+        .line_numbers(true)
+        .theme(colorscheme)
+        .use_italics(true)
+        .paging_mode(bat::PagingMode::QuitIfOneScreen)
+        .print()?)
+}
+
+async fn save_gistit(file: &File) -> Result<()> {
+    let save_location = get_runtime_settings()?
+        .clone()
+        .gistit_global
+        .unwrap_or_default()
+        .save_location
+        .ok_or_else(|| {
+            Error::Internal(InternalError::Memory(
+                "Couldn't read save file directory from memory".to_owned(),
+            ))
+        })?;
+    let file_path = save_location.join(file.name());
+    file.save_as(&file_path).await
+}
+
+fn print_success(hash: &str, prevent_ask_tip: bool) {
+    let tip = if prevent_ask_tip {
+        ""
+    } else {
+        "\n(You can disable the asking behavior by using one of the flags: '--save', '--preview')\n"
+    };
+    println!(
+        r#"
+{}:
+    hash: {}
+    url: {}{}
+{}"#,
+        style("SUCCESS").green(),
+        style(hash).yellow(),
+        style("https://gistit.vercel.app/").blue(),
+        style(hash).blue(),
+        style(tip).italic(),
+    );
+}
+
 #[async_trait]
 impl Dispatch for Action {
     type InnerData = Config;
@@ -194,34 +256,41 @@ impl Dispatch for Action {
                 let payload = response.into_inner()?;
                 let gistit = payload.to_file().await?;
                 let file = gistit.inner().await.expect("File to be open");
+                let prevent_ask_tip = self.preview || self.save;
+                print_success(&payload.hash, prevent_ask_tip);
 
-                let mut header_string = style(file.name()).green().to_string();
-                header_string.push_str(&format!(" | {}", style(payload.author).blue().bold()));
-
-                if let Some(description) = payload.description {
-                    header_string.push_str(&format!(" | {}", style(description).italic()));
+                if self.preview {
+                    preview_gistit(self, &payload, &file)?;
                 }
-                // If user provided colorscheme we overwrite the stored one
-                let colorscheme = self
-                    .colorscheme
-                    .unwrap_or_else(|| payload.colorscheme.as_str());
-
-                // TODO: branch into preview or save it local fs. wait for flags to be ready
-                let input = bat::Input::from_reader(file.data())
-                    .name(file.name())
-                    .title(header_string);
-
-                bat::PrettyPrinter::new()
-                    .header(true)
-                    .grid(true)
-                    .input(input)
-                    .line_numbers(true)
-                    // .language(&payload.gistit.lang)
-                    .theme(colorscheme)
-                    .use_italics(true)
-                    .paging_mode(bat::PagingMode::QuitIfOneScreen)
-                    .print()
-                    .unwrap();
+                if self.save {
+                    save_gistit(&file).await?;
+                }
+                if !self.save && !self.preview {
+                    // Ask
+                    let choice_idx = Select::with_theme(&ColorfulTheme::default())
+                        .with_prompt("Select what to do next:")
+                        .item("save locally")
+                        .item("preview in terminal")
+                        .item("open in web browser")
+                        .interact()?;
+                    match choice_idx {
+                        // Save locally only
+                        0 => save_gistit(&file).await?,
+                        // Preview with 'bat' only
+                        1 => {
+                            preview_gistit(self, &payload, &file)?;
+                        }
+                        // Open in web browser
+                        2 => {
+                            webbrowser::open(&format!(
+                                "https://gistit.vercel.app/{}",
+                                &payload.hash
+                            ))
+                            .expect("to open web browser");
+                        }
+                        _ => unreachable!(),
+                    }
+                }
                 Ok(())
             }
             StatusCode::UNAUTHORIZED => {
@@ -238,7 +307,7 @@ impl Dispatch for Action {
                         style("\nSecret").bold().to_string()
                     };
 
-                    let new_secret = dialoguer::Password::new()
+                    let new_secret = Password::new()
                         .with_prompt(prompt_msg)
                         .interact()
                         .map_err(|err| Error::IO(IoError::StdinWrite(err.to_string())))?;

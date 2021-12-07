@@ -17,6 +17,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::encrypt::{decrypt_aes256_u12nonce, encrypt_aes256_u12nonce};
 use crate::errors::file::FileError;
+use crate::errors::io::IoError;
 use crate::{Error, Result};
 
 #[cfg(doc)]
@@ -629,7 +630,7 @@ pub fn name_from_path(path: &Path) -> String {
         .to_string()
 }
 
-async fn spawn_and_write_file(bytes: &[u8]) -> Result<(tokio::fs::File, PathBuf)> {
+async fn spawn_and_write_rng_file(bytes: &[u8]) -> Result<(tokio::fs::File, PathBuf)> {
     let path = rng_temp_file();
     let mut handler = tokio::fs::File::create(&path).await?;
     handler.write_all(bytes).await?;
@@ -684,7 +685,7 @@ impl File {
     /// written to.
     pub async fn from_bytes_encoded(bytes: &[u8]) -> Result<Self> {
         let decoded_bytes = base64::decode(bytes)?;
-        let (handler, path) = spawn_and_write_file(&decoded_bytes).await?;
+        let (handler, path) = spawn_and_write_rng_file(&decoded_bytes).await?;
 
         Ok(Self {
             handler,
@@ -701,7 +702,7 @@ impl File {
     /// Fails with [`IoError`] if the file can't be created for some reason. Also if it can't be
     /// written to.
     pub async fn from_bytes(decoded_bytes: &[u8]) -> Result<Self> {
-        let (handler, path) = spawn_and_write_file(decoded_bytes).await?;
+        let (handler, path) = spawn_and_write_rng_file(decoded_bytes).await?;
 
         Ok(Self {
             handler,
@@ -709,6 +710,15 @@ impl File {
             path,
             bytes: decoded_bytes.to_vec(),
         })
+    }
+
+    /// Creates/writes the contents as string to the given file path.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`IoError`] if the file can't be written to.
+    pub async fn save_as(&self, file_path: &Path) -> Result<()> {
+        Ok(tokio::fs::write(file_path, &self.bytes).await?)
     }
 
     /// Set the file name, useful when creating a [`File`] using [`from_bytes`].

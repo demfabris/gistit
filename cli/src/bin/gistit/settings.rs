@@ -1,15 +1,22 @@
-//! Settings module
+//! The settings module
+//!
+//! Here we manage the local settings file and merge it's params with a given gistit action
 
+use std::fs;
 use std::path::PathBuf;
 
 use clap::crate_authors;
 use directories::ProjectDirs;
 use lazy_static::lazy_static;
+use lib_gistit::errors::settings::SettingsError;
 use serde::{Deserialize, Serialize};
 
 use lib_gistit::encrypt::digest_md5;
+use lib_gistit::errors::internal::InternalError;
 use lib_gistit::file::{File, FileReady};
-use lib_gistit::Result;
+use lib_gistit::{Error, Result};
+
+use crate::LOCALFS_SETTINGS;
 
 #[doc(hidden)]
 const GISTIT_QUALIFIER: &str = "io";
@@ -24,6 +31,7 @@ const GISTIT_APPLICATION: &str = "Gistit";
 #[doc(hidden)]
 const GISTIT_SETTINGS_FILE_NAME: &str = "settings.yaml";
 
+/// Structured settings params that can be set in `settings.yaml`
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
     pub gistit_send: Option<GistitSend>,
@@ -72,7 +80,7 @@ impl Default for GistitSend {
     fn default() -> Self {
         Self {
             colorscheme: Some(String::from("ansi")),
-            author: None,
+            author: names::Generator::default().next(),
             lifespan: Some(String::from("3600")),
             clipboard: Some(false),
         }
@@ -96,12 +104,12 @@ impl Default for GistitFetch {
     }
 }
 
-/// Trait to merge optional fields having preference over `self`
 pub trait Mergeable: Default {
     fn merge(self: Box<Self>, maybe_rhs: Option<Self>) -> Self;
 }
 
 impl Mergeable for GistitGlobal {
+    /// Merge optional `Self` fields to `rhs` having preference over it.
     fn merge(self: Box<Self>, maybe_rhs: Option<Self>) -> Self {
         let rhs = maybe_rhs.unwrap_or_default();
         Self {
@@ -113,11 +121,12 @@ impl Mergeable for GistitGlobal {
 impl Mergeable for GistitSend {
     fn merge(self: Box<Self>, maybe_rhs: Option<Self>) -> Self {
         let rhs = maybe_rhs.unwrap_or_default();
+        let clipboard = map_false_to_none(self.clipboard);
         Self {
             colorscheme: self.colorscheme.or(rhs.colorscheme),
             author: self.author.or(rhs.author),
             lifespan: self.lifespan.or(rhs.lifespan),
-            clipboard: self.clipboard.or(rhs.clipboard),
+            clipboard: clipboard.or(rhs.clipboard),
         }
     }
 }
@@ -125,36 +134,90 @@ impl Mergeable for GistitSend {
 impl Mergeable for GistitFetch {
     fn merge(self: Box<Self>, maybe_rhs: Option<Self>) -> Self {
         let rhs = maybe_rhs.unwrap_or_default();
+        let save = map_false_to_none(self.save);
+        let preview = map_false_to_none(self.preview);
         Self {
             colorscheme: self.colorscheme.or(rhs.colorscheme),
-            save: self.save.or(rhs.save),
-            preview: self.preview.or(rhs.preview),
+            save: save.or(rhs.save),
+            preview: preview.or(rhs.preview),
         }
     }
 }
 
+// Disallowing this so we can keep `const`
+#[allow(clippy::option_if_let_else)]
+const fn map_false_to_none(arg: Option<bool>) -> Option<bool> {
+    if let Some(flag) = arg {
+        if flag {
+            Some(true)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Get the runtime settings read from local config directory
+///
 /// # Errors
-/// asd
+///
+/// Fails with [`InternalError`] if something goes wrong when loading this settings
+pub fn get_runtime_settings() -> Result<&'static Settings> {
+    LOCALFS_SETTINGS.get().ok_or_else(|| {
+        Error::Internal(InternalError::Memory(
+            "Failed to read in memory runtime settings".to_owned(),
+        ))
+    })
+}
+
+/// Return platform specific project directories
 #[must_use]
 pub fn project_dirs() -> ProjectDirs {
     ProjectDirs::from(GISTIT_QUALIFIER, &GISTIT_ORGANIZATION, GISTIT_APPLICATION)
         .expect("To read project directory")
 }
 
+/// Validate the global settings values.
+/// We validate it here because it's not part of any specific gistit action.
+///
+/// # Errors
+///
+/// Fails with [`SettingsError`] if some parameter does not meet requirements
+fn validate_global_settings(global: &GistitGlobal) -> Result<()> {
+    if let Some(ref save_location) = global.save_location {
+        if fs::metadata(save_location).is_err() {
+            fs::create_dir(save_location).map_err(|err| {
+                Error::Settings(SettingsError::InvalidSettingsParam((
+                    "save_location".to_owned(),
+                    err.to_string(),
+                )))
+            })?;
+        }
+    }
+    Ok(())
+}
+
 impl Settings {
+    /// Merge default settings with the one found in the user system.
+    /// The preference follows: arguments > settings file > app defaults.
+    ///
     /// # Errors
     ///
-    /// Asd
+    /// Fails with [`SettingsError`] if any invalid value is found in the settings file.
     pub async fn merge_local(self) -> Result<Self> {
         let path = project_dirs().config_dir().join(GISTIT_SETTINGS_FILE_NAME);
 
         if let Ok(handler) = File::from_path(&path).await {
             // Checking Md5Sum is quicker than matching fields one by one
             if user_has_default_settings(handler.data()) {
+                println!("USER HAS DEFAULT CONF");
                 return Ok(self);
             }
 
-            let theirs: Self = serde_yaml::from_slice(handler.data()).expect("to deserialize"); // TODO: proper error
+            let theirs: Self = serde_yaml::from_slice(handler.data())
+                .map_err(|err| Error::Settings(SettingsError::Deserialize(err.to_string())))?;
+
             let global = theirs.gistit_global.map_or(GistitGlobal::default(), |t| {
                 Box::new(t).merge(self.gistit_global)
             });
@@ -164,6 +227,7 @@ impl Settings {
             let fetch = theirs.gistit_fetch.map_or(GistitFetch::default(), |t| {
                 Box::new(t).merge(self.gistit_fetch)
             });
+            validate_global_settings(&global)?;
 
             Ok(Self {
                 gistit_global: Some(global),
@@ -175,18 +239,28 @@ impl Settings {
         }
     }
 
-    // reset config file via a flag. prompt dialog to confirm
+    /// Creates a new default settings file with [`SETTINGS_FILE_TEMPLATE`] contents and saves it
+    /// in the project `config_dir` path.
+    /// This is useful to reset the file to defaults as well.
+    ///
     /// # Errors
-    /// asd
-    pub fn reset() -> Result<()> {
-        todo!()
+    ///
+    /// Fails with [`IoError`] if something goes wrong opening/writing to the file.
+    pub async fn save_new() -> Result<()> {
+        File::from_bytes(SETTINGS_FILE_TEMPLATE.as_bytes())
+            .await?
+            .save_as(&project_dirs().config_dir().join(GISTIT_SETTINGS_FILE_NAME))
+            .await
     }
 }
 
+/// Check if local settings file match app defaults. Useful to skip deserializing if the user has
+/// default settings in usage.
 fn user_has_default_settings(theirs: &[u8]) -> bool {
     digest_md5(theirs) == digest_md5(SETTINGS_FILE_TEMPLATE.as_bytes())
 }
 
+/// Default settings file content as str
 const SETTINGS_FILE_TEMPLATE: &str = r#"
 ---
 gistit_global:
@@ -201,7 +275,7 @@ gistit_global:
   # MacOs:
   # `$HOME/Library/Application Support/_project_path_`
   #
-  # Must be a valid path with read/write permissions.
+  # Must be a valid **ABSOLUTE** path with read/write permissions.
   # (leave null to use default)
   save_location: null
 

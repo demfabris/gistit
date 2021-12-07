@@ -48,9 +48,6 @@ pub fn app() -> App<'static, 'static> {
                         .short("a")
                         .help("With author information. Defaults to a random generated name")
                         .takes_value(true)
-                        .default_value(Box::leak(Box::new(
-                            names::Generator::default().next().unwrap(),
-                        )))
                         .requires("file"),
                 )
                 .arg(
@@ -74,7 +71,6 @@ pub fn app() -> App<'static, 'static> {
                     Arg::with_name("theme")
                         .long("theme")
                         .short("t")
-                        .default_value("ansi")
                         .requires("file")
                         .takes_value(true)
                         .help("The color scheme to apply syntax highlighting")

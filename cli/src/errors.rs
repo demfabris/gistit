@@ -20,6 +20,8 @@ pub enum Error {
     Encryption(encryption::EncryptionError),
     /// Gistit-fetch related errors
     Fetch(fetch::FetchError),
+    /// Settings file errors
+    Settings(settings::SettingsError),
     /// Argument parsing errors
     Argument,
     /// Unrecoverable/unexpected errors
@@ -48,6 +50,9 @@ impl std::fmt::Debug for Error {
                 write!(f, "{}", err)
             }
             Self::Internal(err) => {
+                write!(f, "{}", err)
+            }
+            Self::Settings(err) => {
                 write!(f, "{}", err)
             }
             Self::Argument => {
@@ -154,16 +159,88 @@ This is unlikely to be caused by a misuse of the application, check your program
     }
 }
 
+pub mod settings {
+    use super::{style, Emoji, Error};
+
+    pub enum SettingsError {
+        InvalidSettingsParam((String, String)),
+        Deserialize(String),
+    }
+
+    impl From<SettingsError> for Error {
+        fn from(err: SettingsError) -> Self {
+            Self::Settings(err)
+        }
+    }
+
+    impl std::fmt::Display for SettingsError {
+        #[allow(clippy::too_many_lines)]
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match &self {
+                SettingsError::InvalidSettingsParam((param, err)) => {
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("InvalidSettingsParam").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+PARAM:
+    {}
+
+CAUSE:
+    there's a invalid value in 'settings.yaml' file
+
+SYSTEM:
+    {}
+        
+                    "#,
+                        style(param).yellow(),
+                        style(err).yellow()
+                    )
+                }
+                SettingsError::Deserialize(err) => {
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("Deserialize").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+CAUSE:
+    couldn't understand `settings.yaml` file,  make sure it's valid YAML format.
+
+SYSTEM:
+    {}
+        
+                    "#,
+                        style(err).yellow()
+                    )
+                }
+            }
+        }
+    }
+}
+
 pub mod internal {
     use super::{style, Emoji, Error};
 
     pub enum InternalError {
         Memory(String),
+        TerminalSupport(String),
     }
 
     impl From<InternalError> for Error {
         fn from(err: InternalError) -> Self {
             Self::Internal(err)
+        }
+    }
+
+    impl From<bat::error::Error> for Error {
+        fn from(err: bat::error::Error) -> Self {
+            Self::Internal(InternalError::TerminalSupport(err.to_string()))
         }
     }
 
@@ -187,6 +264,25 @@ SYSTEM:
     {}
 
 This is unlikely to be caused by a misuse of the application.
+                    "#,
+                        style(err).yellow()
+                    )
+                }
+                InternalError::TerminalSupport(err) => {
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("TerminalSupport").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+CAUSE:
+    couldn't render elements to your terminal, please check if your 
+    system supports the `bat` application.
+
+SYSTEM:
+    {}
                     "#,
                         style(err).yellow()
                     )
