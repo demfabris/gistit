@@ -37,27 +37,27 @@
 
 A hash based `code` snippet sharing tool focused on ease of use and simplicity.
 
-**Gistit** aspires to be a more robust platform to share `code` with peer to peer features in the future.
+**Gistit** aspires to be a more robust platform with peer to peer features in the future.
 
 ## What can Gistit do today?
 
-- <h3><a href="https://github.com/fabricio7p/gistit/tree/master/cli">gistit-cli</a></h3>
+ <h3><a href="https://github.com/fabricio7p/gistit/tree/master/cli">💻 gistit-cli</a></h3>
 
 _simple command line program written in Rust 🦀_
 
-<p>
-&nbsp;&nbsp;&nbsp;&nbsp;🚀 &nbsp;Send/upload code snippets file temporarily <br/>
-&nbsp;&nbsp;&nbsp;&nbsp;🤏 &nbsp;Fetch <code>code</code> snippets via it's hash <br/>
-&nbsp;&nbsp;&nbsp;&nbsp;🦇 &nbsp;Preview files with syntax highlighting (uses <a href="https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&cad=rja&uact=8&ved=2ahUKEwjH85K20NL0AhU-pZUCHeDZBt0QFnoECBQQAQ&url=https%3A%2F%2Fgithub.com%2Fsharkdp%2Fbat&usg=AOvVaw3bT_Seb24g1Vx-7cOb086M">bat</a>)<br/>
-&nbsp;&nbsp;&nbsp;&nbsp;🧰 &nbsp;Configure to make it your everyday tool <br/>
-&nbsp;&nbsp;&nbsp;&nbsp;✍️ &nbsp;Auto clipboard, encryption, and more handy features... <br/>
-</p>
+<ul>
+  <li>&nbsp;&nbsp;Send/upload code snippets file temporarily</li>
+  <li>&nbsp;&nbsp;Fetch <code>code</code> snippets via it's hash</li>
+  <li>&nbsp;&nbsp;Preview files with syntax highlighting (uses <a href="https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&cad=rja&uact=8&ved=2ahUKEwjH85K20NL0AhU-   pZUCHeDZBt0QFnoECBQQAQ&url=https%3A%2F%2Fgithub.com%2Fsharkdp%2Fbat&usg=AOvVaw3bT_Seb24g1Vx-7cOb086M">bat</a>)</li>
+  <li>&nbsp;&nbsp;Configure to make it your everyday tool</li>
+  <li>&nbsp;&nbsp;Auto clipboard, encryption, and more handy features...</li>
+</ul>
 
-- <h3><a href="https://github.com/fabricio7p/gistit/tree/master/cli">gistit-app</a></h3>
+<h3><a href="https://github.com/fabricio7p/gistit/tree/master/app">🌐 gistit-app</a></h3>
 
 _web application to find and preview gistits_
 
-<p>
-&nbsp;&nbsp;&nbsp;&nbsp;✅&nbsp;Preview snippets with syntax highlighting <br/>
-&nbsp;&nbsp;&nbsp;&nbsp;🔍&nbsp;Search for gistits online <br/>
-</p>
+<ul>
+  <li>&nbsp;&nbsp;Preview snippets with syntax highlighting</li>
+  <li>&nbsp;&nbsp;Search for gistits online</li>
+</ul>
