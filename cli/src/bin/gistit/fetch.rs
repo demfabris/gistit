@@ -114,7 +114,7 @@ impl Config {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidUrl`] error
+    /// Fails with [`ParamsError`] error
     fn into_json(self) -> Result<serde_json::Value> {
         let final_hash = match &self.params {
             FetchParams {

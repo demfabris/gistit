@@ -93,7 +93,7 @@ impl SendParams {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] error
+    /// Fails with [`ParamsError`] error
     pub fn check_consume(self) -> Result<Self> {
         <Self as Check>::lifespan(&self)?;
         <Self as Check>::colorscheme(&self)?;
@@ -108,7 +108,7 @@ impl FetchParams {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] error
+    /// Fails with [`ParamsError`] error
     pub fn check_consume(self) -> Result<Self> {
         <Self as Check>::colorscheme(&self)?;
         <Self as Check>::hash(&self)?;
@@ -122,7 +122,7 @@ impl Params {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] error
+    /// Fails with [`ParamsError`] error
     pub fn from_send(action: &SendAction) -> Result<SendParams> {
         Ok(SendParams {
             author: action.author,
@@ -139,7 +139,7 @@ impl Params {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] error
+    /// Fails with [`ParamsError`] error
     pub const fn from_fetch(action: &FetchAction) -> Result<FetchParams> {
         Ok(FetchParams {
             hash: action.hash,
@@ -155,7 +155,7 @@ trait Check {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] if colorscheme isn't named properly.
+    /// Fails with [`ParamsError`] if colorscheme isn't named properly.
     /// Prompts the user with a suggestion if it fuzzy matches agains't a probability.
     fn colorscheme(&self) -> Result<()>;
 
@@ -163,7 +163,7 @@ trait Check {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] if the provided number is outside allowed range.
+    /// Fails with [`ParamsError`] if the provided number is outside allowed range.
     fn lifespan(&self) -> Result<()>
     where
         Self: SendArgs,
@@ -175,7 +175,7 @@ trait Check {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] if description is over allowed length
+    /// Fails with [`ParamsError`] if description is over allowed length
     fn description(&self) -> Result<()>
     where
         Self: SendArgs,
@@ -187,7 +187,7 @@ trait Check {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] if author name is over allowed length
+    /// Fails with [`ParamsError`] if author name is over allowed length
     fn author(&self) -> Result<()>
     where
         Self: SendArgs,
@@ -199,7 +199,7 @@ trait Check {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] if hash is an invalid format
+    /// Fails with [`ParamsError`] if hash is an invalid format
     fn hash(&self) -> Result<()>
     where
         Self: FetchArgs,
@@ -211,7 +211,7 @@ trait Check {
     ///
     /// # Errors
     ///
-    /// Fails with [`InvalidParams`] if url is invalid
+    /// Fails with [`ParamsError`] if url is invalid
     fn url(&self) -> Result<()>
     where
         Self: FetchArgs,
@@ -290,7 +290,7 @@ impl Check for FetchParams {
 /// - starts with '#': gistit is on the server
 ///
 /// # Errors
-/// Fails with [`InvalidHash`] error
+/// Fails with [`ParamsError`] error
 pub fn validate_hash(hash: &str) -> Result<()> {
     let valid =
         (hash.starts_with('@') || hash.starts_with('#')) && hash.len() == GISTIT_HASH_CHAR_LENGTH;
@@ -304,7 +304,7 @@ pub fn validate_hash(hash: &str) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Fails with [`InvalidParams`] if colorscheme isn't named properly.
+/// Fails with [`ParamsError`] if colorscheme isn't named properly.
 /// Prompts the user with a suggestion if it fuzzy matches agains't a probability.
 pub fn try_match_colorscheme(maybe_value: Option<&str>) -> Result<()> {
     maybe_value.map_or(Ok(()), |value| {

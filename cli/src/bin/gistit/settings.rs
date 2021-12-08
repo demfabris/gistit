@@ -18,6 +18,9 @@ use lib_gistit::{Error, Result};
 
 use crate::LOCALFS_SETTINGS;
 
+#[cfg(doc)]
+use lib_gistit::errors::io::IoError;
+
 #[doc(hidden)]
 const GISTIT_QUALIFIER: &str = "io";
 
@@ -260,7 +263,7 @@ fn user_has_default_settings(theirs: &[u8]) -> bool {
 }
 
 /// Default settings file content as str
-const SETTINGS_FILE_TEMPLATE: &str = r#"---
+pub const SETTINGS_FILE_TEMPLATE: &str = r#"---
 gistit_global:
   # The place to save gistits, defaults to project data directory, e.g:
   #

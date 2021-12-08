@@ -20,7 +20,7 @@ use crate::errors::file::FileError;
 use crate::{Error, Result};
 
 #[cfg(doc)]
-use crate::errors::{encryption::EncryptionError, file::FileError, io::IoError};
+use crate::errors::{encryption::EncryptionError, io::IoError};
 
 /// Allowed file size range in bytes
 const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=50_000;
@@ -694,7 +694,7 @@ impl File {
         })
     }
 
-    /// Same as [`from_bytes_encoded`] but doesn't expect encoded bytes
+    /// Same as [`Self::from_bytes_encoded`] but doesn't expect encoded bytes
     ///
     /// # Errors
     ///
@@ -720,8 +720,8 @@ impl File {
         Ok(tokio::fs::write(file_path, &self.bytes).await?)
     }
 
-    /// Set the file name, useful when creating a [`File`] using [`from_bytes`].
-    /// if the [`File`] was created using [`from_path`] it will use the provided file name.
+    /// Set the file name, useful when creating a [`File`] using [`Self::from_bytes`].
+    /// if the [`File`] was created using [`Self::from_path`] it will use the provided file name.
     #[allow(clippy::missing_const_for_fn)]
     #[must_use]
     pub fn with_name(self, name: String) -> Self {

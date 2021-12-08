@@ -8,6 +8,9 @@ use lib_gistit::Result;
 
 use crate::gistit_line_out;
 
+#[cfg(doc)]
+use lib_gistit::errors::io::IoError;
+
 #[async_trait]
 pub trait Dispatch {
     type InnerData;

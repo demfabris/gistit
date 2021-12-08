@@ -194,7 +194,7 @@ impl Clipboard {
     ///
     /// # Errors
     ///
-    /// Fails with [`Error::Clipboard`] error
+    /// Fails with [`ClipboardError`] error
     pub fn try_into_selected(self) -> Result<ClipboardSelected> {
         match select_display() {
             DisplayKind::Unknown => Err(ClipboardError::UnknownPlatform.into()),
@@ -212,7 +212,7 @@ pub trait ClipboardProvider {
     ///
     /// # Errors
     ///
-    /// Fails with [`Error::Clipboard`]
+    /// Fails with [`ClipboardError`]
     fn set_contents(&self) -> Result<()>;
 }
 
@@ -302,7 +302,7 @@ impl ClipboardSelected {
     ///
     /// # Errors
     ///
-    /// Will fail with [`Error::Clipboard`] when any matched display server misses it's supported
+    /// Will fail with [`ClipboardError`] when any matched display server misses it's supported
     /// clipboard binaries.
     fn try_into_bin(&self) -> Result<BinClipboard> {
         let (bin, program) = match self.display {
@@ -370,7 +370,7 @@ impl ClipboardSelected {
     ///
     /// # Errors
     ///
-    /// Will fail with [`Error::Clipboard`] when any matched display server misses it's supported
+    /// Will fail with [`ClipboardError`] when any matched display server misses it's supported
     /// clipboard binaries.
     fn try_into_bin(&self) -> Result<BinClipboard> {
         let bin = match self.display {

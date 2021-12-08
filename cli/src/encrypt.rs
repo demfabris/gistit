@@ -59,7 +59,7 @@ impl Secret {
     ///
     /// # Errors
     ///
-    /// Fails with [`Encryption`] error
+    /// Fails with [`EncryptionError`] error
     pub fn into_hashed(self) -> Result<HashedSecret> {
         let (log_n, r, p) = (SCRYPT_PARAM_LOG_N, SCRYPT_PARAM_R, SCRYPT_PARAM_P);
         let params = ScryptParams::new(log_n, r, p);
@@ -71,7 +71,7 @@ impl Secret {
     ///
     /// # Errors
     ///
-    /// Fails with [`Encryption`] error
+    /// Fails with [`EncryptionError`] error
     pub fn check_consume(self) -> Result<Self> {
         <Self as Check>::length(&self)?;
         Ok(self)
