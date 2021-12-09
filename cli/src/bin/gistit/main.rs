@@ -57,14 +57,19 @@ pub static LOCALFS_SETTINGS: OnceCell<Settings> = OnceCell::new();
 
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(app().get_matches()));
-    CURRENT_ACTION
-        .set(matches.subcommand().0.to_string())
-        .map_err(|err| Error::Internal(InternalError::Memory(err)))?;
+    let cmd_args = if let Some((cmd, args)) = matches.subcommand() {
+        CURRENT_ACTION
+            .set(cmd.to_owned())
+            .map_err(|err| Error::Internal(InternalError::Memory(err)))?;
+        (cmd, Some(args))
+    } else {
+        ("", None)
+    };
     LOCALFS_SETTINGS
         .set(Settings::default().merge_local().await?)
         .map_err(|err| Error::Internal(InternalError::Memory(err.to_string())))?;
 
-    match matches.subcommand() {
+    match cmd_args {
         ("send", Some(args)) => dispatch_from_args!(send, args),
         ("fetch", Some(args)) => dispatch_from_args!(fetch, args),
         ("", None) => {

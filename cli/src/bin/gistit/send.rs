@@ -63,7 +63,7 @@ pub struct Action {
     pub dry_run: bool,
 }
 
-impl<'args> Action {
+impl Action {
     /// Parse [`ArgMatches`] into the dispatchable Send action.
     /// Here we also merge user settings while keeping this order of priority:
     /// arguments > local settings file > app defaults
@@ -72,7 +72,7 @@ impl<'args> Action {
     ///
     /// Fails with argument errors
     pub fn from_args(
-        args: &'static ArgMatches<'args>,
+        args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         let file = args.value_of_os("file").ok_or(Error::Argument)?;
         gistit_line_out!(format!(

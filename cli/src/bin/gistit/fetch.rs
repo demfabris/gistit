@@ -55,7 +55,7 @@ pub struct Action {
     pub save: bool,
 }
 
-impl<'args> Action {
+impl Action {
     /// Parse [`ArgMatches`] into the dispatchable Fetch action
     /// Here we also merge user settings while keeping this order of priority:
     /// arguments > local settings file > app defaults
@@ -64,7 +64,7 @@ impl<'args> Action {
     ///
     /// Fails with argument errors
     pub fn from_args(
-        args: &'static ArgMatches<'args>,
+        args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         let rhs_settings = get_runtime_settings()?.gistit_fetch.clone();
 

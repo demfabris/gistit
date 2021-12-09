@@ -50,10 +50,9 @@ names = { version = "0.12.0", default-features = false }
 which = { version = "4.2.2", optional = true }
 
 [dependencies.clap]
-version = "2.34.0"
+version = "3.0.0-rc.1"
 optional = true
-default-features = false
-features = ["color", "suggestions", "atty", "wrap_help"]
+features = ["cargo"]
 
 
 [dependencies.dialoguer]
