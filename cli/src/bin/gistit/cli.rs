@@ -1,5 +1,4 @@
-//! Gistit command line interface
-
+/// Gistit command line interface
 use clap::{crate_description, crate_version, App, Arg};
 
 /// The gistit application
@@ -118,7 +117,7 @@ This is our best efforts at persisting the hash into the system clipboard after 
                 .arg(
                     Arg::new("hash")
                         .long("hash")
-                        .short('h')
+                        .short('x')
                         .help("Fetch a gistit via it's hash")
                         .required_unless_present("url")
                         .takes_value(true),
