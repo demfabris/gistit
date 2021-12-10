@@ -90,6 +90,7 @@ pub struct EscapeSeqClipboard {
 
 /// The display server type
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 enum DisplayKind {
     X11,
     Wayland,
@@ -394,5 +395,39 @@ impl ClipboardSelected {
 impl ClipboardSelected {
     fn try_into_bin(&self) -> Result<BinClipboard> {
         Err(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    #[test]
+    pub fn clipboard_test_selection_order() {
+        env::remove_var("DISPLAY");
+        env::remove_var("WSL_DISTRO_NAME");
+        env::remove_var("WAYLAND_DISPLAY");
+        env::remove_var("SSH_CLIENT");
+        env::remove_var("WT_SESSION");
+        env::remove_var("WSL_INTEROP");
+
+        env::set_var("DISPLAY", "localhost");
+        let clip1 = Clipboard::new("foo".to_owned())
+            .try_into_selected()
+            .unwrap();
+        assert_eq!(clip1.display, DisplayKind::X11);
+
+        env::set_var("WAYLAND_DISPLAY", "wayland");
+        let clip2 = Clipboard::new("bar".to_owned())
+            .try_into_selected()
+            .unwrap();
+        assert_eq!(clip2.display, DisplayKind::Wayland);
+
+        env::set_var("WSL_DISTRO_NAME", "hanna_montana_linux");
+        let clip3 = Clipboard::new("baz".to_owned())
+            .try_into_selected()
+            .unwrap();
+        assert_eq!(clip3.display, DisplayKind::Wsl);
     }
 }

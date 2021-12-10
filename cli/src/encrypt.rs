@@ -172,3 +172,119 @@ pub fn decrypt_aes256_u12nonce(
 
     Ok(decrypted)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RSCRYPT_SHORT_HASH_LENGTH: usize = 86;
+
+    #[test]
+    fn encrypt_secret_scrypt_basic_hashing() {
+        let short_secret = Secret::new("foobar").into_hashed().unwrap();
+        assert_eq!(short_secret.to_str().len(), RSCRYPT_SHORT_HASH_LENGTH);
+    }
+
+    #[test]
+    fn encrypt_digestors_functions_consistent() {
+        let alright = "Mathew McConaughey";
+        let hash1 = digest_md5(alright.as_bytes());
+        let hash2 = digest_md5_multi(&[alright.as_bytes()]);
+        assert_eq!(hash1, hash2);
+
+        let never = "gonna give you up";
+        let composed = format!("{}{}", alright, never);
+        let hash3 = digest_md5(composed.as_bytes());
+        let hash4 = digest_md5_multi(&[alright.as_bytes(), never.as_bytes()]);
+        assert_eq!(hash3, hash4);
+    }
+
+    #[test]
+    fn encrypt_basic_encrypt_decrypt() {
+        let secret = "foobar";
+        let raw_data = "I'm a file, for real";
+
+        let (encrypted_data, magic) =
+            encrypt_aes256_u12nonce(secret.as_bytes(), raw_data.as_bytes()).unwrap();
+
+        let magic: [u8; 12] = magic.try_into().unwrap();
+        let decrypted_data =
+            decrypt_aes256_u12nonce(secret.as_bytes(), encrypted_data.as_slice(), &magic).unwrap();
+
+        assert_eq!(raw_data.as_bytes(), decrypted_data);
+    }
+
+    #[test]
+    #[should_panic = "invalid nounce"]
+    fn encrypt_fails_with_invalid_nounce() {
+        let secret = "foobar";
+        let raw_data = "I'm a file, for real";
+
+        let (encrypted_data, magic) =
+            encrypt_aes256_u12nonce(secret.as_bytes(), raw_data.as_bytes()).unwrap();
+
+        let magic: [u8; 12] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        let decrypted_data =
+            decrypt_aes256_u12nonce(secret.as_bytes(), encrypted_data.as_slice(), &magic)
+                .expect("invalid nounce");
+    }
+
+    #[test]
+    #[should_panic = "invalid secret"]
+    fn encrypt_fails_with_invalid_secret() {
+        let secret = "foobar";
+        let raw_data = "I'm a file, for real";
+
+        let (encrypted_data, magic) =
+            encrypt_aes256_u12nonce(secret.as_bytes(), raw_data.as_bytes()).unwrap();
+
+        let magic: [u8; 12] = magic.try_into().unwrap();
+        let decrypted_data =
+            decrypt_aes256_u12nonce("foobah".as_bytes(), encrypted_data.as_slice(), &magic)
+                .expect("invalid secret");
+    }
+
+    #[test]
+    fn encrypt_data_is_actually_encrypted() {
+        let secret = "foobar";
+        let raw_data = "I'm a file, for real".as_bytes();
+
+        let (encrypted_data, magic) = encrypt_aes256_u12nonce(secret.as_bytes(), raw_data).unwrap();
+
+        assert_ne!(raw_data, encrypted_data);
+    }
+
+    #[test]
+    fn encrypt_output_data_is_different_every_time() {
+        let secret = "foobar";
+        let raw_data = "I'm a file, for real".as_bytes();
+
+        let (encrypted_data1, magic) =
+            encrypt_aes256_u12nonce(secret.as_bytes(), raw_data).unwrap();
+        let (encrypted_data2, magic) =
+            encrypt_aes256_u12nonce(secret.as_bytes(), raw_data).unwrap();
+
+        assert_ne!(encrypted_data1, encrypted_data2);
+    }
+
+    #[test]
+    #[should_panic = "invalid nounce"]
+    fn encrypt_different_magic_doesnt_decrypt_each_other() {
+        let secret = "foobar";
+        let raw_data = "I'm a file, for real".as_bytes();
+
+        let (encrypted_data1, magic1) =
+            encrypt_aes256_u12nonce(secret.as_bytes(), raw_data).unwrap();
+        let (encrypted_data2, magic2) =
+            encrypt_aes256_u12nonce(secret.as_bytes(), raw_data).unwrap();
+
+        let magic: [u8; 12] = magic1.try_into().unwrap();
+        let decrypted_data1 =
+            decrypt_aes256_u12nonce(secret.as_bytes(), encrypted_data1.as_slice(), &magic).unwrap();
+        assert_eq!(raw_data, decrypted_data1.as_slice());
+
+        let decrypted_data2 =
+            decrypt_aes256_u12nonce(secret.as_bytes(), encrypted_data2.as_slice(), &magic)
+                .expect("invalid nounce");
+    }
+}
