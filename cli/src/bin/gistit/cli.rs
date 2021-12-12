@@ -38,6 +38,7 @@ Beware to mistakenly overwriting your settings.",
                     Arg::new("file")
                         .long("file")
                         .short('f')
+                        .allow_invalid_utf8(true)
                         .help("The file to be sent [required]")
                         .required(true)
                         .multiple_occurrences(false) // currently not supported
