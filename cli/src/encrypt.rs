@@ -15,7 +15,7 @@
 //! ## Encryption
 //!
 //! The encryption/decryption process relies on `AesGcm` algorithm with 256-bit key and 96-bit
-//! nounce. See [`aes_gcm`] for more info.
+//! nonce. See [`aes_gcm`] for more info.
 
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
@@ -131,7 +131,7 @@ pub fn digest_md5(input: &[u8]) -> String {
     hasher.result_str()
 }
 
-/// Encrypts `raw_data` with a randomly generated `nounce` and a Md5 hash of the provided secret
+/// Encrypts `raw_data` with a randomly generated `nonce` and a Md5 hash of the provided secret
 ///
 /// # Errors
 ///
@@ -151,7 +151,7 @@ pub fn encrypt_aes256_u12nonce(secret: &[u8], raw_data: &[u8]) -> Result<(Vec<u8
 }
 
 /// Decrypts `encrypted_data` given the `magic` and a Md5 hash of the provided secret.
-/// Expects the same `nounce` (`magic`) and `secret` as given in the encryption process.
+/// Expects the same `nonce` (`magic`) and `secret` as given in the encryption process.
 ///
 /// # Errors
 ///
@@ -215,8 +215,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "invalid nounce"]
-    fn encrypt_fails_with_invalid_nounce() {
+    #[should_panic = "invalid nonce"]
+    fn encrypt_fails_with_invalid_nonce() {
         let secret = "foobar";
         let raw_data = "I'm a file, for real";
 
@@ -226,7 +226,7 @@ mod tests {
         let magic: [u8; 12] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
         let decrypted_data =
             decrypt_aes256_u12nonce(secret.as_bytes(), encrypted_data.as_slice(), &magic)
-                .expect("invalid nounce");
+                .expect("invalid nonce");
     }
 
     #[test]
@@ -268,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "invalid nounce"]
+    #[should_panic = "invalid nonce"]
     fn encrypt_different_magic_doesnt_decrypt_each_other() {
         let secret = "foobar";
         let raw_data = "I'm a file, for real".as_bytes();
@@ -285,6 +285,6 @@ mod tests {
 
         let decrypted_data2 =
             decrypt_aes256_u12nonce(secret.as_bytes(), encrypted_data2.as_slice(), &magic)
-                .expect("invalid nounce");
+                .expect("invalid nonce");
     }
 }

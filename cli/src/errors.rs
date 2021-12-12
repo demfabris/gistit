@@ -581,7 +581,7 @@ CAUSE:
                         f,
                         r#"
 CAUSE:
-    unable to parse encrypted data, nounce or padding are missplaced.
+    unable to parse encrypted data, nonce or padding are missplaced.
                     "#,
                     )
                 }
