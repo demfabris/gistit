@@ -37,7 +37,7 @@
 
 A hash based `code` snippet sharing tool focused on ease of use and simplicity.
 
-**Gistit** aspires to be a more robust platform with peer to peer features in the future.
+**Gistit** aspires to be the end of copy/pasting code in inadequate places
 
 ## ⭐ Project components
 
@@ -73,3 +73,12 @@ Contributors please head to [Project](https://github.com/fabricio7p/gistit/proje
 ## 📃 License
 
 [MIT](https://choosealicense.com/licenses/mit)
+
+## 👀 Wish list
+
+What can you expect from **gistit** in the future:
+
+- Finish web app
+- IDE extensions
+- `host` feature for CLI. (p2p sharing)
+- QoL improvements to UX
