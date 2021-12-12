@@ -629,8 +629,8 @@ pub fn name_from_path(path: &Path) -> String {
         .to_string()
 }
 
-async fn spawn_and_write_rng_file(bytes: &[u8]) -> Result<(tokio::fs::File, PathBuf)> {
-    let path = rng_temp_file();
+async fn rng_file_with_name(bytes: &[u8], name: &str) -> Result<(tokio::fs::File, PathBuf)> {
+    let path = rng_temp_file(name);
     let mut handler = tokio::fs::File::create(&path).await?;
     handler.write_all(bytes).await?;
     Ok((handler, path))
@@ -682,9 +682,9 @@ impl File {
     ///
     /// Fails with [`IoError`] if the file can't be created for some reason. Also if it can't be
     /// written to.
-    pub async fn from_bytes_encoded(bytes: &[u8]) -> Result<Self> {
+    pub async fn from_bytes_encoded(bytes: &[u8], name: &str) -> Result<Self> {
         let decoded_bytes = base64::decode(bytes)?;
-        let (handler, path) = spawn_and_write_rng_file(&decoded_bytes).await?;
+        let (handler, path) = rng_file_with_name(&decoded_bytes, name).await?;
 
         Ok(Self {
             handler,
@@ -701,7 +701,7 @@ impl File {
     /// Fails with [`IoError`] if the file can't be created for some reason. Also if it can't be
     /// written to.
     pub async fn from_bytes(decoded_bytes: &[u8]) -> Result<Self> {
-        let (handler, path) = spawn_and_write_rng_file(decoded_bytes).await?;
+        let (handler, path) = rng_file_with_name(decoded_bytes, "").await?;
 
         Ok(Self {
             handler,
@@ -836,9 +836,9 @@ impl EncryptedFile {
     ///
     /// Fails with [`IoError`] if can't create or write to the file handler.
     /// Fails with [`FileError`] if the encryption header is invalid.
-    pub async fn from_bytes_encoded(encoded_bytes: &[u8]) -> Result<Self> {
+    pub async fn from_bytes_encoded(encoded_bytes: &[u8], name: &str) -> Result<Self> {
         let decoded_bytes = base64::decode(encoded_bytes)?;
-        let path = rng_temp_file();
+        let path = rng_temp_file(name);
 
         let (nounce, encrypted_bytes) = parse_encryption_header(&decoded_bytes)?;
         let mut handler = tokio::fs::File::create(&path).await?;
@@ -885,7 +885,7 @@ impl EncryptedFile {
 }
 
 /// Returns a new randomnly generated file path in your system `temp` directory
-fn rng_temp_file() -> PathBuf {
+fn rng_temp_file(suffix: &str) -> PathBuf {
     let rng_string: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(8)
@@ -894,6 +894,7 @@ fn rng_temp_file() -> PathBuf {
 
     let mut rng_file_name = "__gistit_tmp_".to_owned();
     rng_file_name.push_str(&rng_string);
+    rng_file_name.push_str(suffix);
 
     temp_dir().join(&rng_file_name)
 }
@@ -1026,7 +1027,9 @@ mod tests {
             .take(512)
             .map(char::from)
             .collect();
-        let (file, path) = spawn_and_write_rng_file(data.as_bytes()).await.unwrap();
+        let (file, path) = rng_file_with_name(data.as_bytes(), "foo.txt")
+            .await
+            .unwrap();
         let read_bytes = tokio::fs::read(path).await.unwrap();
         assert_eq!(data, std::str::from_utf8(&read_bytes).unwrap());
     }
@@ -1065,7 +1068,7 @@ mod tests {
             .map(char::from)
             .collect();
         let encoded_data = base64::encode(&data);
-        let file = File::from_bytes_encoded(encoded_data.as_bytes())
+        let file = File::from_bytes_encoded(encoded_data.as_bytes(), "nameless")
             .await
             .unwrap();
         assert_eq!(file.bytes, data.as_bytes());
@@ -1073,7 +1076,7 @@ mod tests {
         // Fails when encoding is corrupted
         let mut corrupted_data = "¨¨¨¨".to_owned();
         corrupted_data.extend(encoded_data.chars());
-        let decode_err = File::from_bytes_encoded(corrupted_data.as_bytes())
+        let decode_err = File::from_bytes_encoded(corrupted_data.as_bytes(), "nameless")
             .await
             .unwrap_err();
         assert!(matches!(
@@ -1199,9 +1202,10 @@ mod tests {
             .await
             .unwrap()
             .to_encoded_data();
-        let encrypted = EncryptedFile::from_bytes_encoded(encoded_data.inner.as_bytes())
-            .await
-            .unwrap();
+        let encrypted =
+            EncryptedFile::from_bytes_encoded(encoded_data.inner.as_bytes(), "nameless")
+                .await
+                .unwrap();
         assert_ne!(encrypted.data(), data.as_bytes());
         assert!(matches!(encrypted.prev, None));
     }
