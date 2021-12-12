@@ -72,3 +72,9 @@ $ cargo build --release
 ```
 
 Your binary will be in `/target/release` folder
+
+### From [crates.io](https://crates.io/crates/gistit/)
+
+```shell
+$ cargo install gistit
+```
