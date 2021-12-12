@@ -652,7 +652,7 @@ impl File {
             .map_err(|err| {
                 // Intercept OS error 21 (EISDIR), meaning we can't write to a directory
                 #[cfg(target_family = "unix")]
-                if let Some(21) = err.raw_os_error() {
+                if err.raw_os_error() == Some(21) {
                     Error::File(FileError::NotAFile(name_from_path(path)))
                 } else {
                     Error::from(err)
@@ -991,5 +991,268 @@ impl Check for File {
         } else {
             Err(FileError::UnsupportedExtension(ext.to_owned()).into())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::errors::encryption::EncryptionError;
+    use assert_fs::prelude::*;
+    use predicates::prelude::*;
+    use tokio::task::spawn_blocking;
+
+    #[test]
+    fn file_name_from_path_edge_cases() {
+        let n1 = name_from_path(Path::new("foo.txt"));
+        let n2 = name_from_path(Path::new("~/foo.txt"));
+        let n3 = name_from_path(Path::new("/foo.txt"));
+        let n4 = name_from_path(Path::new("/😁.txt"));
+        let n5 = name_from_path(Path::new("/lol/what/foo/😁.txt"));
+        let n6 = name_from_path(Path::new("😁"));
+
+        assert_eq!(n1, "foo.txt");
+        assert_eq!(n2, "foo.txt");
+        assert_eq!(n3, "foo.txt");
+        assert_eq!(n4, "😁.txt");
+        assert_eq!(n5, "😁.txt");
+        assert_eq!(n6, "😁");
+    }
+
+    #[tokio::test]
+    async fn file_spawn_random_and_write() {
+        let data: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(512)
+            .map(char::from)
+            .collect();
+        let (file, path) = spawn_and_write_rng_file(data.as_bytes()).await.unwrap();
+        let read_bytes = tokio::fs::read(path).await.unwrap();
+        assert_eq!(data, std::str::from_utf8(&read_bytes).unwrap());
+    }
+
+    #[tokio::test]
+    async fn file_structure_new_from_path() {
+        let data: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(512)
+            .map(char::from)
+            .collect();
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let input_file = tmp.child("foo.txt");
+
+        input_file.touch().unwrap();
+        input_file.write_binary(data.as_bytes()).unwrap();
+
+        let file = File::from_path(&input_file).await.unwrap();
+        assert_eq!(file.size().await, 512);
+        assert_eq!(file.bytes, data.as_bytes());
+        assert_eq!(file.name(), "foo.txt".to_owned());
+    }
+
+    #[tokio::test]
+    async fn file_structure_new_from_path_fails_if_is_dir() {
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let read_err = File::from_path(&tmp).await.unwrap_err();
+        assert!(matches!(read_err, Error::File(FileError::NotAFile(_))));
+    }
+
+    #[tokio::test]
+    async fn file_structure_new_from_bytes_encoded() {
+        let data: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(512)
+            .map(char::from)
+            .collect();
+        let encoded_data = base64::encode(&data);
+        let file = File::from_bytes_encoded(encoded_data.as_bytes())
+            .await
+            .unwrap();
+        assert_eq!(file.bytes, data.as_bytes());
+
+        // Fails when encoding is corrupted
+        let mut corrupted_data = "¨¨¨¨".to_owned();
+        corrupted_data.extend(encoded_data.chars());
+        let decode_err = File::from_bytes_encoded(corrupted_data.as_bytes())
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            decode_err,
+            Error::Encryption(EncryptionError::Encoding(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn file_structure_new_from_bytes() {
+        let data: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(512)
+            .map(char::from)
+            .collect();
+        let file = File::from_bytes(data.as_bytes()).await.unwrap();
+        assert_eq!(file.bytes, data.as_bytes());
+    }
+
+    #[tokio::test]
+    async fn file_structure_save_as() {
+        let data: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(512)
+            .map(char::from)
+            .collect();
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let tmp_file = tmp.child("foo.txt");
+
+        tmp_file.touch().unwrap();
+        tmp_file.write_binary(data.as_bytes()).unwrap();
+
+        let file = File::from_path(&tmp_file).await.unwrap();
+        file.save_as(&tmp.join("bar.txt")).await.unwrap();
+        tmp.assert(predicates::path::exists());
+
+        let other = tmp.child("bar.txt");
+        let other = tokio::fs::read(other).await.unwrap();
+        assert_eq!(data.as_bytes(), other);
+    }
+
+    #[tokio::test]
+    async fn file_structure_extension_to_lang_mapping() {
+        let tmp = assert_fs::TempDir::new().unwrap();
+
+        let rust = tmp.child("foo.rs");
+        let js = tmp.child("bar.js");
+        let cpp = tmp.child("lol.cpp");
+        let brainfuck = tmp.child("rly.bf");
+        rust.touch().unwrap();
+        js.touch().unwrap();
+        cpp.touch().unwrap();
+        brainfuck.touch().unwrap();
+
+        assert_eq!(File::from_path(&rust).await.unwrap().lang(), "rust");
+        assert_eq!(File::from_path(&js).await.unwrap().lang(), "javascript");
+        assert_eq!(File::from_path(&cpp).await.unwrap().lang(), "cpp");
+        assert_eq!(
+            File::from_path(&brainfuck).await.unwrap().lang(),
+            "brainfuck"
+        );
+    }
+
+    #[tokio::test]
+    async fn file_structure_support_methods() {
+        let data: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(512)
+            .map(char::from)
+            .collect();
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let tmp_file = tmp.child("foo");
+        tmp_file.touch().unwrap();
+        tmp_file.write_binary(data.as_bytes()).unwrap();
+
+        let file = File::from_path(&tmp_file).await.unwrap();
+        assert_eq!(file.name(), "foo");
+        let file = file.with_name("bar".to_owned());
+        assert_eq!(file.name(), "bar");
+        assert_eq!(file.size().await, 512);
+    }
+
+    #[tokio::test]
+    async fn file_structure_into_encrypted() {
+        let secret = "secret";
+        let data: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(512)
+            .map(char::from)
+            .collect();
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let tmp_file = tmp.child("foo");
+        tmp_file.touch().unwrap();
+        tmp_file.write_binary(data.as_bytes()).unwrap();
+
+        let file = Box::new(File::from_path(&tmp_file).await.unwrap());
+        let encrypted = File::from_path(&tmp_file)
+            .await
+            .unwrap()
+            .into_encrypted(secret)
+            .await
+            .unwrap();
+        // original file is intact
+        tmp_file.assert(predicates::str::contains(&data));
+        assert_ne!(file.data(), encrypted.data());
+        // file prev encrypted is the same decrypted one
+        assert_eq!(file.data(), encrypted.prev.unwrap().data());
+    }
+
+    #[tokio::test]
+    async fn file_encrypted_structure_from_bytes_encoded() {
+        let secret = "secret";
+        let data = "I'm a decrypted string".to_owned();
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let tmp_file = tmp.child("foo");
+        tmp_file.touch().unwrap();
+        tmp_file.write_binary(data.as_bytes()).unwrap();
+
+        let encoded_data = File::from_path(&tmp_file)
+            .await
+            .unwrap()
+            .into_encrypted(secret)
+            .await
+            .unwrap()
+            .to_encoded_data();
+        let encrypted = EncryptedFile::from_bytes_encoded(encoded_data.inner.as_bytes())
+            .await
+            .unwrap();
+        assert_ne!(encrypted.data(), data.as_bytes());
+        assert!(matches!(encrypted.prev, None));
+    }
+
+    #[tokio::test]
+    async fn file_encrypted_structure_into_decrypted() {
+        let secret = "secret";
+        let data = "I'm a decrypted string".to_owned();
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let tmp_file = tmp.child("foo");
+
+        tmp_file.touch().unwrap();
+        tmp_file.write_binary(data.as_bytes()).unwrap();
+
+        let encrypted_file = File::from_path(&tmp_file)
+            .await
+            .unwrap()
+            .into_encrypted(secret)
+            .await
+            .unwrap();
+        let encoded_encrypted_data = encrypted_file.to_encoded_data();
+        let decrypted_file = encrypted_file.into_decrypted(secret).await.unwrap();
+
+        assert_eq!(decrypted_file.data(), data.as_bytes());
+    }
+
+    #[tokio::test]
+    async fn file_encryption_header_data() {
+        let secret = "secret";
+        let data = "Matthew McConaughey".to_owned();
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let tmp_file = tmp.child("foo");
+
+        tmp_file.touch().unwrap();
+        tmp_file.write_binary(data.as_bytes()).unwrap();
+
+        let encoded_encrypted_data = File::from_path(&tmp_file)
+            .await
+            .unwrap()
+            .into_encrypted(secret)
+            .await
+            .unwrap()
+            .to_encoded_data();
+        let (nounce, rest) = parse_encryption_header(
+            base64::decode(encoded_encrypted_data.inner)
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
+        let nounce: [u8; 12] = nounce.try_into().unwrap();
+        let decrypted_data = decrypt_aes256_u12nonce(secret.as_bytes(), &rest, &nounce).unwrap();
+        assert_eq!(decrypted_data, data.as_bytes());
     }
 }

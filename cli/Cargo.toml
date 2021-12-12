@@ -49,6 +49,11 @@ webbrowser = { version = "0.5.5", optional = true }
 names = { version = "0.12.0", default-features = false }
 which = { version = "4.2.2", optional = true }
 
+[dev-dependencies]
+assert_fs = "1.0.6"
+assert_cmd = "2.0.2"
+predicates = "2.1.0"
+
 [build-dependencies]
 clap_generate = { version = "3.0.0-rc.1", optional = true }
 clap = { version = "3.0.0-rc.1", optional = true, features = ["cargo"] }
