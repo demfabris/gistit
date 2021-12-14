@@ -265,7 +265,7 @@ impl Check for SendParams {
 #[async_trait]
 impl Check for FetchParams {
     fn colorscheme(&self) -> Result<()> {
-        try_match_colorscheme(self.colorscheme.as_deref())
+        try_match_colorscheme(self.colorscheme)
     }
     fn hash(&self) -> Result<()> {
         if let Some(hash) = &self.hash {

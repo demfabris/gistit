@@ -134,7 +134,7 @@ impl Hasheable for Config {
         let maybe_secret_bytes = self
             .maybe_secret
             .as_ref()
-            .map_or("", |s| s.to_str())
+            .map_or("", HashedSecret::to_str)
             .as_bytes();
 
         // Digest and collect output
