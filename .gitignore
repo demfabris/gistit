@@ -1,0 +1,8 @@
+build/**
+dist/**
+.next/**
+.turbo
+
+/node_modules
+/.pnp
+.pnp.js
