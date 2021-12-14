@@ -637,7 +637,7 @@ dependencies = [
 
 [[package]]
 name = "gistit"
-version = "0.1.22"
+version = "0.1.4"
 dependencies = [
  "aes-gcm",
  "assert_cmd",

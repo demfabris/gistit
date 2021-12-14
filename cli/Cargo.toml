@@ -8,7 +8,7 @@ license = "MIT"
 name = "gistit"
 readme = "README.md"
 repository = "https://github.com/fabricio7p/gistit"
-version = "0.1.3"
+version = "0.1.4"
 
 [[bin]]
 name = "gistit"

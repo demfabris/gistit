@@ -618,6 +618,22 @@ pub struct File {
     bytes: Vec<u8>,
     /// A custom file name
     name: Option<String>,
+    /// File should be discarded when dropped
+    is_temp: bool,
+}
+
+impl Drop for File {
+    fn drop(&mut self) {
+        if self.is_temp {
+            if let Err(err) = std::fs::remove_file(&self.path) {
+                eprintln!(
+                    "couldn't delete temp file {:?}\n{}",
+                    self.path,
+                    err.to_string()
+                );
+            }
+        }
+    }
 }
 
 #[must_use]
@@ -672,6 +688,7 @@ impl File {
             path: path.to_path_buf(),
             bytes,
             name: Some(name_from_path(path)),
+            is_temp: false,
         })
     }
 
@@ -691,6 +708,7 @@ impl File {
             name: Some(name_from_path(&path)),
             path,
             bytes: decoded_bytes,
+            is_temp: true,
         })
     }
 
@@ -708,6 +726,7 @@ impl File {
             name: Some(name_from_path(&path)),
             path,
             bytes: decoded_bytes.to_vec(),
+            is_temp: true,
         })
     }
 
@@ -724,11 +743,9 @@ impl File {
     /// if the [`File`] was created using [`Self::from_path`] it will use the provided file name.
     #[allow(clippy::missing_const_for_fn)]
     #[must_use]
-    pub fn with_name(self, name: String) -> Self {
-        Self {
-            name: Some(name),
-            ..self
-        }
+    pub fn with_name(mut self, name: &str) -> Self {
+        self.name = Some(name.to_owned());
+        self
     }
 
     /// Returns the file name
@@ -856,11 +873,9 @@ impl EncryptedFile {
     /// string.
     #[allow(clippy::missing_const_for_fn)]
     #[must_use]
-    pub fn with_name(self, name: String) -> Self {
-        Self {
-            name: Some(name),
-            ..self
-        }
+    pub fn with_name(mut self, name: &str) -> Self {
+        self.name = Some(name.to_owned());
+        self
     }
 
     /// Converts [`Self`] into [`File`] handler by applying the decryption process with the
@@ -877,9 +892,11 @@ impl EncryptedFile {
             .expect("Shrink nonce to 12 bytes");
 
         let decrypted_bytes = decrypt_aes256_u12nonce(secret.as_bytes(), self.data(), &nonce)?;
-        let file = File::from_bytes(&decrypted_bytes)
-            .await?
-            .with_name(self.name.expect("Opened file to have at least temp name"));
+        let file = File::from_bytes(&decrypted_bytes).await?.with_name(
+            self.name
+                .as_ref()
+                .expect("Opened file to have at least temp name"),
+        );
         Ok(file)
     }
 }
@@ -1154,7 +1171,7 @@ mod tests {
 
         let file = File::from_path(&tmp_file).await.unwrap();
         assert_eq!(file.name(), "foo");
-        let file = file.with_name("bar".to_owned());
+        let file = file.with_name("bar");
         assert_eq!(file.name(), "bar");
         assert_eq!(file.size().await, 512);
     }
@@ -1258,5 +1275,18 @@ mod tests {
         let nonce: [u8; 12] = nonce.try_into().unwrap();
         let decrypted_data = decrypt_aes256_u12nonce(secret.as_bytes(), &rest, &nonce).unwrap();
         assert_eq!(decrypted_data, data.as_bytes());
+    }
+
+    #[tokio::test]
+    async fn file_temp_fs_file_deleted_on_drop() {
+        let data = "Matthew McConaughey".to_owned();
+        let file = File::from_bytes(data.as_bytes()).await.unwrap();
+        let path = file.path.clone();
+        assert!(tokio::fs::metadata(&path).await.unwrap().is_file());
+        {
+            file;
+        }
+        let not_found = tokio::fs::metadata(&path).await.unwrap_err().kind();
+        assert!(matches!(not_found, std::io::ErrorKind::NotFound));
     }
 }

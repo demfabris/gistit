@@ -56,7 +56,7 @@ impl GistitPayload {
             Ok(Box::new(
                 EncryptedFile::from_bytes_encoded(self.gistit.data.inner.as_bytes(), &name)
                     .await?
-                    .with_name(name)
+                    .with_name(&name)
                     .into_decrypted(secret)
                     .await?,
             ))
@@ -64,7 +64,7 @@ impl GistitPayload {
             Ok(Box::new(
                 File::from_bytes_encoded(self.gistit.data.inner.as_bytes(), &name)
                     .await?
-                    .with_name(name),
+                    .with_name(&name),
             ))
         }
     }
@@ -148,7 +148,7 @@ mod tests {
         let theirs = File::from_bytes_encoded(encoded_data.as_bytes(), "foo.rs")
             .await
             .unwrap()
-            .with_name("foo.rs".to_owned());
+            .with_name("foo.rs");
         let payload = GistitPayload::with_test_info().with_inner(GistitInner::new(
             &theirs.name(),
             theirs.lang(),
