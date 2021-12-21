@@ -144,12 +144,12 @@ impl Dispatch for Action {
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         match config.process_command {
             ProcessCommand::StartEncrypted(password) => {
-                spawn_network_node_daemon(password)?;
                 gistit_line_out!("Starting gistit network node process...");
+                spawn_network_node_daemon(password).await?;
             }
             ProcessCommand::Stop => {
-                signal_network_node_daemon(UNIX_SIGKILL)?;
                 gistit_line_out!("Stopping gistit network node process...");
+                signal_network_node_daemon(UNIX_SIGKILL)?;
             }
             ProcessCommand::Status => {
                 if signal_network_node_daemon(UNIX_SIGNOTHING).is_ok() {
@@ -178,17 +178,20 @@ fn get_runtime_dir() -> Result<PathBuf> {
 }
 
 #[cfg(target_family = "unix")]
-fn spawn_network_node_daemon(password: &str) -> Result<()> {
+async fn spawn_network_node_daemon(password: &'static str) -> Result<()> {
     let runtime_dir = get_runtime_dir()?;
     let daemon_out = std::fs::File::create(runtime_dir.join("gistit_node.out"))?;
     let daemon = Daemonize::new()
         .pid_file(runtime_dir.join("gistit_node.pid"))
         .stdout(daemon_out.try_clone()?)
         .stderr(daemon_out)
-        .privileged_action(|| println!("process started"));
+        .start();
 
-    match daemon.start() {
-        Ok(_) => Ok(()),
+    match daemon {
+        Ok(network) => {
+            Network::new(password).await?.run().await;
+            Ok(())
+        }
         Err(err) => match err {
             DaemonizeError::LockPidfile(pidf) => Err(Error::IO(IoError::ProcessSpawn(format!(
                 "Process is already running... ({})",
