@@ -230,6 +230,7 @@ pub mod internal {
     pub enum InternalError {
         Memory(String),
         TerminalSupport(String),
+        Other(String),
     }
 
     impl From<InternalError> for Error {
@@ -287,6 +288,24 @@ SYSTEM:
                         style(err).yellow()
                     )
                 }
+                InternalError::Other(err) => {
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("Other").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+CAUSE:
+    Something caused an unexpected exit.
+
+SYSTEM:
+    {}
+                    "#,
+                        style(err).yellow()
+                    )
+                }
             }
         }
     }
@@ -304,6 +323,7 @@ pub mod params {
         InvalidLifespan,
         InvalidUrl(String),
         InvalidHash(String),
+        InvalidMultiaddr(String),
     }
 
     impl From<ParamsError> for Error {
@@ -452,6 +472,25 @@ CAUSE:
                         style(hash_captured).yellow()
                     )
                 }
+                ParamsError::InvalidMultiaddr(multiaddr) => {
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("InvalidMultiaddr").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+PARAM:
+    {}
+
+CAUSE:
+    input "{}" does not represent a valid 'multiaddr'
+                    "#,
+                        style("--join <multiaddr>").red().bold(),
+                        style(multiaddr).yellow()
+                    )
+                }
             }
         }
     }
@@ -598,6 +637,8 @@ pub mod io {
     pub enum IoError {
         /// Failed to spawn a process
         ProcessSpawn(String),
+        /// Failed to kill a process
+        ProcessStop(String),
         /// Process hanged/can't close
         ProcessWait(String),
         /// Failed to write to stdin of a process
@@ -664,6 +705,7 @@ CAUSE:
                     )
                 }
                 Self::ProcessWait(err_string)
+                | Self::ProcessStop(err_string)
                 | Self::StdinWrite(err_string)
                 | Self::ProcessSpawn(err_string) => {
                     println!(
@@ -976,6 +1018,7 @@ CAUSE:
                         )
                     }
                     io::IoError::ProcessWait(output)
+                    | io::IoError::ProcessStop(output)
                     | io::IoError::Other(output)
                     | io::IoError::StdoutWrite(output)
                     | io::IoError::Request(output) => {

@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use clap::crate_authors;
-use directories::ProjectDirs;
+use directories::{BaseDirs, ProjectDirs};
 use lazy_static::lazy_static;
 use lib_gistit::errors::settings::SettingsError;
 use serde::{Deserialize, Serialize};

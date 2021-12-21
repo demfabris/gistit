@@ -35,5 +35,8 @@ pub mod file;
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
 
+#[cfg(feature = "host")]
+pub mod network;
+
 pub use errors::Error;
 pub type Result<T> = std::result::Result<T, Error>;

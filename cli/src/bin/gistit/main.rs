@@ -37,6 +37,9 @@ pub mod settings;
 #[cfg(feature = "fetch")]
 pub mod fetch;
 
+#[cfg(feature = "host")]
+pub mod host;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use console::style;
@@ -72,6 +75,7 @@ async fn run() -> Result<()> {
     match cmd_args {
         ("send", Some(args)) => dispatch_from_args!(send, args),
         ("fetch", Some(args)) => dispatch_from_args!(fetch, args),
+        ("host", Some(args)) => dispatch_from_args!(host, args),
         ("", None) => {
             // Global commands
             if matches.is_present("colorschemes") {

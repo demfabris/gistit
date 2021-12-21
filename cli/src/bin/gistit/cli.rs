@@ -170,4 +170,60 @@ Run `gistit --colorschemes` to list available ones.",
                         .help("Disable syntax highlighting"),
                 ),
         )
+        .subcommand(
+            App::new("host")
+                .alias("h")
+                .about("Host a gistit for p2p transfer")
+                .arg(
+                    Arg::new("status")
+                        .long("status")
+                        .help("Display the status of your gistit network node process")
+                        .conflicts_with_all(&["secret", "file", "join", "start", "stop"]),
+                )
+                .arg(
+                    Arg::new("start")
+                        .long("start")
+                        .help("Start encrypted private network node")
+                        .long_help(
+                            "Spawn the gistit network node background process to enable peer 
+to peer file sharing. The provided password will be used to derive your private key.",
+                        )
+                        .value_name("password")
+                        .takes_value(true)
+                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                )
+                .arg(
+                    Arg::new("stop")
+                        .long("stop")
+                        .help("Stop gistit node background process")
+                        .conflicts_with_all(&["start", "secret", "file", "status"]),
+                )
+                .arg(
+                    Arg::new("join")
+                        .long("join")
+                        .short('j')
+                        .help("Join a private gistit network")
+                        .takes_value(true)
+                        .value_name("network_multiaddr")
+                        .conflicts_with_all(&["start", "file", "stop", "status", "secret"]),
+                )
+                .arg(
+                    Arg::new("secret")
+                        .long("secret")
+                        .short('s')
+                        .help("Encrypts the target file with a secret.")
+                        .takes_value(true)
+                        .conflicts_with_all(&["stop", "join", "status"]),
+                )
+                .arg(
+                    Arg::new("file")
+                        .long("file")
+                        .short('f')
+                        .allow_invalid_utf8(true)
+                        .help("Appends this file to your hosted gistits")
+                        .multiple_occurrences(false)
+                        .takes_value(true)
+                        .conflicts_with_all(&["stop", "status", "join"]),
+                ),
+        )
 }

@@ -1,6 +1,7 @@
 //! Params module
 use async_trait::async_trait;
 use lazy_static::lazy_static;
+use libp2p::multiaddr::Multiaddr;
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use phf::{phf_set, Set};
 use url::Url;
@@ -9,6 +10,7 @@ use std::borrow::ToOwned;
 use std::ops::RangeInclusive;
 
 use crate::fetch::Action as FetchAction;
+use crate::host::Action as HostAction;
 use crate::send::Action as SendAction;
 
 use lib_gistit::errors::params::ParamsError;
@@ -88,6 +90,14 @@ pub struct FetchParams {
     pub colorscheme: Option<&'static str>,
 }
 
+pub trait HostArgs {}
+impl HostArgs for HostParams {}
+/// The data structure that holds data to be checked/dispatched during a [`HostAction`]
+#[derive(Clone, Default, Debug)]
+pub struct HostParams {
+    pub encoded_multiaddr: Option<&'static str>,
+}
+
 impl SendParams {
     /// Perform all the needed checks to the params fields concurrently.
     ///
@@ -113,6 +123,18 @@ impl FetchParams {
         <Self as Check>::colorscheme(&self)?;
         <Self as Check>::hash(&self)?;
         <Self as Check>::url(&self)?;
+        Ok(self)
+    }
+}
+
+impl HostParams {
+    /// Perform needed checks for [`HostParams`]
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`ParamsError`]
+    pub fn check_consume(self) -> Result<Self> {
+        <Self as Check>::multiaddr(&self)?;
         Ok(self)
     }
 }
@@ -147,6 +169,16 @@ impl Params {
             colorscheme: action.colorscheme,
         })
     }
+
+    /// Create a new [`HostParams`] from [`HostAction`]
+    ///
+    /// TODO: Remove result above
+    #[must_use]
+    pub const fn from_host(action: &HostAction) -> HostParams {
+        HostParams {
+            encoded_multiaddr: action.join,
+        }
+    }
 }
 
 #[async_trait]
@@ -157,7 +189,9 @@ trait Check {
     ///
     /// Fails with [`ParamsError`] if colorscheme isn't named properly.
     /// Prompts the user with a suggestion if it fuzzy matches agains't a probability.
-    fn colorscheme(&self) -> Result<()>;
+    fn colorscheme(&self) -> Result<()> {
+        Ok(())
+    }
 
     /// Check provided lifetime limit range
     ///
@@ -215,6 +249,18 @@ trait Check {
     fn url(&self) -> Result<()>
     where
         Self: FetchArgs,
+    {
+        Ok(())
+    }
+
+    /// Check the multiaddr to be joined
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`ParamsError`] if multiaddr is invalid
+    fn multiaddr(&self) -> Result<()>
+    where
+        Self: HostArgs,
     {
         Ok(())
     }
@@ -282,6 +328,21 @@ impl Check for FetchParams {
         } else {
             Ok(())
         }
+    }
+}
+
+impl Check for HostParams {
+    fn multiaddr(&self) -> Result<()> {
+        if let Some(encoded_multiaddr) = self.encoded_multiaddr {
+            let decoded_multiaddr = base64::decode(encoded_multiaddr)?;
+            let multiaddr = std::str::from_utf8(&decoded_multiaddr).map_err(|_| {
+                ParamsError::InvalidMultiaddr(format!("{} is encoded properly", encoded_multiaddr))
+            })?;
+            let _valid = multiaddr
+                .parse::<Multiaddr>()
+                .map_err(|_| ParamsError::InvalidMultiaddr(multiaddr.to_owned()))?;
+        }
+        Ok(())
     }
 }
 
