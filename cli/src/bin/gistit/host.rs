@@ -15,7 +15,7 @@ use lib_gistit::encrypt::{HashedSecret, Secret};
 use lib_gistit::errors::internal::InternalError;
 use lib_gistit::errors::io::IoError;
 use lib_gistit::file::{File, FileReady};
-use lib_gistit::network::Network;
+use lib_gistit::network::NetworkDaemon;
 use lib_gistit::{Error, Result};
 
 use crate::dispatch::Dispatch;
@@ -142,10 +142,16 @@ impl Dispatch for Action {
     }
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
+        let dirs = directories::BaseDirs::new()
+            .ok_or_else(|| InternalError::Other("No valid home directory".to_owned()))?;
+        let data_local_dir = dirs.data_local_dir().join("gistit").join("peers");
+        if !Path::exists(&data_local_dir) {
+            std::fs::create_dir(&data_local_dir)?;
+        }
         match config.process_command {
             ProcessCommand::StartEncrypted(password) => {
                 gistit_line_out!("Starting gistit network node process...");
-                spawn_network_node_daemon(password).await?;
+                spawn_network_node_daemon(password, &data_local_dir).await?;
             }
             ProcessCommand::Stop => {
                 gistit_line_out!("Stopping gistit network node process...");
@@ -158,9 +164,28 @@ impl Dispatch for Action {
                     gistit_line_out!("Not running");
                 }
             }
-            ProcessCommand::Skip => {
-                todo!();
-            }
+            // Not a process instruction, that means either add a peer or host a new gistit.
+            ProcessCommand::Skip => match config {
+                Self::InnerData {
+                    maybe_join: Some(encoded_peer_id),
+                    ..
+                } => {
+                    let peer_dir = Path::new(&data_local_dir).join(encoded_peer_id);
+                    if Path::exists(&peer_dir) {
+                        gistit_line_out!("You're already connected to this peer");
+                    } else {
+                        gistit_line_out!("Added peer, check daemon outpt");
+                        std::fs::create_dir(&peer_dir)?;
+                    }
+                }
+                Self::InnerData {
+                    maybe_file: Some(file),
+                    ..
+                } => {
+                    todo!()
+                }
+                _ => (),
+            },
         };
         Ok(())
     }
@@ -178,7 +203,7 @@ fn get_runtime_dir() -> Result<PathBuf> {
 }
 
 #[cfg(target_family = "unix")]
-async fn spawn_network_node_daemon(password: &'static str) -> Result<()> {
+async fn spawn_network_node_daemon(password: &'static str, host_dir: &Path) -> Result<()> {
     let runtime_dir = get_runtime_dir()?;
     let daemon_out = std::fs::File::create(runtime_dir.join("gistit_node.out"))?;
     let daemon = Daemonize::new()
@@ -189,7 +214,7 @@ async fn spawn_network_node_daemon(password: &'static str) -> Result<()> {
 
     match daemon {
         Ok(network) => {
-            Network::new(password).await?.run().await;
+            NetworkDaemon::new(password, host_dir).await?.run().await;
             Ok(())
         }
         Err(err) => match err {
