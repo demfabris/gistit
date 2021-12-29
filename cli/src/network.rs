@@ -19,7 +19,7 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage, ResponseChannel,
 };
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
-use libp2p::{development_transport, Swarm};
+use libp2p::{development_transport, Swarm, Transport};
 use libp2p::{identity, Multiaddr};
 use notify::{raw_watcher, RawEvent as FsEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -27,26 +27,26 @@ use crate::errors::internal::InternalError;
 use crate::{Error, Result};
 
 pub struct NetworkDaemon {
-    client: Client,
     event_loop: EventLoop,
-    _watcher: RecommendedWatcher,
+    watcher: RecommendedWatcher,
+    persist: bool,
 }
 
 impl NetworkDaemon {
     /// # Errors
     ///
     /// asd
-    pub async fn new(secret: &str, host_dir: &Path) -> Result<Self> {
-        // TODO: improve the keypair
-        let ed25519_keypair = identity::Keypair::generate_ed25519();
+    pub async fn new(password: &str, cache_dir: &Path) -> Result<Self> {
+        // let ed25519_keypair = identity::Keypair::generate_ed25519();
+        let mut bytes: Vec<u8> = password.as_bytes().to_vec();
+        bytes.resize_with(32, || 0);
+        let mut bytes: [u8; 32] = bytes.try_into().unwrap();
+        let ed25519_keypair = identity::ed25519::SecretKey::from_bytes(&mut bytes).unwrap();
+        let ed25519_keypair = identity::Keypair::Ed25519(ed25519_keypair.into());
+        println!("{:?}", ed25519_keypair.public());
         let peer_id = PeerId::from(ed25519_keypair.public());
 
-        // The command interface
-        let (cmd_tx, cmd_rx) = futures::channel::mpsc::channel(0);
-        let (cli_event_tx, cli_event_rx) = futures::channel::mpsc::channel(0);
-        let client = Client { sender: cmd_tx };
-
-        let mut swarm = SwarmBuilder::new(
+        let swarm = SwarmBuilder::new(
             development_transport(ed25519_keypair).await.unwrap(),
             RequestResponse::new(
                 GistitExchangeCodec,
@@ -56,20 +56,30 @@ impl NetworkDaemon {
             peer_id,
         )
         .build();
-        swarm
-            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-            .unwrap();
 
-        let (watcher_tx, watcher_rx) = std::sync::mpsc::channel();
-        let mut watcher = raw_watcher(watcher_tx)?;
-        watcher.watch(host_dir, RecursiveMode::Recursive)?;
-        let watcher_rx = Mutex::new(watcher_rx);
+        let FsWatcher {
+            watcher,
+            channel: (_, watcher_rx),
+        } = FsWatcher::new(cache_dir)?;
 
         Ok(Self {
-            client,
-            event_loop: EventLoop::new(swarm, cmd_rx, cli_event_tx, watcher_rx).await?,
-            _watcher: watcher,
+            event_loop: EventLoop::new(swarm, Mutex::new(watcher_rx)).await?,
+            watcher,
+            persist: false,
         })
+    }
+
+    pub const fn persist(mut self, yes: bool) -> Self {
+        self.persist = yes;
+        self
+    }
+
+    pub fn listen(mut self, address_port: &str) -> Self {
+        let (addr, port) = address_port.split_once(':').expect("to contain :"); // FIXME: dont panic
+        println!("addr {} port {}", addr, port);
+        let multiaddr: Multiaddr = format!("/ip4/{}/tcp/{}", addr, port).parse().unwrap();
+        self.event_loop.swarm.listen_on(multiaddr).unwrap();
+        self
     }
 
     pub async fn run(self) {
@@ -77,14 +87,29 @@ impl NetworkDaemon {
     }
 }
 
+struct FsWatcher {
+    watcher: RecommendedWatcher,
+    channel: (Sender<FsEvent>, Receiver<FsEvent>),
+}
+
+impl FsWatcher {
+    fn new(cache_dir: &Path) -> Result<Self> {
+        let (watcher_tx, watcher_rx) = channel();
+
+        let mut watcher = raw_watcher(watcher_tx.clone())?;
+        watcher.watch(cache_dir, RecursiveMode::Recursive)?;
+
+        Ok(Self {
+            watcher,
+            channel: (watcher_tx, watcher_rx),
+        })
+    }
+}
+
 /// The main event loop
 pub struct EventLoop {
     /// p2p Swarm, acts like a receiver
     swarm: Swarm<RequestResponse<GistitExchangeCodec>>,
-    /// The command instructions receiver
-    cmd_rx: futures::channel::mpsc::Receiver<Command>,
-    /// The response event
-    cli_event_tx: futures::channel::mpsc::Sender<CliEventResponse>,
     /// Fs events watcher
     watcher_rx: Mutex<Receiver<FsEvent>>,
 }
@@ -92,22 +117,14 @@ pub struct EventLoop {
 impl EventLoop {
     async fn new(
         swarm: Swarm<RequestResponse<GistitExchangeCodec>>,
-        cmd_rx: futures::channel::mpsc::Receiver<Command>,
-        cli_event_tx: futures::channel::mpsc::Sender<CliEventResponse>,
         watcher_rx: Mutex<Receiver<FsEvent>>,
     ) -> Result<Self> {
-        Ok(Self {
-            swarm,
-            cmd_rx,
-            cli_event_tx,
-            watcher_rx,
-        })
+        Ok(Self { swarm, watcher_rx })
     }
 
     async fn run(mut self) {
         loop {
             tokio::select! {
-                // Swarm events
                 swarm_event = self.swarm.next() => self.handle_swarm_event(swarm_event.expect("some event")).await,
 
                 fs_event = poll_fn(|_| {
@@ -118,10 +135,6 @@ impl EventLoop {
         }
     }
 
-    async fn handle_command(&mut self, cmd: Command) {
-        todo!()
-    }
-
     async fn handle_swarm_event(
         &mut self,
         event: SwarmEvent<
@@ -129,7 +142,7 @@ impl EventLoop {
             ProtocolsHandlerUpgrErr<std::io::Error>,
         >,
     ) {
-        todo!()
+        println!("{:?}", event);
     }
 
     async fn handle_fs_event(&mut self, fs_event: FsEvent) {
@@ -139,7 +152,15 @@ impl EventLoop {
                 op: Ok(notify::op::Op::CREATE),
                 ..
             } => {
-                println!("Connected to peer {:?}", peer);
+                let addr_str = peer.as_os_str().to_string_lossy();
+                println!("{:?}", addr_str);
+                let peer_multiaddr =
+                    std::str::from_utf8(base64::decode(addr_str.as_ref()).unwrap().as_slice())
+                        .unwrap()
+                        .parse::<Multiaddr>()
+                        .unwrap();
+                self.swarm.dial(peer_multiaddr).unwrap();
+                println!("Connected to peer {:?}", addr_str);
             }
             FsEvent {
                 path: Some(peer),
@@ -152,41 +173,6 @@ impl EventLoop {
         }
     }
 }
-
-#[derive(Clone)]
-pub struct Client {
-    sender: futures::channel::mpsc::Sender<Command>,
-}
-
-impl Client {
-    pub fn listen(&mut self, addr: Multiaddr) -> Result<()> {
-        let (tx, mut rx) = futures::channel::oneshot::channel::<Command>();
-        self.sender
-            .try_send(Command::Listen { addr, tx })
-            .expect("To send listen command");
-        rx.try_recv().expect("To receive listen command");
-        Ok(())
-    }
-
-    pub fn dial(&mut self, peer_id: PeerId, peer_addr: Multiaddr) -> Result<()> {
-        let (sender, mut recv) = futures::channel::oneshot::channel::<Command>();
-        self.sender
-            .try_send(Command::Dial)
-            .expect("To send dial command");
-        recv.try_recv().expect("To receive dial command");
-        Ok(())
-    }
-}
-
-pub enum Command {
-    Listen {
-        addr: Multiaddr,
-        tx: futures::channel::oneshot::Sender<Command>,
-    },
-    Dial,
-}
-
-pub struct CliEventResponse;
 
 #[derive(Debug, Clone)]
 pub struct GistitExchangeProtocol;

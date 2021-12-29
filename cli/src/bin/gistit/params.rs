@@ -7,6 +7,7 @@ use phf::{phf_set, Set};
 use url::Url;
 
 use std::borrow::ToOwned;
+use std::net::Ipv4Addr;
 use std::ops::RangeInclusive;
 
 use crate::fetch::Action as FetchAction;
@@ -96,6 +97,7 @@ impl HostArgs for HostParams {}
 #[derive(Clone, Default, Debug)]
 pub struct HostParams {
     pub encoded_multiaddr: Option<&'static str>,
+    pub listen_addr: &'static str,
 }
 
 impl SendParams {
@@ -135,6 +137,7 @@ impl HostParams {
     /// Fails with [`ParamsError`]
     pub fn check_consume(self) -> Result<Self> {
         <Self as Check>::multiaddr(&self)?;
+        <Self as Check>::listen_addr(&self)?;
         Ok(self)
     }
 }
@@ -177,6 +180,7 @@ impl Params {
     pub const fn from_host(action: &HostAction) -> HostParams {
         HostParams {
             encoded_multiaddr: action.join,
+            listen_addr: action.listen,
         }
     }
 }
@@ -264,6 +268,18 @@ trait Check {
     {
         Ok(())
     }
+
+    /// Check the local listen address
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`ParamsError`] if multiaddr is invalid
+    fn listen_addr(&self) -> Result<()>
+    where
+        Self: HostArgs,
+    {
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -342,6 +358,24 @@ impl Check for HostParams {
                 .parse::<Multiaddr>()
                 .map_err(|_| ParamsError::InvalidMultiaddr(multiaddr.to_owned()))?;
         }
+        Ok(())
+    }
+
+    fn listen_addr(&self) -> Result<()> {
+        let (addr, port) = self.listen_addr.split_once(':').ok_or_else(|| {
+            ParamsError::InvalidIpv4Address(
+                "make sure it's <address>:<port> format".to_owned(),
+                self.listen_addr.to_owned(),
+            )
+        })?;
+        addr.parse::<Ipv4Addr>().map_err(|_| {
+            ParamsError::InvalidIpv4Address(
+                "address is not in ipv4 format".to_owned(),
+                addr.to_owned(),
+            )
+        })?;
+        port.parse::<u16>()
+            .map_err(|_| ParamsError::InvalidPort(port.to_owned()))?;
         Ok(())
     }
 }

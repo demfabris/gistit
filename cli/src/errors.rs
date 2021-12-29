@@ -324,6 +324,8 @@ pub mod params {
         InvalidUrl(String),
         InvalidHash(String),
         InvalidMultiaddr(String),
+        InvalidIpv4Address(String, String), // Message, Captured value
+        InvalidPort(String),
     }
 
     impl From<ParamsError> for Error {
@@ -489,6 +491,46 @@ CAUSE:
                     "#,
                         style("--join <multiaddr>").red().bold(),
                         style(multiaddr).yellow()
+                    )
+                }
+                ParamsError::InvalidIpv4Address(msg, ipv4addr) => {
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("InvalidIpv4Address").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+PARAM:
+    {}
+
+CAUSE:
+    {} is not valid ipv4 address.
+    {}
+                    "#,
+                        style("--listen-on <address:port>").red().bold(),
+                        style(ipv4addr).yellow(),
+                        msg
+                    )
+                }
+                ParamsError::InvalidPort(port) => {
+                    println!(
+                        "{}{}",
+                        style(Emoji("\u{274c} ", "X")).red(),
+                        style("InvalidPort").red().bold()
+                    );
+                    write!(
+                        f,
+                        r#"
+PARAM:
+    {}
+
+CAUSE:
+    {} is not a valid port. (1-65535)
+                    "#,
+                        style("--listen-on <address:port>").red().bold(),
+                        style(port).yellow(),
                     )
                 }
             }

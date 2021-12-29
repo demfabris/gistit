@@ -1,5 +1,5 @@
 /// Gistit command line interface
-use clap::{crate_description, crate_version, App, Arg};
+use clap::{crate_description, crate_version, App, Arg, ArgGroup};
 
 /// The gistit application
 #[allow(clippy::too_many_lines)]
@@ -174,10 +174,12 @@ Run `gistit --colorschemes` to list available ones.",
             App::new("host")
                 .alias("h")
                 .about("Host a gistit for p2p transfer")
+                .group(ArgGroup::new("process_cmd").multiple(true))
                 .arg(
                     Arg::new("status")
                         .long("status")
                         .help("Display the status of your gistit network node process")
+                        .group("process_cmd")
                         .conflicts_with_all(&["secret", "file", "join", "start", "stop"]),
                 )
                 .arg(
@@ -186,15 +188,36 @@ Run `gistit --colorschemes` to list available ones.",
                         .help("Start encrypted private network node")
                         .long_help(
                             "Spawn the gistit network node background process to enable peer 
-to peer file sharing. The provided password will be used to derive your private key.",
+to peer file sharing.",
                         )
                         .value_name("password")
+                        .group("process_cmd")
                         .takes_value(true)
+                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                )
+                .arg(
+                    Arg::new("persist")
+                        .long("persist")
+                        .help("Save the network configuration and peer addresses to a future connection")
+                        .group("process_cmd")
+                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                )
+                .arg(
+                    Arg::new("listen")
+                        .long("listen")
+                        .help("The Ipv4 address used to listen for inbound connections. Defaults to '127.0.0.1:0'")
+                        .long_help("The Ipv4 address used to listen for inbound connections. 
+Defaults to '127.0.0.1:0', which means (localhost:random_port)")
+                        .takes_value(true)
+                        .value_name("address:port")
+                        .default_value("127.0.0.1:0")
+                        .group("process_cmd")
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("stop")
                         .long("stop")
+                        .group("process_cmd")
                         .help("Stop gistit node background process")
                         .conflicts_with_all(&["start", "secret", "file", "status"]),
                 )
