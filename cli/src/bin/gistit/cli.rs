@@ -185,14 +185,22 @@ Run `gistit --colorschemes` to list available ones.",
                 .arg(
                     Arg::new("start")
                         .long("start")
-                        .help("Start encrypted private network node")
+                        .help("Start encrypted private network node.")
                         .long_help(
                             "Spawn the gistit network node background process to enable peer 
 to peer file sharing.",
                         )
-                        .value_name("password")
                         .group("process_cmd")
-                        .takes_value(true)
+                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                )
+                .arg(
+                    Arg::new("seed")
+                        .long("seed")
+                        .help("Seed to derive your ed25519 keypair under peer to peer connections.")
+                        .long_help("Seed to derive your ed25519 keypair under peer to peer connections.
+Use this to have a peristing keypair that enables your peers to recognize you in future connections, provided you entered the same seed.")
+                        .group("process_cmd")
+                        .requires("start")
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
