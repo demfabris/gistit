@@ -683,6 +683,8 @@ pub mod io {
         ProcessStop(String),
         /// Process hanged/can't close
         ProcessWait(String),
+        /// Signal can't reach process
+        ProcessSignal(String),
         /// Failed to write to stdin of a process
         StdinWrite(String),
         /// Failed to write to stdout
@@ -748,6 +750,7 @@ CAUSE:
                 }
                 Self::ProcessWait(err_string)
                 | Self::ProcessStop(err_string)
+                | Self::ProcessSignal(err_string)
                 | Self::StdinWrite(err_string)
                 | Self::ProcessSpawn(err_string) => {
                     println!(
@@ -763,7 +766,7 @@ CAUSE:
 CAUSE:
     {}
                     "#,
-                        style(err_string).yellow()
+                        err_string
                     )
                 }
             }
@@ -784,6 +787,7 @@ CAUSE:
 }
 
 /// Fetch module errors
+#[cfg(feature = "fetch")]
 pub mod fetch {
     use super::{style, Emoji, Error};
 
@@ -869,6 +873,7 @@ The host location is missbehaving or trying to be evil.
 }
 
 /// Clipboard module errors
+#[cfg(feature = "clipboard")]
 pub mod clipboard {
     use super::{io, style, Emoji, Error};
 
@@ -1061,6 +1066,7 @@ CAUSE:
                     }
                     io::IoError::ProcessWait(output)
                     | io::IoError::ProcessStop(output)
+                    | io::IoError::ProcessSignal(output)
                     | io::IoError::Other(output)
                     | io::IoError::StdoutWrite(output)
                     | io::IoError::Request(output) => {

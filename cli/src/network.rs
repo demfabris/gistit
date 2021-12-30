@@ -37,12 +37,17 @@ impl NetworkDaemon {
     ///
     /// asd
     pub async fn new(password: &str, cache_dir: &Path) -> Result<Self> {
-        // let ed25519_keypair = identity::Keypair::generate_ed25519();
-        let mut bytes: Vec<u8> = password.as_bytes().to_vec();
-        bytes.resize_with(32, || 0);
-        let mut bytes: [u8; 32] = bytes.try_into().unwrap();
-        let ed25519_keypair = identity::ed25519::SecretKey::from_bytes(&mut bytes).unwrap();
-        let ed25519_keypair = identity::Keypair::Ed25519(ed25519_keypair.into());
+        let ed25519_keypair = if password == "none" {
+            identity::Keypair::generate_ed25519()
+        } else {
+            let mut bytes: Vec<u8> = password.as_bytes().to_vec();
+            bytes.resize_with(32, || 0);
+            let mut bytes: [u8; 32] = bytes.try_into().unwrap();
+
+            let ed25519_secret = identity::ed25519::SecretKey::from_bytes(&mut bytes).unwrap();
+            identity::Keypair::Ed25519(ed25519_secret.into())
+        };
+
         println!("{:?}", ed25519_keypair.public());
         let peer_id = PeerId::from(ed25519_keypair.public());
 

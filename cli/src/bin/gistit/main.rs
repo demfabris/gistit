@@ -74,7 +74,9 @@ async fn run() -> Result<()> {
 
     match cmd_args {
         ("send", Some(args)) => dispatch_from_args!(send, args),
+        #[cfg(feature = "fetch")]
         ("fetch", Some(args)) => dispatch_from_args!(fetch, args),
+        #[cfg(feature = "host")]
         ("host", Some(args)) => dispatch_from_args!(host, args),
         ("", None) => {
             // Global commands

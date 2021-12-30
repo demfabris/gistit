@@ -27,9 +27,13 @@ const UNIX_SIGNOTHING: i32 = 0;
 
 /// The Send action runtime parameters
 #[derive(Debug, Clone)]
+// No way around it, it's arg parsing
+#[allow(clippy::struct_excessive_bools)]
 pub struct Action {
     /// Start p2p background process
-    pub start: Option<&'static str>,
+    pub start: bool,
+    /// The seed to derive the keypair
+    pub seed: Option<&'static str>,
     /// Wether or not to save peers
     pub persist: bool,
     /// Address to listen for connections
@@ -60,7 +64,8 @@ impl Action {
         // merge settings
 
         Ok(Box::new(Self {
-            start: args.value_of("start"),
+            start: args.is_present("start"),
+            seed: args.value_of("seed"),
             persist: args.is_present("persist"),
             listen: args.value_of("listen").expect("to have default value"),
             stop: args.is_present("stop"),
@@ -74,6 +79,7 @@ impl Action {
 
 pub enum ProcessCommand {
     StartEncrypted(&'static str),
+    Start,
     Stop,
     Status,
     Skip,
@@ -109,11 +115,12 @@ impl Dispatch for Action {
 
     async fn prepare(&self) -> Result<Self::InnerData> {
         let params = Params::from_host(self).check_consume()?;
-        let command = match (self.start, self.stop, self.status) {
-            (Some(password), false, false) => ProcessCommand::StartEncrypted(password),
-            (None, true, false) => ProcessCommand::Stop,
-            (None, false, true) => ProcessCommand::Status,
-            (_, _, _) => ProcessCommand::Skip,
+        let command = match (self.start, self.seed, self.stop, self.status) {
+            (true, Some(seed), false, false) => ProcessCommand::StartEncrypted(seed),
+            (true, None, false, false) => ProcessCommand::Start,
+            (false, None, true, false) => ProcessCommand::Stop,
+            (false, None, false, true) => ProcessCommand::Status,
+            (_, _, _, _) => ProcessCommand::Skip,
         };
 
         // Construct `FileReady` if a file was provided, that means user wants to host a new file
@@ -157,8 +164,12 @@ impl Dispatch for Action {
 
         match config.process_command {
             ProcessCommand::StartEncrypted(password) => {
-                gistit_line_out!("Starting gistit network node process...");
+                gistit_line_out!("Starting gistit network node process with seed...");
                 spawn_network_node_daemon(password, &cache_dir, self.persist, self.listen).await?;
+            }
+            ProcessCommand::Start => {
+                gistit_line_out!("Starting gistit network node process...");
+                spawn_network_node_daemon("none", &cache_dir, self.persist, self.listen).await?;
             }
             ProcessCommand::Stop => {
                 gistit_line_out!("Stopping gistit network node process...");
@@ -201,7 +212,7 @@ impl Dispatch for Action {
 #[cfg(target_family = "unix")]
 fn get_runtime_dir() -> Result<PathBuf> {
     let dirs = BaseDirs::new().ok_or_else(|| {
-        Error::Internal(InternalError::Other("No valid home directory".to_owned()))
+        Error::Internal(InternalError::Other("no valid home directory".to_owned()))
     })?;
     Ok(dirs
         .runtime_dir()
@@ -217,9 +228,9 @@ async fn spawn_network_node_daemon(
     listen_addr: &'static str,
 ) -> Result<()> {
     let runtime_dir = get_runtime_dir()?;
-    let daemon_out = std::fs::File::create(runtime_dir.join("gistit_node.out"))?;
+    let daemon_out = std::fs::File::create(runtime_dir.join("gistit_host.out"))?;
     let daemon = Daemonize::new()
-        .pid_file(runtime_dir.join("gistit_node.pid"))
+        .pid_file(runtime_dir.join("gistit_host.pid"))
         .stdout(daemon_out.try_clone()?)
         .stderr(daemon_out)
         .start();
@@ -236,11 +247,11 @@ async fn spawn_network_node_daemon(
         }
         Err(err) => match err {
             DaemonizeError::LockPidfile(pidf) => Err(Error::IO(IoError::ProcessSpawn(format!(
-                "Process is already running... ({})",
+                "process is already running... ({})",
                 pidf
             )))),
             _ => Err(Error::IO(IoError::ProcessSpawn(
-                "Failed to initialize daemon".to_owned(),
+                "failed to initialize gistit-host daemon".to_owned(),
             ))),
         },
     }
@@ -249,11 +260,16 @@ async fn spawn_network_node_daemon(
 #[cfg(target_family = "unix")]
 fn signal_network_node_daemon(sig: i32) -> Result<()> {
     let runtime_dir = get_runtime_dir()?;
-    let pid = std::fs::read_to_string(runtime_dir.join("gistit_node.pid"))?
+    let pid = std::fs::read_to_string(runtime_dir.join("gistit_host.pid"))
+        .map_err(|_| {
+            Error::IO(IoError::ProcessSignal(
+                "process is not running...".to_owned(),
+            ))
+        })?
         .parse::<i32>()
         .map_err(|_| {
-            Error::Internal(InternalError::Other(
-                "Process pid file is corrupted".to_owned(),
+            Error::IO(IoError::ProcessSignal(
+                "process pid file is corrupted".to_owned(),
             ))
         })?;
 
@@ -261,7 +277,7 @@ fn signal_network_node_daemon(sig: i32) -> Result<()> {
 
     if res == -1 {
         Err(Error::IO(IoError::ProcessStop(
-            "Signal to gistit network node process failed. Is it running?".to_owned(),
+            "signal to gistit-host process failed... is it running?".to_owned(),
         )))
     } else {
         Ok(())
