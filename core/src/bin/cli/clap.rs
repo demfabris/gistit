@@ -1,5 +1,5 @@
 /// Gistit command line interface
-use clap::{crate_description, crate_version, App, Arg, ArgGroup};
+use clap::{crate_authors, crate_description, crate_version, App, Arg, ArgGroup};
 
 /// The gistit application
 #[allow(clippy::too_many_lines)]
@@ -8,6 +8,7 @@ pub fn app() -> App<'static> {
     App::new("Gistit")
         .version(crate_version!())
         .about(crate_description!())
+        .author(crate_authors!())
         .arg(
             Arg::new("colorschemes")
                 .long("colorschemes")
@@ -112,6 +113,7 @@ This is our best efforts at persisting the hash into the system clipboard after 
                 ),
         )
         .subcommand(
+            #[cfg(feature = "fetch")]
             App::new("fetch")
                 .alias("f")
                 .about("Fetch a gistit wherever it is")
@@ -169,8 +171,12 @@ Run `gistit --colorschemes` to list available ones.",
                         .long("no-syntax-highlighting")
                         .help("Disable syntax highlighting"),
                 ),
+                #[cfg(not(feature = "fetch"))]
+                App::new("fetch")
+                    .help("This gistit binary is missing gistit-fetch")
         )
         .subcommand(
+            #[cfg(feature = "host")]
             App::new("host")
                 .alias("h")
                 .about("Host a gistit for p2p transfer")
@@ -264,5 +270,8 @@ Defaults to '127.0.0.1:0', which means (localhost:random_port)")
                         .takes_value(true)
                         .conflicts_with_all(&["stop", "status", "join"]),
                 ),
+                #[cfg(not(feature = "host"))]
+                App::new("host")
+                    .help("This gistit binary is missing gistit-host")
         )
 }
