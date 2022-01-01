@@ -223,7 +223,7 @@ impl Dispatch for Action {
     ///
     /// If all checks runs successfully, assemble the config structure to later be dispatched
     /// by [`Dispatch::dispatch`]
-    async fn prepare(&self) -> Result<Self::InnerData> {
+    async fn prepare(&'static self) -> Result<Self::InnerData> {
         // Check params first and exit faster if there's a invalid input
         let params = Params::from_send(self)?.check_consume()?;
 
@@ -245,7 +245,7 @@ impl Dispatch for Action {
         let config = Config::new(file, params, maybe_hashed_secret);
         Ok(config)
     }
-    async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
+    async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         if self.dry_run {
             return Ok(());
         }

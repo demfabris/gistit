@@ -19,10 +19,10 @@ pub trait Dispatch {
     type InnerData;
 
     /// Perform the checks needed
-    async fn prepare(&self) -> Result<Self::InnerData>;
+    async fn prepare(&'static self) -> Result<Self::InnerData>;
 
     /// Execute the action
-    async fn dispatch(&self, payload: Self::InnerData) -> Result<()>;
+    async fn dispatch(&'static self, payload: Self::InnerData) -> Result<()>;
 }
 
 #[async_trait]

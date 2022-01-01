@@ -231,7 +231,7 @@ fn print_success(hash: &str, prevent_ask_tip: bool) {
 impl Dispatch for Action {
     type InnerData = Config;
 
-    async fn prepare(&self) -> Result<Self::InnerData> {
+    async fn prepare(&'static self) -> Result<Self::InnerData> {
         let params = Params::from_fetch(self)?.check_consume()?;
         if let Some(secret_str) = self.secret {
             Secret::new(secret_str).check_consume()?;
@@ -240,7 +240,7 @@ impl Dispatch for Action {
         Ok(config)
     }
 
-    async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
+    async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let json = config.into_json()?;
         // TODO: branch this into '#' and '@'
         gistit_line_out!("Contacting host...");
@@ -316,9 +316,9 @@ impl Dispatch for Action {
                     // Rebuild the action object and recurse down the same path
                     let mut action = self.clone();
                     action.secret = Some(Box::leak(Box::new(new_secret)));
-
-                    let new_config = Dispatch::prepare(&action).await?;
-                    Dispatch::dispatch(&action, new_config).await?;
+                    let action = Box::leak(Box::new(action.clone()));
+                    let new_config = Dispatch::prepare(&*action).await?;
+                    Dispatch::dispatch(&*action, new_config).await?;
                     Ok(())
                 } else {
                     // Enough retries

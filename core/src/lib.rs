@@ -1,3 +1,4 @@
+//
 //   ________.__          __  .__  __
 //  /  _____/|__| _______/  |_|__|/  |_
 // /   \  ___|  |/  ___/\   __\  \   __\
@@ -5,7 +6,6 @@
 //  \______  /__/____  > |__| |__||__|
 //         \/        \/
 //
-// ------------------ Style police begin ------------------
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 // This would decrease readability
 #![allow(clippy::module_name_repetitions)]
@@ -26,7 +26,6 @@
         clippy::missing_docs_in_private_items,
     )
 )]
-// ------------------ Style police end ------------------
 
 pub mod encrypt;
 pub mod errors;
@@ -35,6 +34,8 @@ pub mod file;
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
 
+#[cfg(feature = "host")]
+pub mod ipc;
 #[cfg(feature = "host")]
 pub mod network;
 

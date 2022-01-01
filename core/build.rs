@@ -1,9 +1,9 @@
-use clap_generate::{generate_to, generators};
+use clap_complete::{generate_to, Shell};
 use std::env;
 
 const BIN_NAME: &str = "gistit";
 
-include!("src/bin/gistit/cli.rs");
+include!("src/bin/cli/clap.rs");
 
 #[cfg(not(feature = "application"))]
 fn main() {}
@@ -19,11 +19,10 @@ fn main() -> Result<(), String> {
         Some(outdir) => outdir,
     };
 
-    generate_to(generators::Bash, &mut app, BIN_NAME, &outdir).map_err(|err| err.to_string())?;
-    generate_to(generators::Zsh, &mut app, BIN_NAME, &outdir).map_err(|err| err.to_string())?;
-    generate_to(generators::Fish, &mut app, BIN_NAME, &outdir).map_err(|err| err.to_string())?;
-    generate_to(generators::PowerShell, &mut app, BIN_NAME, &outdir)
-        .map_err(|err| err.to_string())?;
+    generate_to(Shell::Bash, &mut app, BIN_NAME, &outdir).map_err(|err| err.to_string())?;
+    generate_to(Shell::Zsh, &mut app, BIN_NAME, &outdir).map_err(|err| err.to_string())?;
+    generate_to(Shell::Fish, &mut app, BIN_NAME, &outdir).map_err(|err| err.to_string())?;
+    generate_to(Shell::PowerShell, &mut app, BIN_NAME, &outdir).map_err(|err| err.to_string())?;
     println!(
         "cargo:warning=generated shell completion scripts at {:?}",
         outdir

@@ -3,7 +3,10 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 use std::ffi::OsStr;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::Receiver;
+use unchecked_unwrap::UncheckedUnwrap;
 
 use async_trait::async_trait;
 use clap::ArgMatches;
@@ -15,7 +18,7 @@ use lib_gistit::encrypt::{HashedSecret, Secret};
 use lib_gistit::errors::internal::InternalError;
 use lib_gistit::errors::io::IoError;
 use lib_gistit::file::{File, FileReady};
-use lib_gistit::network::NetworkDaemon;
+use lib_gistit::network::{Connected, DaemonMessage, NetworkDaemon};
 use lib_gistit::{Error, Result};
 
 use crate::dispatch::Dispatch;
@@ -32,6 +35,8 @@ const UNIX_SIGNOTHING: i32 = 0;
 pub struct Action {
     /// Start p2p background process
     pub start: bool,
+    /// Auto copy to clipboard
+    pub clipboard: bool,
     /// The seed to derive the keypair
     pub seed: Option<&'static str>,
     /// Wether or not to save peers
@@ -65,6 +70,7 @@ impl Action {
 
         Ok(Box::new(Self {
             start: args.is_present("start"),
+            clipboard: args.is_present("clipboard"),
             seed: args.value_of("seed"),
             persist: args.is_present("persist"),
             listen: args.value_of("listen").expect("to have default value"),
@@ -78,7 +84,7 @@ impl Action {
 }
 
 pub enum ProcessCommand {
-    StartEncrypted(&'static str),
+    StartWithSeed(&'static str),
     Start,
     Stop,
     Status,
@@ -113,10 +119,10 @@ impl Config {
 impl Dispatch for Action {
     type InnerData = Config;
 
-    async fn prepare(&self) -> Result<Self::InnerData> {
+    async fn prepare(&'static self) -> Result<Self::InnerData> {
         let params = Params::from_host(self).check_consume()?;
         let command = match (self.start, self.seed, self.stop, self.status) {
-            (true, Some(seed), false, false) => ProcessCommand::StartEncrypted(seed),
+            (true, Some(seed), false, false) => ProcessCommand::StartWithSeed(seed),
             (true, None, false, false) => ProcessCommand::Start,
             (false, None, true, false) => ProcessCommand::Stop,
             (false, None, false, true) => ProcessCommand::Status,
@@ -154,22 +160,27 @@ impl Dispatch for Action {
         ))
     }
 
-    async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
+    async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = get_runtime_dir()?;
         let cache_dir = runtime_dir.join("gistit_peers");
+        let mut node_hash: &str;
+        // SAFETY: Value was previously checked in `Dispatch::prepare` stage. It's either the
+        // default '127.0.0.1:0' or some valid <ip>:<port>
+        let (addr, port) = unsafe { self.listen.split_once(':').unchecked_unwrap() };
 
         if !Path::exists(&cache_dir) {
             std::fs::create_dir(&cache_dir)?;
         }
 
         match config.process_command {
-            ProcessCommand::StartEncrypted(password) => {
+            ProcessCommand::StartWithSeed(password) => {
                 gistit_line_out!("Starting gistit network node process with seed...");
-                spawn_network_node_daemon(password, &cache_dir, self.persist, self.listen).await?;
+
+                // spawn_network_node_daemon(network_daemon).await?;
             }
             ProcessCommand::Start => {
                 gistit_line_out!("Starting gistit network node process...");
-                spawn_network_node_daemon("none", &cache_dir, self.persist, self.listen).await?;
+                // spawn_network_node_daemon(network_daemon).await?;
             }
             ProcessCommand::Stop => {
                 gistit_line_out!("Stopping gistit network node process...");
@@ -221,12 +232,7 @@ fn get_runtime_dir() -> Result<PathBuf> {
 }
 
 #[cfg(target_family = "unix")]
-async fn spawn_network_node_daemon(
-    password: &'static str,
-    cache_dir: &Path,
-    persist_peers: bool,
-    listen_addr: &'static str,
-) -> Result<()> {
+async fn spawn_network_node_daemon(network_daemon: NetworkDaemon<Connected>) -> Result<()> {
     let runtime_dir = get_runtime_dir()?;
     let daemon_out = std::fs::File::create(runtime_dir.join("gistit_host.out"))?;
     let daemon = Daemonize::new()
@@ -236,13 +242,8 @@ async fn spawn_network_node_daemon(
         .start();
 
     match daemon {
-        Ok(network) => {
-            NetworkDaemon::new(password, cache_dir)
-                .await?
-                .listen(listen_addr)
-                .persist(persist_peers)
-                .run()
-                .await;
+        Ok(_) => {
+            network_daemon.run().await;
             Ok(())
         }
         Err(err) => match err {

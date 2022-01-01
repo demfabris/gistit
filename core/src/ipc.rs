@@ -1,0 +1,1 @@
+//! Inter process comunication module

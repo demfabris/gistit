@@ -1,3 +1,4 @@
+//
 //   ________.__          __  .__  __
 //  /  _____/|__| _______/  |_|__|/  |_
 // /   \  ___|  |/  ___/\   __\  \   __\
@@ -5,7 +6,6 @@
 //  \______  /__/____  > |__| |__||__|
 //         \/        \/
 //
-// ------------------ Style police begin ------------------
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 // This would decrease readability
 #![allow(clippy::module_name_repetitions)]
@@ -26,9 +26,8 @@
         clippy::missing_docs_in_private_items,
     )
 )]
-// ------------------ Style police end ------------------
 
-pub mod cli;
+pub mod clap;
 pub mod dispatch;
 pub mod params;
 pub mod send;
@@ -48,7 +47,7 @@ use once_cell::sync::OnceCell;
 use lib_gistit::errors::{internal::InternalError, io::IoError};
 use lib_gistit::{Error, Result};
 
-use crate::cli::app;
+use crate::clap::app;
 use crate::settings::Settings;
 
 /// Stores the current command executed
@@ -138,8 +137,9 @@ macro_rules! dispatch_from_args {
     ($mod:path, $args:expr) => {{
         use $mod as module;
         let action = module::Action::from_args($args)?;
-        let payload = dispatch::Dispatch::prepare(&*action).await?;
-        dispatch::Dispatch::dispatch(&*action, payload).await?;
+        let action = Box::leak(Box::new(action));
+        let payload = dispatch::Dispatch::prepare(&**action).await?;
+        dispatch::Dispatch::dispatch(&**action, payload).await?;
     }};
 }
 

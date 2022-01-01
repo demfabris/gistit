@@ -698,7 +698,7 @@ pub mod io {
     impl std::fmt::Display for IoError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &self {
-                Self::Other(err_string) => {
+                Self::Other(output) => {
                     println!(
                         "{}{}",
                         style(Emoji("\u{274c} ", "X")).red(),
@@ -710,10 +710,10 @@ pub mod io {
 CAUSE:
     {}
                     "#,
-                        style(err_string).yellow()
+                        output
                     )
                 }
-                Self::Request(err_string) => {
+                Self::Request(output) => {
                     println!(
                         "{}{} {}{}",
                         style(Emoji("\u{274c} ", "X")).red(),
@@ -727,10 +727,10 @@ CAUSE:
 CAUSE:
     {}
                     "#,
-                        style(err_string).yellow()
+                        output
                     )
                 }
-                Self::StdoutWrite(err_string) => {
+                Self::StdoutWrite(output) => {
                     println!(
                         "{}{} {}{}",
                         style(Emoji("\u{274c} ", "X")).red(),
@@ -745,14 +745,14 @@ CAUSE:
     failed to write to stdout.
     {}
                     "#,
-                        style(err_string).yellow()
+                        output
                     )
                 }
-                Self::ProcessWait(err_string)
-                | Self::ProcessStop(err_string)
-                | Self::ProcessSignal(err_string)
-                | Self::StdinWrite(err_string)
-                | Self::ProcessSpawn(err_string) => {
+                Self::ProcessWait(output)
+                | Self::ProcessStop(output)
+                | Self::ProcessSignal(output)
+                | Self::StdinWrite(output)
+                | Self::ProcessSpawn(output) => {
                     println!(
                         "{}{} {}{}",
                         style(Emoji("\u{274c} ", "X")).red(),
@@ -766,7 +766,7 @@ CAUSE:
 CAUSE:
     {}
                     "#,
-                        err_string
+                        output
                     )
                 }
             }
@@ -1088,7 +1088,7 @@ CAUSE:
     {}
                             "#,
                             style("--clipboard").red().bold(),
-                            style(output).yellow()
+                            output
                         )
                     }
                 },

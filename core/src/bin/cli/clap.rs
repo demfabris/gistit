@@ -174,7 +174,7 @@ Run `gistit --colorschemes` to list available ones.",
             App::new("host")
                 .alias("h")
                 .about("Host a gistit for p2p transfer")
-                .group(ArgGroup::new("process_cmd").multiple(true))
+                .group(ArgGroup::new("process_cmd").required(true))
                 .arg(
                     Arg::new("status")
                         .long("status")
@@ -191,7 +191,7 @@ Run `gistit --colorschemes` to list available ones.",
 to peer file sharing.",
                         )
                         .group("process_cmd")
-                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                        .conflicts_with_all(&["secret", "file", "stop", "status", "join"]),
                 )
                 .arg(
                     Arg::new("seed")
@@ -199,15 +199,23 @@ to peer file sharing.",
                         .help("Seed to derive your ed25519 keypair under peer to peer connections.")
                         .long_help("Seed to derive your ed25519 keypair under peer to peer connections.
 Use this to have a peristing keypair that enables your peers to recognize you in future connections, provided you entered the same seed.")
-                        .group("process_cmd")
+                        .takes_value(true)
+                        .value_name("seed")
                         .requires("start")
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("persist")
                         .long("persist")
+                        .requires("start")
                         .help("Save the network configuration and peer addresses to a future connection")
-                        .group("process_cmd")
+                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                )
+                .arg(
+                    Arg::new("clipboard")
+                        .long("clipboard")
+                        .requires("start")
+                        .help("Attempt to copy your gistit node hash into clipboard")
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
@@ -219,7 +227,6 @@ Defaults to '127.0.0.1:0', which means (localhost:random_port)")
                         .takes_value(true)
                         .value_name("address:port")
                         .default_value("127.0.0.1:0")
-                        .group("process_cmd")
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
@@ -235,6 +242,7 @@ Defaults to '127.0.0.1:0', which means (localhost:random_port)")
                         .short('j')
                         .help("Join a private gistit network")
                         .takes_value(true)
+                        .group("process_cmd")
                         .value_name("network_multiaddr")
                         .conflicts_with_all(&["start", "file", "stop", "status", "secret"]),
                 )
