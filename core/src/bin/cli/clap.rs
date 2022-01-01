@@ -1,11 +1,11 @@
 /// Gistit command line interface
-use clap::{crate_authors, crate_description, crate_version, App, Arg, ArgGroup};
+use clap::{crate_authors, crate_description, crate_version, App, Arg, ArgGroup, ValueHint};
 
 /// The gistit application
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn app() -> App<'static> {
-    App::new("Gistit")
+    App::new("gistit_cli")
         .version(crate_version!())
         .about(crate_description!())
         .author(crate_authors!())
@@ -43,7 +43,8 @@ Beware to mistakenly overwriting your settings.",
                         .help("The file to be sent [required]")
                         .required(true)
                         .multiple_occurrences(false) // currently not supported
-                        .takes_value(true),
+                        .takes_value(true)
+                        .value_hint(ValueHint::FilePath),
                 )
                 .arg(
                     Arg::new("description")
@@ -51,7 +52,7 @@ Beware to mistakenly overwriting your settings.",
                         .short('d')
                         .help("With a description")
                         .takes_value(true)
-                        .requires("file"),
+                        .requires("file")
                 )
                 .arg(
                     Arg::new("author")
@@ -59,7 +60,8 @@ Beware to mistakenly overwriting your settings.",
                         .short('a')
                         .help("With author information. Defaults to a random generated name")
                         .takes_value(true)
-                        .requires("file"),
+                        .requires("file")
+                        .value_hint(ValueHint::Username),
                 )
                 .arg(
                     Arg::new("lifespan")
@@ -146,7 +148,8 @@ and 'Standard Directories' on MacOS.",
                         .short('u')
                         .required_unless_present("hash")
                         .help("Fetch and open a gistit on your default browser")
-                        .takes_value(true),
+                        .takes_value(true)
+                        .value_hint(ValueHint::Url),
                 )
                 .arg(
                     Arg::new("secret")
@@ -233,6 +236,7 @@ Defaults to '127.0.0.1:0', which means (localhost:random_port)")
                         .takes_value(true)
                         .value_name("address:port")
                         .default_value("127.0.0.1:0")
+                        .value_hint(ValueHint::Hostname)
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
@@ -268,6 +272,7 @@ Defaults to '127.0.0.1:0', which means (localhost:random_port)")
                         .help("Appends this file to your hosted gistits")
                         .multiple_occurrences(false)
                         .takes_value(true)
+                        .value_hint(ValueHint::FilePath)
                         .conflicts_with_all(&["stop", "status", "join"]),
                 ),
                 #[cfg(not(feature = "host"))]
