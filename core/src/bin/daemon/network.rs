@@ -1,9 +1,7 @@
 //! The network module
 #![allow(clippy::missing_errors_doc)]
 
-use std::env::temp_dir;
 use std::iter::once;
-use std::marker::PhantomData;
 use std::net::Ipv4Addr;
 use std::path::Path;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -26,58 +24,20 @@ use libp2p::{development_transport, Swarm, Transport};
 use libp2p::{identity, Multiaddr};
 use notify::{raw_watcher, RawEvent as FsEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
-use crate::errors::internal::InternalError;
-use crate::{Error, Result};
+use lib_gistit::errors::internal::InternalError;
+use lib_gistit::{Error, Result};
 
-#[derive(Clone, Debug)]
-pub struct NetworkDaemonBuilder<'s> {
-    /// Seed used to derive ed25519 keypair
-    seed: &'s str,
-    cache_dir: &'s Path,
-    persist: bool,
-    local_multiaddr: Multiaddr,
+pub struct NetworkConfig {
+    event_loop_config: EventLoopConfig,
+    watcher: RecommendedWatcher,
 }
 
-impl<'s> Default for NetworkDaemonBuilder<'s> {
-    fn default() -> Self {
-        Self {
-            seed: "none",
-            cache_dir: Box::leak(Box::new(temp_dir())),
-            persist: false,
-            local_multiaddr: multiaddr!(Ip4([127, 0, 0, 1]), Tcp(0_u16)),
-        }
-    }
-}
-
-impl<'s> NetworkDaemonBuilder<'s> {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    #[must_use]
-    pub const fn persist(mut self, yes: bool) -> Self {
-        self.persist = yes;
-        self
-    }
-
-    #[must_use]
-    pub const fn cache_dir(mut self, dir: &'s Path) -> Self {
-        self.cache_dir = dir;
-        self
-    }
-
-    #[must_use]
-    pub fn listen_on(mut self, addr: Ipv4Addr, port: u16) -> Self {
-        self.local_multiaddr = multiaddr!(Ip4(addr), Tcp(port));
-        self
-    }
-
-    pub fn build(self) -> Result<NetworkDaemon<Disconnected>> {
-        let ed25519_keypair = if self.seed == "none" {
+impl NetworkConfig {
+    pub fn new(seed: &str, local_multiaddr: Multiaddr, runtime_dir: &Path) -> Result<Self> {
+        let keypair = if seed == "none" {
             identity::Keypair::generate_ed25519()
         } else {
-            let mut bytes: Vec<u8> = self.seed.as_bytes().to_vec();
+            let mut bytes: Vec<u8> = seed.as_bytes().to_vec();
             bytes.resize_with(32, || 0);
             let mut bytes: [u8; 32] = bytes.try_into().unwrap();
 
@@ -87,78 +47,43 @@ impl<'s> NetworkDaemonBuilder<'s> {
         let FsWatcher {
             watcher,
             channel: (_, watcher_rx),
-        } = FsWatcher::new(self.cache_dir)?;
+        } = FsWatcher::new(runtime_dir)?;
 
         let event_loop_config = EventLoopConfig {
-            peer_id: PeerId::from(ed25519_keypair.public()),
-            keypair: ed25519_keypair,
-            local_multiaddr: self.local_multiaddr,
+            peer_id: PeerId::from(keypair.public()),
+            keypair,
+            local_multiaddr,
             watcher_rx: Arc::new(Mutex::new(watcher_rx)),
         };
 
-        Ok(NetworkDaemon::new(watcher, event_loop_config))
-    }
-}
-
-pub trait ConnState {}
-
-pub struct Disconnected;
-impl ConnState for Disconnected {}
-
-pub struct Connected;
-impl ConnState for Connected {}
-
-pub struct NetworkDaemon<S>
-where
-    S: ConnState,
-{
-    event_loop_config: Option<EventLoopConfig>,
-    event_loop: Option<EventLoop>,
-    __watcher: RecommendedWatcher,
-    __marker_state: PhantomData<S>,
-}
-
-impl<'s> NetworkDaemon<Disconnected> {
-    fn new(watcher: RecommendedWatcher, event_loop_config: EventLoopConfig) -> Self {
-        Self {
-            event_loop_config: Some(event_loop_config),
-            event_loop: None,
-            __watcher: watcher,
-            __marker_state: PhantomData,
-        }
+        Ok(Self {
+            event_loop_config,
+            watcher,
+        })
     }
 
-    #[must_use]
-    pub fn builder() -> NetworkDaemonBuilder<'s> {
-        NetworkDaemonBuilder::default()
-    }
+    pub async fn into_node(self) -> Result<NetworkNode> {
+        let event_loop = EventLoop::from_config(self.event_loop_config)
+            .await?
+            .prepare()
+            .await;
 
-    pub async fn connect(self) -> Result<NetworkDaemon<Connected>> {
-        // SAFETY: We'll always have `Some(event_loop_config)` in `Disconnected` state
-        let event_loop =
-            EventLoop::from_config(unsafe { self.event_loop_config.unchecked_unwrap() })
-                .await?
-                .prepare()
-                .await;
-        Ok(NetworkDaemon {
-            event_loop_config: None,
-            event_loop: Some(event_loop),
-            __watcher: self.__watcher,
-            __marker_state: PhantomData,
+        Ok(NetworkNode {
+            event_loop,
+            __watcher: self.watcher,
         })
     }
 }
 
-impl NetworkDaemon<Connected> {
-    pub async fn run(self) {
-        // SAFETY: We'll always have `Some(event_loop)` in `Connected` state
-        unsafe { self.event_loop.unchecked_unwrap().run().await }
-    }
+pub struct NetworkNode {
+    event_loop: EventLoop,
+    __watcher: RecommendedWatcher,
 }
 
-#[derive(Debug, Clone)]
-pub enum DaemonMessage {
-    Init(String),
+impl NetworkNode {
+    pub async fn run(self) {
+        self.event_loop.run().await;
+    }
 }
 
 struct FsWatcher {
@@ -359,8 +284,7 @@ impl RequestResponseCodec for GistitExchangeCodec {
     }
 }
 
-impl From<notify::Error> for Error {
-    fn from(err: notify::Error) -> Self {
-        Self::Internal(InternalError::Other(err.to_string()))
-    }
+#[must_use]
+pub fn ipv4_to_multiaddr(addr: Ipv4Addr, port: u16) -> Multiaddr {
+    multiaddr!(Ip4(addr), Tcp(port))
 }

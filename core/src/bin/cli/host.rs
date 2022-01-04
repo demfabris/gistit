@@ -11,14 +11,12 @@ use unchecked_unwrap::UncheckedUnwrap;
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::Style;
-use daemonize::{Daemonize, DaemonizeError};
 use directories::BaseDirs;
 
 use lib_gistit::encrypt::{HashedSecret, Secret};
 use lib_gistit::errors::internal::InternalError;
 use lib_gistit::errors::io::IoError;
 use lib_gistit::file::{File, FileReady};
-use lib_gistit::network::{Connected, DaemonMessage, NetworkDaemon};
 use lib_gistit::{Error, Result};
 
 use crate::dispatch::Dispatch;
@@ -175,23 +173,15 @@ impl Dispatch for Action {
         match config.process_command {
             ProcessCommand::StartWithSeed(password) => {
                 gistit_line_out!("Starting gistit network node process with seed...");
-
-                // spawn_network_node_daemon(network_daemon).await?;
             }
             ProcessCommand::Start => {
                 gistit_line_out!("Starting gistit network node process...");
-                // spawn_network_node_daemon(network_daemon).await?;
             }
             ProcessCommand::Stop => {
                 gistit_line_out!("Stopping gistit network node process...");
-                signal_network_node_daemon(UNIX_SIGKILL)?;
             }
             ProcessCommand::Status => {
-                if signal_network_node_daemon(UNIX_SIGNOTHING).is_ok() {
-                    gistit_line_out!("Running");
-                } else {
-                    gistit_line_out!("Not running");
-                }
+                todo!()
             }
             // Not a process instruction, that means either add a peer or host a new gistit.
             ProcessCommand::Skip => match config {
@@ -231,61 +221,29 @@ fn get_runtime_dir() -> Result<PathBuf> {
         .to_path_buf())
 }
 
-#[cfg(target_family = "unix")]
-async fn spawn_network_node_daemon(network_daemon: NetworkDaemon<Connected>) -> Result<()> {
-    let runtime_dir = get_runtime_dir()?;
-    let daemon_out = std::fs::File::create(runtime_dir.join("gistit_host.out"))?;
-    let daemon = Daemonize::new()
-        .pid_file(runtime_dir.join("gistit_host.pid"))
-        .stdout(daemon_out.try_clone()?)
-        .stderr(daemon_out)
-        .start();
+// #[cfg(target_family = "unix")]
+// fn signal_network_node_daemon(sig: i32) -> Result<()> {
+//     let runtime_dir = get_runtime_dir()?;
+//     let pid = std::fs::read_to_string(runtime_dir.join("gistit_host.pid"))
+//         .map_err(|_| {
+//             Error::IO(IoError::ProcessSignal(
+//                 "process is not running...".to_owned(),
+//             ))
+//         })?
+//         .parse::<i32>()
+//         .map_err(|_| {
+//             Error::IO(IoError::ProcessSignal(
+//                 "process pid file is corrupted".to_owned(),
+//             ))
+//         })?;
 
-    match daemon {
-        Ok(_) => {
-            network_daemon.run().await;
-            Ok(())
-        }
-        Err(err) => match err {
-            DaemonizeError::LockPidfile(pidf) => Err(Error::IO(IoError::ProcessSpawn(format!(
-                "process is already running... ({})",
-                pidf
-            )))),
-            _ => Err(Error::IO(IoError::ProcessSpawn(
-                "failed to initialize gistit-host daemon".to_owned(),
-            ))),
-        },
-    }
-}
+//     let res = unsafe { libc::kill(pid, sig) };
 
-#[cfg(target_family = "unix")]
-fn signal_network_node_daemon(sig: i32) -> Result<()> {
-    let runtime_dir = get_runtime_dir()?;
-    let pid = std::fs::read_to_string(runtime_dir.join("gistit_host.pid"))
-        .map_err(|_| {
-            Error::IO(IoError::ProcessSignal(
-                "process is not running...".to_owned(),
-            ))
-        })?
-        .parse::<i32>()
-        .map_err(|_| {
-            Error::IO(IoError::ProcessSignal(
-                "process pid file is corrupted".to_owned(),
-            ))
-        })?;
-
-    let res = unsafe { libc::kill(pid, sig) };
-
-    if res == -1 {
-        Err(Error::IO(IoError::ProcessStop(
-            "signal to gistit-host process failed... is it running?".to_owned(),
-        )))
-    } else {
-        Ok(())
-    }
-}
-
-#[cfg(target_family = "windows")]
-fn spawn_network_node_daemon(password: &str) -> Result<()> {
-    Ok(())
-}
+//     if res == -1 {
+//         Err(Error::IO(IoError::ProcessStop(
+//             "signal to gistit-host process failed... is it running?".to_owned(),
+//         )))
+//     } else {
+//         Ok(())
+//     }
+// }
