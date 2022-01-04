@@ -1,0 +1,31 @@
+[package]
+authors = ["Fabricio <fabricio7p@protonmail.com>"]
+categories = ["command-line-utilities", "text-processing"]
+description = "Gistit daemon used for p2p file sharing"
+edition = "2021"
+keywords = ["code", "snippets", "share", "hash"]
+license = "MIT"
+name = "gistit-daemon"
+repository = "https://github.com/fabricio7p/gistit"
+version = "0.1.0"
+
+[dependencies]
+notify = { version = "4.0.17" }
+
+[dependencies.clap]
+version = "3.0.0"
+optional = true
+features = ["cargo"]
+
+[dependencies.libp2p]
+version = "0.41.0"
+optional = true
+default-features = false
+features = ["noise", "kad", "identify", "mdns", "mplex", "tcp-async-io", "dns-async-std", "websocket", "yamux", "request-response"]
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2.112" }
+
+[target.'cfg(windows)'.dependencies]
+windows-service = { version = "0.4.0" }
+# msvc

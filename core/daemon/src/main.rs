@@ -34,14 +34,14 @@ use unchecked_unwrap::UncheckedUnwrap;
 
 use ::clap::ArgMatches;
 
-use lib_gistit::errors::internal::InternalError;
-use lib_gistit::{Error, Result};
-
 use crate::clap::app;
 use crate::network::{ipv4_to_multiaddr, NetworkConfig};
 
 mod clap;
 mod network;
+
+pub type Error = dyn std::error::Error;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug)]
 struct Config {
