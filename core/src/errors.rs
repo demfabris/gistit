@@ -245,12 +245,6 @@ pub mod internal {
         }
     }
 
-    impl From<notify::Error> for Error {
-        fn from(err: notify::Error) -> Self {
-            Self::Internal(InternalError::Other(err.to_string()))
-        }
-    }
-
     impl std::fmt::Display for InternalError {
         #[allow(clippy::too_many_lines)]
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -32,15 +32,15 @@ use std::net::Ipv4Addr;
 use std::path::Path;
 use unchecked_unwrap::UncheckedUnwrap;
 
-use ::clap::ArgMatches;
+use clap::ArgMatches;
 
-use crate::clap::app;
+use crate::args::app;
 use crate::network::{ipv4_to_multiaddr, NetworkConfig};
 
-mod clap;
+mod args;
 mod network;
 
-pub type Error = dyn std::error::Error;
+pub type Error = Box<dyn std::error::Error>;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug)]
@@ -63,22 +63,19 @@ impl Config {
                     .value_of("host")
                     .unchecked_unwrap()
                     .parse()
-                    .map_err(|_| {
-                        Error::Internal(InternalError::Other("daemon: invalid ipv4".to_owned()))
-                    })?,
+                    .expect("to work"),
                 inbound_port: args
                     .value_of("port")
                     .unchecked_unwrap()
                     .parse()
-                    .map_err(|_| {
-                        Error::Internal(InternalError::Other("daemon: invalid port".to_owned()))
-                    })?,
+                    .expect("to work"),
                 persist: args.is_present("persist"),
             })
         }
     }
 }
 
+#[cfg(feature = "host")]
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Box::leak(Box::new(app().get_matches()));
@@ -100,4 +97,9 @@ async fn main() -> Result<()> {
     node.run().await;
 
     Ok(())
+}
+
+#[cfg(not(feature = "host"))]
+fn main() {
+    println!("Skipping daemon")
 }

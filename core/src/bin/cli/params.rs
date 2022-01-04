@@ -1,21 +1,20 @@
 //! Params module
-use async_trait::async_trait;
-use lazy_static::lazy_static;
-use libp2p::multiaddr::Multiaddr;
-use ngrammatic::{Corpus, CorpusBuilder, Pad};
-use phf::{phf_set, Set};
-use url::Url;
-
 use std::borrow::ToOwned;
 use std::net::Ipv4Addr;
 use std::ops::RangeInclusive;
 
-use crate::fetch::Action as FetchAction;
-use crate::host::Action as HostAction;
-use crate::send::Action as SendAction;
+use async_trait::async_trait;
+use lazy_static::lazy_static;
+use ngrammatic::{Corpus, CorpusBuilder, Pad};
+use phf::{phf_set, Set};
+use url::Url;
 
 use lib_gistit::errors::params::ParamsError;
 use lib_gistit::{Error, Result};
+
+use crate::fetch::Action as FetchAction;
+use crate::host::Action as HostAction;
+use crate::send::Action as SendAction;
 
 /// Allowed description length
 const ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE: RangeInclusive<usize> = 10..=100;
@@ -96,7 +95,6 @@ impl HostArgs for HostParams {}
 /// The data structure that holds data to be checked/dispatched during a [`HostAction`]
 #[derive(Clone, Default, Debug)]
 pub struct HostParams {
-    pub encoded_multiaddr: Option<&'static str>,
     pub listen_addr: &'static str,
 }
 
@@ -136,7 +134,6 @@ impl HostParams {
     ///
     /// Fails with [`ParamsError`]
     pub fn check_consume(self) -> Result<Self> {
-        <Self as Check>::multiaddr(&self)?;
         <Self as Check>::listen_addr(&self)?;
         Ok(self)
     }
@@ -161,25 +158,17 @@ impl Params {
     }
 
     /// Create a new [`FetchParams`] from [`FetchAction`]
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`ParamsError`] error
-    pub const fn from_fetch(action: &FetchAction) -> Result<FetchParams> {
-        Ok(FetchParams {
+    pub const fn from_fetch(action: &FetchAction) -> FetchParams {
+        FetchParams {
             hash: action.hash,
             url: action.url,
             colorscheme: action.colorscheme,
-        })
+        }
     }
 
     /// Create a new [`HostParams`] from [`HostAction`]
-    ///
-    /// TODO: Remove result above
-    #[must_use]
     pub const fn from_host(action: &HostAction) -> HostParams {
         HostParams {
-            encoded_multiaddr: action.join,
             listen_addr: action.listen,
         }
     }
@@ -253,18 +242,6 @@ trait Check {
     fn url(&self) -> Result<()>
     where
         Self: FetchArgs,
-    {
-        Ok(())
-    }
-
-    /// Check the multiaddr to be joined
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`ParamsError`] if multiaddr is invalid
-    fn multiaddr(&self) -> Result<()>
-    where
-        Self: HostArgs,
     {
         Ok(())
     }
@@ -348,19 +325,6 @@ impl Check for FetchParams {
 }
 
 impl Check for HostParams {
-    fn multiaddr(&self) -> Result<()> {
-        if let Some(encoded_multiaddr) = self.encoded_multiaddr {
-            let decoded_multiaddr = base64::decode(encoded_multiaddr)?;
-            let multiaddr = std::str::from_utf8(&decoded_multiaddr).map_err(|_| {
-                ParamsError::InvalidMultiaddr(format!("{} is encoded properly", encoded_multiaddr))
-            })?;
-            let _valid = multiaddr
-                .parse::<Multiaddr>()
-                .map_err(|_| ParamsError::InvalidMultiaddr(multiaddr.to_owned()))?;
-        }
-        Ok(())
-    }
-
     fn listen_addr(&self) -> Result<()> {
         let (addr, port) = self.listen_addr.split_once(':').ok_or_else(|| {
             ParamsError::InvalidIpv4Address(

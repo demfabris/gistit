@@ -24,8 +24,7 @@ use libp2p::{development_transport, Swarm, Transport};
 use libp2p::{identity, Multiaddr};
 use notify::{raw_watcher, RawEvent as FsEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
-use lib_gistit::errors::internal::InternalError;
-use lib_gistit::{Error, Result};
+use crate::{Error, Result};
 
 pub struct NetworkConfig {
     event_loop_config: EventLoopConfig,

@@ -3,7 +3,7 @@ use std::env;
 
 const BIN_NAME: &str = "gistit";
 
-include!("src/bin/cli/clap.rs");
+include!("src/bin/cli/args.rs");
 
 #[cfg(not(feature = "application"))]
 fn main() {}

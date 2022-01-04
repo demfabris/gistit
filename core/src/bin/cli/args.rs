@@ -189,7 +189,7 @@ Run `gistit --colorschemes` to list available ones.",
                         .long("status")
                         .help("Display the status of your gistit network node process")
                         .group("process_cmd")
-                        .conflicts_with_all(&["secret", "file", "join", "start", "stop"]),
+                        .conflicts_with_all(&["secret", "file", "start", "stop"]),
                 )
                 .arg(
                     Arg::new("start")
@@ -200,7 +200,7 @@ Run `gistit --colorschemes` to list available ones.",
 to peer file sharing.",
                         )
                         .group("process_cmd")
-                        .conflicts_with_all(&["secret", "file", "stop", "status", "join"]),
+                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("seed")
@@ -247,22 +247,12 @@ Defaults to '127.0.0.1:0', which means (localhost:random_port)")
                         .conflicts_with_all(&["start", "secret", "file", "status"]),
                 )
                 .arg(
-                    Arg::new("join")
-                        .long("join")
-                        .short('j')
-                        .help("Join a private gistit network")
-                        .takes_value(true)
-                        .group("process_cmd")
-                        .value_name("network_multiaddr")
-                        .conflicts_with_all(&["start", "file", "stop", "status", "secret"]),
-                )
-                .arg(
                     Arg::new("secret")
                         .long("secret")
                         .short('s')
                         .help("Encrypts the target file with a secret.")
                         .takes_value(true)
-                        .conflicts_with_all(&["stop", "join", "status"]),
+                        .conflicts_with_all(&["stop", "status"]),
                 )
                 .arg(
                     Arg::new("file")
@@ -273,7 +263,7 @@ Defaults to '127.0.0.1:0', which means (localhost:random_port)")
                         .multiple_occurrences(false)
                         .takes_value(true)
                         .value_hint(ValueHint::FilePath)
-                        .conflicts_with_all(&["stop", "status", "join"]),
+                        .conflicts_with_all(&["stop", "status"]),
                 ),
                 #[cfg(not(feature = "host"))]
                 App::new("host")

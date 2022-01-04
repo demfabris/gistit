@@ -93,7 +93,6 @@ pub struct Config {
     process_command: ProcessCommand,
     maybe_secret: Option<HashedSecret>,
     maybe_file: Option<Box<dyn FileReady + Send + Sync>>,
-    maybe_join: Option<&'static str>,
 }
 
 impl Config {
@@ -102,13 +101,11 @@ impl Config {
         process_command: ProcessCommand,
         maybe_secret: Option<HashedSecret>,
         maybe_file: Option<Box<dyn FileReady + Send + Sync>>,
-        maybe_join: Option<&'static str>,
     ) -> Self {
         Self {
             process_command,
             maybe_secret,
             maybe_file,
-            maybe_join,
         }
     }
 }
@@ -150,12 +147,7 @@ impl Dispatch for Action {
             (None, None)
         };
 
-        Ok(Config::new(
-            command,
-            maybe_hashed_secret,
-            maybe_file,
-            params.encoded_multiaddr,
-        ))
+        Ok(Config::new(command, maybe_hashed_secret, maybe_file))
     }
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
@@ -183,28 +175,16 @@ impl Dispatch for Action {
             ProcessCommand::Status => {
                 todo!()
             }
-            // Not a process instruction, that means either add a peer or host a new gistit.
-            ProcessCommand::Skip => match config {
-                Self::InnerData {
-                    maybe_join: Some(encoded_peer_id),
-                    ..
-                } => {
-                    let peer_dir = Path::new(&cache_dir).join(encoded_peer_id);
-                    if Path::exists(&peer_dir) {
-                        gistit_line_out!("You're already connected to this peer");
-                    } else {
-                        gistit_line_out!("Added peer, check daemon outpt");
-                        std::fs::create_dir(&peer_dir)?;
-                    }
-                }
-                Self::InnerData {
+            // Not a process instruction
+            ProcessCommand::Skip => {
+                if let Self::InnerData {
                     maybe_file: Some(file),
                     ..
-                } => {
+                } = config
+                {
                     todo!()
                 }
-                _ => (),
-            },
+            }
         };
         Ok(())
     }
@@ -220,30 +200,3 @@ fn get_runtime_dir() -> Result<PathBuf> {
         .unwrap_or_else(|| Path::new("/tmp"))
         .to_path_buf())
 }
-
-// #[cfg(target_family = "unix")]
-// fn signal_network_node_daemon(sig: i32) -> Result<()> {
-//     let runtime_dir = get_runtime_dir()?;
-//     let pid = std::fs::read_to_string(runtime_dir.join("gistit_host.pid"))
-//         .map_err(|_| {
-//             Error::IO(IoError::ProcessSignal(
-//                 "process is not running...".to_owned(),
-//             ))
-//         })?
-//         .parse::<i32>()
-//         .map_err(|_| {
-//             Error::IO(IoError::ProcessSignal(
-//                 "process pid file is corrupted".to_owned(),
-//             ))
-//         })?;
-
-//     let res = unsafe { libc::kill(pid, sig) };
-
-//     if res == -1 {
-//         Err(Error::IO(IoError::ProcessStop(
-//             "signal to gistit-host process failed... is it running?".to_owned(),
-//         )))
-//     } else {
-//         Ok(())
-//     }
-// }

@@ -27,7 +27,7 @@
     )
 )]
 
-pub mod clap;
+pub mod args;
 pub mod dispatch;
 pub mod params;
 pub mod send;
@@ -47,7 +47,7 @@ use once_cell::sync::OnceCell;
 use lib_gistit::errors::{internal::InternalError, io::IoError};
 use lib_gistit::{Error, Result};
 
-use crate::clap::app;
+use crate::args::app;
 use crate::settings::Settings;
 
 /// Stores the current command executed

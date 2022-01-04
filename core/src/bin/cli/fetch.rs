@@ -232,7 +232,7 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&'static self) -> Result<Self::InnerData> {
-        let params = Params::from_fetch(self)?.check_consume()?;
+        let params = Params::from_fetch(self).check_consume()?;
         if let Some(secret_str) = self.secret {
             Secret::new(secret_str).check_consume()?;
         }
