@@ -14,6 +14,8 @@ notify = "4.0.17"
 async-trait = "0.1.51"
 unchecked_unwrap = "3.0.0"
 base64 = "0.13.0"
+daemonize = "0.4.1"
+directories = "4.0.1"
 
 [dependencies.clap]
 version = "3.0.0"

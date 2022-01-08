@@ -214,13 +214,6 @@ Use this to have a peristing keypair that enables your peers to recognize you in
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
-                    Arg::new("persist")
-                        .long("persist")
-                        .requires("start")
-                        .help("Save the network configuration and peer addresses to a future connection")
-                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
-                )
-                .arg(
                     Arg::new("clipboard")
                         .long("clipboard")
                         .requires("start")

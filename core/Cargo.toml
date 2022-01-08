@@ -32,7 +32,7 @@ clipboard = ["which"]
 # browser
 fetch = ["bat", "dialoguer", "webbrowser"]
 # Enables p2p sharing
-host = ["libp2p", "notify"]
+host = ["libp2p", "notify", "daemonize"]
 
 [dependencies]
 async-trait = "0.1.51"
@@ -56,6 +56,7 @@ webbrowser = { version = "0.5.5", optional = true }
 names = { version = "0.12.0", default-features = false }
 which = { version = "4.2.2", optional = true }
 notify = { version = "4.0.17", optional = true }
+daemonize = { version = "0.4.1", optional = true }
 
 [dev-dependencies]
 assert_fs = "1.0.6"

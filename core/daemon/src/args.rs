@@ -30,7 +30,6 @@ pub fn app() -> App<'static> {
             Arg::new("runtime-dir")
                 .long("runtime-dir")
                 .help("Directory to cache peers")
-                .required(true)
                 .takes_value(true)
                 .value_name("directory")
                 .default_value_os({
@@ -48,5 +47,4 @@ pub fn app() -> App<'static> {
                 .value_name("seed")
                 .default_value("none"),
         )
-        .arg(Arg::new("persist").long("persist").help("Persist peers"))
 }

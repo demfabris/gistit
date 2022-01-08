@@ -5,6 +5,7 @@
 use std::ffi::OsStr;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::mpsc::Receiver;
 use unchecked_unwrap::UncheckedUnwrap;
 
@@ -37,8 +38,6 @@ pub struct Action {
     pub clipboard: bool,
     /// The seed to derive the keypair
     pub seed: Option<&'static str>,
-    /// Wether or not to save peers
-    pub persist: bool,
     /// Address to listen for connections
     pub listen: &'static str,
     /// Stop p2p background process
@@ -49,8 +48,6 @@ pub struct Action {
     pub secret: Option<&'static str>,
     /// The file to be hosted.
     pub file: Option<&'static OsStr>,
-    /// The private network to join
-    pub join: Option<&'static str>,
 }
 
 impl Action {
@@ -70,13 +67,12 @@ impl Action {
             start: args.is_present("start"),
             clipboard: args.is_present("clipboard"),
             seed: args.value_of("seed"),
-            persist: args.is_present("persist"),
-            listen: args.value_of("listen").expect("to have default value"),
+            // SAFETY: Has default value
+            listen: unsafe { args.value_of("listen").unchecked_unwrap() },
             stop: args.is_present("stop"),
             status: args.is_present("status"),
             secret: args.value_of("secret"),
             file: args.value_of_os("file"),
-            join: args.value_of("join"),
         }))
     }
 }
@@ -152,22 +148,21 @@ impl Dispatch for Action {
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = get_runtime_dir()?;
-        let cache_dir = runtime_dir.join("gistit_peers");
         let mut node_hash: &str;
-        // SAFETY: Value was previously checked in `Dispatch::prepare` stage. It's either the
-        // default '127.0.0.1:0' or some valid <ip>:<port>
-        let (addr, port) = unsafe { self.listen.split_once(':').unchecked_unwrap() };
+        let (host, port) = self.listen.split_once(':').ok_or(Error::Argument)?;
 
-        if !Path::exists(&cache_dir) {
-            std::fs::create_dir(&cache_dir)?;
+        if !Path::exists(&runtime_dir) {
+            std::fs::create_dir(&runtime_dir)?;
         }
 
         match config.process_command {
-            ProcessCommand::StartWithSeed(password) => {
+            ProcessCommand::StartWithSeed(seed) => {
                 gistit_line_out!("Starting gistit network node process with seed...");
+                spawn_daemon_from_args(&runtime_dir, seed, host, port)?;
             }
             ProcessCommand::Start => {
                 gistit_line_out!("Starting gistit network node process...");
+                spawn_daemon_from_args(&runtime_dir, "none", host, port)?;
             }
             ProcessCommand::Stop => {
                 gistit_line_out!("Stopping gistit network node process...");
@@ -199,4 +194,18 @@ fn get_runtime_dir() -> Result<PathBuf> {
         .runtime_dir()
         .unwrap_or_else(|| Path::new("/tmp"))
         .to_path_buf())
+}
+
+fn spawn_daemon_from_args(runtime_dir: &Path, seed: &str, host: &str, port: &str) -> Result<()> {
+    let daemon = Command::new("gistit_daemon")
+        .args(["--seed", seed])
+        .args(["--runtime-dir", runtime_dir.to_string_lossy().as_ref()])
+        .args(["--host", host])
+        .args(["--port", port])
+        .stdout(Stdio::piped())
+        .output()?;
+
+    println!("{:?}", daemon);
+
+    Ok(())
 }

@@ -33,15 +33,23 @@ use std::path::Path;
 use unchecked_unwrap::UncheckedUnwrap;
 
 use clap::ArgMatches;
+use daemonize::Daemonize;
 
 use crate::args::app;
+use crate::errors::ErrorKind;
 use crate::network::{ipv4_to_multiaddr, NetworkConfig};
 
 mod args;
+mod errors;
 mod network;
 
-pub type Error = Box<dyn std::error::Error>;
+pub type Error = crate::errors::Error;
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(not(feature = "host"))]
+fn main() {
+    println!("Skipping daemon");
+}
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -49,7 +57,6 @@ struct Config {
     runtime_dir: &'static OsStr,
     inbound_addr: Ipv4Addr,
     inbound_port: u16,
-    persist: bool,
 }
 
 impl Config {
@@ -63,13 +70,12 @@ impl Config {
                     .value_of("host")
                     .unchecked_unwrap()
                     .parse()
-                    .expect("to work"),
+                    .map_err(|_| ErrorKind::InvalidArgs)?,
                 inbound_port: args
                     .value_of("port")
                     .unchecked_unwrap()
                     .parse()
-                    .expect("to work"),
-                persist: args.is_present("persist"),
+                    .map_err(|_| ErrorKind::InvalidArgs)?,
             })
         }
     }
@@ -84,22 +90,43 @@ async fn main() -> Result<()> {
         inbound_addr,
         inbound_port,
         runtime_dir,
-        ..
     } = Config::from_args(args)?;
 
     let multiaddr = ipv4_to_multiaddr(inbound_addr, inbound_port);
     let runtime_dir = Path::new(runtime_dir);
+    println!(
+        "{:?} {:?} {:?} {:?}",
+        runtime_dir, seed, inbound_addr, inbound_port
+    );
 
-    let node = NetworkConfig::new(seed, multiaddr, runtime_dir)?
+    let stdout = std::fs::File::create(runtime_dir.join("gistit_node.out"))?;
+    let daemonize = Daemonize::new()
+        .pid_file(runtime_dir.join("gistit_node.pid"))
+        .chown_pid_file(true)
+        .working_directory(runtime_dir)
+        .user("gistit")
+        .group("gistit")
+        .umask(0o600)
+        .stdout(stdout.try_clone()?)
+        .stderr(stdout);
+
+    let cache_dir = runtime_dir.join("gistit_peers");
+    if !Path::exists(&cache_dir) {
+        std::fs::create_dir(&cache_dir)?;
+    }
+
+    let node = NetworkConfig::new(seed, multiaddr, &cache_dir)?
         .into_node()
         .await?;
 
-    node.run().await;
+    match daemonize.start() {
+        Ok(_) => {
+            node.run().await;
+        }
+        Err(e) => {
+            println!("{:?}", e);
+        }
+    }
 
     Ok(())
-}
-
-#[cfg(not(feature = "host"))]
-fn main() {
-    println!("Skipping daemon")
 }
