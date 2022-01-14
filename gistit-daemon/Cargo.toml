@@ -11,14 +11,15 @@ version = "0.1.0"
 
 [dependencies]
 notify = "4.0.17"
-async-trait = "0.1.51"
+async-trait = "0.1.52"
 unchecked_unwrap = "3.0.0"
 base64 = "0.13.0"
 daemonize = "0.4.1"
 directories = "4.0.1"
+lib-gistit = { path = "../lib-gistit/" }
 
 [dependencies.clap]
-version = "3.0.0"
+version = "3.0.7"
 features = ["cargo"]
 
 [dependencies.tokio]
@@ -26,7 +27,7 @@ features = ["macros", "fs", "rt", "rt-multi-thread", "sync", "io-util"]
 version = "1.15.0"
 
 [dependencies.libp2p]
-version = "0.41.0"
+version = "0.41.1"
 default-features = false
 features = ["noise", "kad", "identify", "mdns", "mplex", "tcp-async-io", "dns-async-std", "websocket", "yamux", "request-response"]
 

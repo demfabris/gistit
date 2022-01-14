@@ -5,8 +5,6 @@ use std::iter::once;
 use std::net::Ipv4Addr;
 use std::path::Path;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
-use unchecked_unwrap::UncheckedUnwrap;
 
 use async_trait::async_trait;
 use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed};
@@ -16,19 +14,22 @@ use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::multiaddr;
 use libp2p::request_response::{
-    ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseConfig,
-    RequestResponseEvent, RequestResponseMessage, ResponseChannel,
+    ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
+    RequestResponseEvent,
 };
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
-use libp2p::{development_transport, Swarm, Transport};
+use libp2p::{development_transport, Swarm};
 use libp2p::{identity, Multiaddr};
-use notify::{raw_watcher, RawEvent as FsEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
-use crate::{Error, Result};
+use lib_gistit::ipc::Bridge;
+
+use crate::Result;
 
 pub struct NetworkConfig {
-    event_loop_config: EventLoopConfig,
-    watcher: RecommendedWatcher,
+    peer_id: PeerId,
+    keypair: Keypair,
+    local_multiaddr: Multiaddr,
+    bridge: Bridge,
 }
 
 impl NetworkConfig {
@@ -43,85 +44,32 @@ impl NetworkConfig {
             let ed25519_secret = identity::ed25519::SecretKey::from_bytes(&mut bytes).unwrap();
             identity::Keypair::Ed25519(ed25519_secret.into())
         };
-        let FsWatcher {
-            watcher,
-            channel: (_, watcher_rx),
-        } = FsWatcher::new(runtime_dir)?;
 
-        let event_loop_config = EventLoopConfig {
-            peer_id: PeerId::from(keypair.public()),
+        let peer_id = PeerId::from(keypair.public());
+        let bridge = Bridge::connect(runtime_dir)?;
+
+        Ok(Self {
+            peer_id,
             keypair,
             local_multiaddr,
-            watcher_rx: Arc::new(Mutex::new(watcher_rx)),
-        };
-
-        Ok(Self {
-            event_loop_config,
-            watcher,
+            bridge,
         })
     }
 
-    pub async fn into_node(self) -> Result<NetworkNode> {
-        let event_loop = EventLoop::from_config(self.event_loop_config)
-            .await?
-            .prepare()
-            .await;
-
-        Ok(NetworkNode {
-            event_loop,
-            __watcher: self.watcher,
-        })
+    pub async fn apply(self) -> Result<NetworkNode> {
+        NetworkNode::new(self).await
     }
-}
-
-pub struct NetworkNode {
-    event_loop: EventLoop,
-    __watcher: RecommendedWatcher,
-}
-
-impl NetworkNode {
-    pub async fn run(self) {
-        self.event_loop.run().await;
-    }
-}
-
-struct FsWatcher {
-    watcher: RecommendedWatcher,
-    channel: (Sender<FsEvent>, Receiver<FsEvent>),
-}
-
-impl FsWatcher {
-    fn new(cache_dir: &Path) -> Result<Self> {
-        let (watcher_tx, watcher_rx) = channel();
-
-        let mut watcher = raw_watcher(watcher_tx.clone())?;
-        watcher.watch(cache_dir, RecursiveMode::Recursive)?;
-
-        Ok(Self {
-            watcher,
-            channel: (watcher_tx, watcher_rx),
-        })
-    }
-}
-
-#[derive(Clone)]
-pub struct EventLoopConfig {
-    peer_id: PeerId,
-    keypair: Keypair,
-    local_multiaddr: Multiaddr,
-    watcher_rx: Arc<Mutex<Receiver<FsEvent>>>,
 }
 
 /// The main event loop
-pub struct EventLoop {
+pub struct NetworkNode {
     /// p2p Swarm, acts like a receiver
     swarm: Swarm<RequestResponse<GistitExchangeCodec>>,
-    /// Fs events watcher
-    watcher_rx: Arc<Mutex<Receiver<FsEvent>>>,
+    bridge: Bridge,
 }
 
-impl EventLoop {
-    async fn from_config(config: EventLoopConfig) -> Result<Self> {
+impl NetworkNode {
+    pub async fn new(config: NetworkConfig) -> Result<Self> {
         let mut swarm = SwarmBuilder::new(
             development_transport(config.keypair).await.unwrap(), // TODO: dont panic
             RequestResponse::new(
@@ -132,32 +80,38 @@ impl EventLoop {
             config.peer_id,
         )
         .build();
+
+        println!("Listening on {:?}", config.local_multiaddr);
         swarm.listen_on(config.local_multiaddr).unwrap(); //TODO: dont panic
 
         Ok(Self {
             swarm,
-            watcher_rx: config.watcher_rx,
+            bridge: config.bridge,
         })
     }
 
-    async fn prepare(mut self) -> Self {
-        while let SwarmEvent::NewListenAddr { address, .. } = self.swarm.select_next_some().await {
-            println!("{:?}", address);
-        }
-        self
+    pub fn peer_id(&self) -> Vec<u8> {
+        self.swarm.local_peer_id().to_bytes()
     }
 
-    async fn run(mut self) {
+    pub async fn run(mut self) -> Result<()> {
         // TODO: routine to check current peers
         loop {
             tokio::select! {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
                     swarm_event.expect("some event")).await,
 
-                fs_event = poll_fn(|_| {
-                    let watcher = self.watcher_rx.lock().expect("to lock");
-                    futures::task::Poll::Ready(watcher.recv())
-                }) => self.handle_fs_event(fs_event.expect("to receive fs event")).await
+                bridge_event = poll_fn(|ctx| {
+                    self.bridge.rx.poll_recv_ready(ctx)
+                }) => {
+                    println!("stuff");
+                },
+
+                // fs_event = poll_fn(|_| {
+                //     let watcher_rx = self.fs_watcher.channel.1.clone();
+                //     let watcher_rx = watcher_rx.lock().expect("to lock");
+                //     futures::task::Poll::Ready(watcher_rx.recv())
+                // }) => self.handle_fs_event(fs_event.expect("to receive fs event")).await?
             }
         }
     }
@@ -172,32 +126,8 @@ impl EventLoop {
         println!("{:?}", event);
     }
 
-    async fn handle_fs_event(&mut self, fs_event: FsEvent) {
-        match fs_event {
-            FsEvent {
-                path: Some(peer),
-                op: Ok(notify::op::Op::CREATE),
-                ..
-            } => {
-                let addr_str = peer.file_name().expect("valid").to_string_lossy();
-                println!("{:?}", addr_str);
-                let peer_multiaddr =
-                    std::str::from_utf8(base64::decode(addr_str.as_ref()).unwrap().as_slice())
-                        .unwrap()
-                        .parse::<Multiaddr>()
-                        .unwrap();
-                self.swarm.dial(peer_multiaddr).unwrap();
-                println!("Connected to peer {:?}", addr_str);
-            }
-            FsEvent {
-                path: Some(peer),
-                op: Ok(notify::op::Op::REMOVE),
-                ..
-            } => {
-                println!("removed");
-            }
-            _ => (),
-        }
+    async fn handle_bridge_event(&mut self) -> Result<()> {
+        todo!()
     }
 }
 

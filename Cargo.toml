@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+  "gistit-cli",
+  "gistit-daemon",
+  "lib-gistit"
+]

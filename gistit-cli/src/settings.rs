@@ -6,20 +6,15 @@ use std::fs;
 use std::path::PathBuf;
 
 use clap::crate_authors;
-use directories::{BaseDirs, ProjectDirs};
+use directories::ProjectDirs;
 use lazy_static::lazy_static;
-use lib_gistit::errors::settings::SettingsError;
 use serde::{Deserialize, Serialize};
 
 use lib_gistit::encrypt::digest_md5;
-use lib_gistit::errors::internal::InternalError;
 use lib_gistit::file::{File, FileReady};
-use lib_gistit::{Error, Result};
 
 use crate::LOCALFS_SETTINGS;
-
-#[cfg(doc)]
-use lib_gistit::errors::io::IoError;
+use crate::{ErrorKind, Result};
 
 #[doc(hidden)]
 const GISTIT_QUALIFIER: &str = "io";
@@ -167,11 +162,7 @@ const fn map_false_to_none(arg: Option<bool>) -> Option<bool> {
 ///
 /// Fails with [`InternalError`] if something goes wrong when loading this settings
 pub fn get_runtime_settings() -> Result<&'static Settings> {
-    LOCALFS_SETTINGS.get().ok_or_else(|| {
-        Error::Internal(InternalError::Memory(
-            "Failed to read in memory runtime settings".to_owned(),
-        ))
-    })
+    Ok(LOCALFS_SETTINGS.get().ok_or(ErrorKind::Settings)?)
 }
 
 /// Return platform specific project directories
@@ -190,12 +181,7 @@ pub fn project_dirs() -> ProjectDirs {
 fn validate_global_settings(global: &GistitGlobal) -> Result<()> {
     if let Some(ref save_location) = global.save_location {
         if fs::metadata(save_location).is_err() {
-            fs::create_dir(save_location).map_err(|err| {
-                Error::Settings(SettingsError::InvalidSettingsParam((
-                    "save_location".to_owned(),
-                    err.to_string(),
-                )))
-            })?;
+            fs::create_dir(save_location)?;
         }
     }
     Ok(())
@@ -217,8 +203,7 @@ impl Settings {
                 return Ok(self);
             }
 
-            let theirs: Self = serde_yaml::from_slice(handler.data())
-                .map_err(|err| Error::Settings(SettingsError::Deserialize(err.to_string())))?;
+            let theirs: Self = serde_yaml::from_slice(handler.data())?;
 
             let global = theirs.gistit_global.map_or(GistitGlobal::default(), |t| {
                 Box::new(t).merge(self.gistit_global)
@@ -249,10 +234,10 @@ impl Settings {
     ///
     /// Fails with [`IoError`] if something goes wrong opening/writing to the file.
     pub async fn save_new() -> Result<()> {
-        File::from_bytes(SETTINGS_FILE_TEMPLATE.as_bytes())
+        Ok(File::from_bytes(SETTINGS_FILE_TEMPLATE.as_bytes())
             .await?
             .save_as(&project_dirs().config_dir().join(GISTIT_SETTINGS_FILE_NAME))
-            .await
+            .await?)
     }
 }
 

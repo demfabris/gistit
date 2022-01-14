@@ -1,5 +1,3 @@
-//! The Fetch module
-
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use async_trait::async_trait;
@@ -7,23 +5,18 @@ use clap::ArgMatches;
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Password, Select};
 use lazy_static::lazy_static;
-use lib_gistit::errors::internal::InternalError;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 use url::Url;
 
 use lib_gistit::encrypt::Secret;
-use lib_gistit::errors::fetch::FetchError;
-use lib_gistit::errors::io::IoError;
-use lib_gistit::errors::params::ParamsError;
 use lib_gistit::file::{File, FileReady};
-use lib_gistit::{Error, Result};
 
 use crate::dispatch::{Dispatch, GistitPayload};
 use crate::params::{FetchParams, Params};
 use crate::settings::{get_runtime_settings, GistitFetch, Mergeable};
-use crate::{gistit_line_out, gistit_warn};
+use crate::{gistit_line_out, gistit_warn, ErrorKind, Result};
 
 lazy_static! {
     static ref GISTIT_SECRET_RETRY_COUNT: AtomicU8 = AtomicU8::new(0);
@@ -36,33 +29,18 @@ lazy_static! {
     .expect("to join 'get' function URL");
 }
 
-/// The Fetch action runtime parameters
 #[derive(Debug, Clone)]
 pub struct Action {
-    /// The hash to fetch
     pub hash: Option<&'static str>,
-    /// The gistit url
     pub url: Option<&'static str>,
-    /// The secret key to fetch and decrypt a gistit
     pub secret: Option<&'static str>,
-    /// The colorscheme to highlight in preview
     pub colorscheme: Option<&'static str>,
-    /// Preview with no syntax highlighting
     pub no_syntax_highlighting: bool,
-    /// Immediately preview the file
     pub preview: bool,
-    /// Immediately save the file to local fs
     pub save: bool,
 }
 
 impl Action {
-    /// Parse [`ArgMatches`] into the dispatchable Fetch action
-    /// Here we also merge user settings while keeping this order of priority:
-    /// arguments > local settings file > app defaults
-    ///
-    /// # Errors
-    ///
-    /// Fails with argument errors
     pub fn from_args(
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
@@ -76,9 +54,9 @@ impl Action {
 
         let merged = lhs_settings.merge(rhs_settings);
         let (colorscheme, preview, save) = (
-            merged.colorscheme.ok_or(Error::Argument)?,
-            merged.preview.ok_or(Error::Argument)?,
-            merged.save.ok_or(Error::Argument)?,
+            merged.colorscheme.ok_or(ErrorKind::Argument)?,
+            merged.preview.ok_or(ErrorKind::Argument)?,
+            merged.save.ok_or(ErrorKind::Argument)?,
         );
 
         Ok(Box::new(Self {
@@ -99,7 +77,6 @@ pub struct Config {
 }
 
 impl Config {
-    /// Trivially initialize config structure
     #[must_use]
     const fn new(params: FetchParams, maybe_secret: Option<String>) -> Self {
         Self {
@@ -108,24 +85,16 @@ impl Config {
         }
     }
 
-    /// Converts `gistit-fetch` [`Config`] into json.
-    /// If input is a URL it extracts the hash and it's safe to grab it
-    /// directly from `url.path()` because it was previously checked to be valid.
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`ParamsError`] error
     fn into_json(self) -> Result<serde_json::Value> {
         let final_hash = match &self.params {
             FetchParams {
                 hash: Some(hash), ..
-            } => (*hash).to_string(),
+            } => hash.to_string(),
             FetchParams {
                 url: Some(url),
                 hash: None,
                 ..
-            } => Url::parse(url)
-                .map_err(|err| ParamsError::InvalidUrl(err.to_string()))?
+            } => Url::parse(url)?
                 .path()
                 // Removing `/` prefix from URL parsing
                 .split_at(1)
@@ -156,7 +125,7 @@ impl Response {
             Self {
                 error: Some(error_msg),
                 ..
-            } => Err(Error::IO(IoError::Request(error_msg))),
+            } => Err(ErrorKind::FetchUnexpectedResponse.into()),
             _ => unreachable!("Gistit server is unreachable"),
         }
     }
@@ -198,13 +167,11 @@ async fn save_gistit(file: &File) -> Result<()> {
         .gistit_global
         .unwrap_or_default()
         .save_location
-        .ok_or_else(|| {
-            Error::Internal(InternalError::Memory(
-                "Couldn't read save file directory from memory".to_owned(),
-            ))
-        })?;
+        .ok_or(ErrorKind::Settings)?;
+
     let file_path = save_location.join(file.name());
-    file.save_as(&file_path).await
+    file.save_as(&file_path).await?;
+    Ok(())
 }
 
 fn print_success(hash: &str, prevent_ask_tip: bool) {
@@ -307,10 +274,7 @@ impl Dispatch for Action {
                         style("\nSecret").bold().to_string()
                     };
 
-                    let new_secret = Password::new()
-                        .with_prompt(prompt_msg)
-                        .interact()
-                        .map_err(|err| Error::IO(IoError::StdinWrite(err.to_string())))?;
+                    let new_secret = Password::new().with_prompt(prompt_msg).interact()?;
                     drop(first_try);
 
                     // Rebuild the action object and recurse down the same path
@@ -322,11 +286,11 @@ impl Dispatch for Action {
                     Ok(())
                 } else {
                     // Enough retries
-                    Err(Error::Fetch(FetchError::ExaustedSecretRetries))
+                    Err(ErrorKind::FetchEnoughRetries.into())
                 }
             }
-            StatusCode::NOT_FOUND => Err(Error::Fetch(FetchError::NotFound)),
-            _ => Err(Error::Fetch(FetchError::UnexpectedResponse)),
+            StatusCode::NOT_FOUND => Err(ErrorKind::FetchNotFound.into()),
+            _ => Err(ErrorKind::FetchUnexpectedResponse.into()),
         }
     }
 }

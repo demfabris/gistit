@@ -27,13 +27,13 @@
     )
 )]
 
+use std::convert::Infallible;
 use std::ffi::OsStr;
 use std::net::Ipv4Addr;
 use std::path::Path;
 use unchecked_unwrap::UncheckedUnwrap;
 
-use clap::ArgMatches;
-use daemonize::Daemonize;
+use ::clap::ArgMatches;
 
 use crate::args::app;
 use crate::errors::ErrorKind;
@@ -47,9 +47,7 @@ pub type Error = crate::errors::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(not(feature = "host"))]
-fn main() {
-    println!("Skipping daemon");
-}
+fn main() {}
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -81,9 +79,7 @@ impl Config {
     }
 }
 
-#[cfg(feature = "host")]
-#[tokio::main]
-async fn main() -> Result<()> {
+async fn run() -> Result<()> {
     let args = Box::leak(Box::new(app().get_matches()));
     let Config {
         seed,
@@ -99,34 +95,22 @@ async fn main() -> Result<()> {
         runtime_dir, seed, inbound_addr, inbound_port
     );
 
-    let stdout = std::fs::File::create(runtime_dir.join("gistit_node.out"))?;
-    let daemonize = Daemonize::new()
-        .pid_file(runtime_dir.join("gistit_node.pid"))
-        .chown_pid_file(true)
-        .working_directory(runtime_dir)
-        .user("gistit")
-        .group("gistit")
-        .umask(0o600)
-        .stdout(stdout.try_clone()?)
-        .stderr(stdout);
-
-    let cache_dir = runtime_dir.join("gistit_peers");
-    if !Path::exists(&cache_dir) {
-        std::fs::create_dir(&cache_dir)?;
-    }
-
-    let node = NetworkConfig::new(seed, multiaddr, &cache_dir)?
-        .into_node()
+    let node = NetworkConfig::new(seed, multiaddr, runtime_dir)?
+        .apply()
         .await?;
 
-    match daemonize.start() {
-        Ok(_) => {
-            node.run().await;
-        }
-        Err(e) => {
-            println!("{:?}", e);
-        }
-    }
+    println!("{:?}", node.peer_id());
+
+    node.run().await?;
 
     Ok(())
+}
+
+#[cfg(feature = "host")]
+#[tokio::main]
+async fn main() {
+    if let Err(err) = run().await {
+        println!("{:?}", err);
+        std::process::exit(1);
+    }
 }

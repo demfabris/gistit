@@ -57,9 +57,7 @@ use std::process::{Command, Stdio};
 
 use which::which;
 
-use crate::errors::clipboard::ClipboardError;
-use crate::errors::io::IoError;
-use crate::Result;
+use crate::{ErrorKind, Result};
 
 /// The clipboard structure, holds the content string
 #[derive(Clone, Debug)]
@@ -198,7 +196,7 @@ impl Clipboard {
     /// Fails with [`ClipboardError`] error
     pub fn try_into_selected(self) -> Result<ClipboardSelected> {
         match select_display() {
-            DisplayKind::Unknown => Err(ClipboardError::UnknownPlatform.into()),
+            DisplayKind::Unknown => Err(ErrorKind::UnsupportedPlatform.into()),
             valid => Ok(ClipboardSelected {
                 display: valid,
                 content: self.content,
@@ -233,27 +231,17 @@ impl ClipboardProvider for BinClipboard {
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .spawn()
-            .map_err(|err| ClipboardError::BinExecution(IoError::ProcessSpawn(err.to_string())))?;
+            .spawn()?;
 
         process
             .stdin
             .as_mut()
             .expect("to access stdin")
-            .write_all(self.selected.content.as_bytes())
-            .map_err(|err| ClipboardError::BinExecution(IoError::StdinWrite(err.to_string())))?;
+            .write_all(self.selected.content.as_bytes())?;
 
-        let status = process
-            .wait()
-            .map_err(|err| ClipboardError::BinExecution(IoError::ProcessWait(err.to_string())))?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err(ClipboardError::BinExecution(IoError::Other(
-                "process returned non zero status".to_owned(),
-            ))
-            .into())
-        }
+        let _status = process.wait()?;
+
+        Ok(())
     }
 }
 
@@ -317,24 +305,21 @@ impl ClipboardSelected {
 
                 let (bin, program) = binaries
                     .find(|(bin, _)| bin.is_ok())
-                    .ok_or(ClipboardError::MissingX11ClipboardBin)?;
+                    .ok_or(ErrorKind::MissingClipboardBinary)?;
                 // Safe to unwrap since we previously checked `bin.is_ok()`
                 (bin.unwrap(), program)
             }
             DisplayKind::Wayland => {
-                let bin =
-                    which("wl-copy").map_err(|_| ClipboardError::MissingWaylandClipboardBin)?;
+                let bin = which("wl-copy")?;
                 let program = ClipboardBinProgram::WlCopy;
                 (bin, program)
             }
             DisplayKind::SshTty => {
                 //`xauth` missing most likely mean display passthrough isn't working
-                let _xauth = which("xauth").map_err(|_| ClipboardError::MissingTtyClipboardBin)?;
+                let _xauth = which("xauth")?;
 
                 // DISPALY variable different than `localhost:...` is a bad sign as well
-                let _display = env::var("DISPLAY")
-                    .map(|var| var.contains("localhost"))
-                    .map_err(|_| ClipboardError::MissingDisplayEnvSsh)?;
+                let _display = env::var("DISPLAY").map_err(|_| ErrorKind::DisplayNotSet)?;
 
                 let mut binaries = [
                     (which("xclip"), ClipboardBinProgram::Xclip),
@@ -345,7 +330,7 @@ impl ClipboardSelected {
 
                 let (bin, program) = binaries
                     .find(|(bin, _)| bin.is_ok())
-                    .ok_or(ClipboardError::MissingX11ClipboardBin)?;
+                    .ok_or(ErrorKind::MissingClipboardBinary)?;
                 // Safe to unwrap since we previously checked `bin.is_ok()`
                 (bin.unwrap(), program)
             }
@@ -378,7 +363,7 @@ impl ClipboardSelected {
             DisplayKind::MacOs => which("pbcopy")
                 .ok()
                 .map(|t| t.as_os_str().to_owned())
-                .ok_or(ClipboardError::MissingMacosClipboardBin)?,
+                .ok_or(ErrorKind::MissingClipboardBinary)?,
             DisplayKind::Unknown => panic!("clipboard feature not supported"),
         };
         let program = ClipboardBinProgram::PbCopy;

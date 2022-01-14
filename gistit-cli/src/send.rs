@@ -1,11 +1,3 @@
-//! The send feature.
-//!
-//! This module comes by default when building `gistit` cli application.
-//! Here we parse and check user input to give better UX feedback. Most of these checks are
-//! repeated in the server.
-//!
-//! In this module we pack a gistit, generate a hash, and send to a centralized server
-
 use std::ffi::OsStr;
 use std::path::Path;
 use std::str;
@@ -20,15 +12,13 @@ use url::Url;
 
 use lib_gistit::clipboard::Clipboard;
 use lib_gistit::encrypt::{digest_md5_multi, HashedSecret, Secret};
-use lib_gistit::errors::io::IoError;
 use lib_gistit::file::{name_from_path, File, FileReady};
-use lib_gistit::{Error, Result};
 
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
-use crate::gistit_line_out;
 use crate::params::Params;
 use crate::params::SendParams;
 use crate::settings::{get_runtime_settings, GistitSend, Mergeable};
+use crate::{gistit_line_out, ErrorKind, Result};
 
 const SERVER_IDENTIFIER_CHAR: char = '#';
 
@@ -42,39 +32,23 @@ lazy_static! {
     .expect("to join 'load' function URL");
 }
 
-/// The Send action runtime parameters
 #[derive(Debug, Clone)]
 pub struct Action {
-    /// The file to be sent.
     pub file: &'static OsStr,
-    /// The description of this Gistit.
     pub description: Option<&'static str>,
-    /// The author information.
     pub author: &'static str,
-    /// The colorscheme to be displayed.
     pub theme: Option<String>,
-    /// The secret key to encrypt.
     pub secret: Option<&'static str>,
-    /// The custom lifespan of a Gistit snippet.
     pub lifespan: &'static str,
-    /// Whether or not to copy successfully sent gistit hash to clipboard.
     pub clipboard: bool,
-    /// Dry run. Prepare without dispatching
     pub dry_run: bool,
 }
 
 impl Action {
-    /// Parse [`ArgMatches`] into the dispatchable Send action.
-    /// Here we also merge user settings while keeping this order of priority:
-    /// arguments > local settings file > app defaults
-    ///
-    /// # Errors
-    ///
-    /// Fails with argument errors
     pub fn from_args(
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        let file = args.value_of_os("file").ok_or(Error::Argument)?;
+        let file = args.value_of_os("file").ok_or(ErrorKind::Argument)?;
         gistit_line_out!(format!(
             "{} {}",
             style("Preparing gistit:").bold(),
@@ -92,10 +66,10 @@ impl Action {
 
         let merged = lhs_settings.merge(rhs_settings);
         let (author, theme, lifespan, clipboard) = (
-            merged.author.ok_or(Error::Argument)?,
+            merged.author.ok_or(ErrorKind::Argument)?,
             merged.colorscheme,
-            merged.lifespan.ok_or(Error::Argument)?,
-            merged.clipboard.ok_or(Error::Argument)?,
+            merged.lifespan.ok_or(ErrorKind::Argument)?,
+            merged.clipboard.ok_or(ErrorKind::Argument)?,
         );
 
         Ok(Box::new(Self {
@@ -111,7 +85,6 @@ impl Action {
     }
 }
 
-/// The parsed/checked data that should be dispatched
 pub struct Config {
     pub file: Box<dyn FileReady + Send + Sync>,
     pub params: SendParams,
@@ -120,15 +93,6 @@ pub struct Config {
 
 #[async_trait]
 impl Hasheable for Config {
-    /// Hash config fields.
-    /// Reads the inner file contents into a buffer and digest it into the hasher.
-    /// If a secret was provided it should be digested by the hasher as well.
-    ///
-    /// Returns the hashed string hex encoded with an identification prefix
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`std::io::Error`]
     fn hash(&self) -> String {
         let file_data = self.file.data();
         let maybe_secret_bytes = self
@@ -137,14 +101,12 @@ impl Hasheable for Config {
             .map_or("", HashedSecret::to_str)
             .as_bytes();
 
-        // Digest and collect output
         let hash = digest_md5_multi(&[file_data, maybe_secret_bytes]);
         format!("{}{}", SERVER_IDENTIFIER_CHAR, hash)
     }
 }
 
 impl Config {
-    /// Trivially initialize config structure
     #[must_use]
     fn new(
         file: Box<dyn FileReady + Send + Sync>,
@@ -158,11 +120,6 @@ impl Config {
         }
     }
 
-    /// Serializes this config into [`GistitPayload`]
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`std::io::Error`]
     async fn into_payload(self) -> Result<GistitPayload> {
         let hash = self.hash();
         let params = self.params;
@@ -191,7 +148,6 @@ impl Config {
     }
 }
 
-/// The cloud functions response structure
 #[derive(Deserialize, Debug)]
 struct Response {
     success: Option<String>,
@@ -208,30 +164,23 @@ impl Response {
             Self {
                 error: Some(error_msg),
                 ..
-            } => Err(Error::IO(IoError::Request(error_msg))),
+            } => Err(ErrorKind::Unknown.into()),
             _ => unreachable!("Gistit server is unreachable"),
         }
     }
 }
 
-/// The dispatch implementation for Send action
 #[async_trait]
 impl Dispatch for Action {
     type InnerData = Config;
-    /// Build each top level entity and run inner checks concurrently to assert valid input and
-    /// output data.
-    ///
-    /// If all checks runs successfully, assemble the config structure to later be dispatched
-    /// by [`Dispatch::dispatch`]
+
     async fn prepare(&'static self) -> Result<Self::InnerData> {
-        // Check params first and exit faster if there's a invalid input
         let params = Params::from_send(self)?.check_consume()?;
 
         let (file, maybe_hashed_secret): (Box<dyn FileReady + Send + Sync>, Option<HashedSecret>) = {
             let path = Path::new(self.file);
             let file = File::from_path(path).await?.check_consume().await?;
 
-            // If secret provided, hash it and encrypt file
             if let Some(secret_str) = self.secret {
                 let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
                 gistit_line_out!("Encrypting...");

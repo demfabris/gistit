@@ -7,13 +7,6 @@
 //         \/        \/
 //
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
-// This would decrease readability
-#![allow(clippy::module_name_repetitions)]
-// Not my fault
-#![allow(clippy::multiple_crate_versions)]
-// Boring
-#![allow(clippy::missing_panics_doc)]
-// Test env should be chill
 #![cfg_attr(
     test,
     allow(
@@ -27,25 +20,22 @@
     )
 )]
 
-pub mod args;
-pub mod dispatch;
-pub mod params;
-pub mod send;
-pub mod settings;
-
-#[cfg(feature = "fetch")]
-pub mod fetch;
-
-#[cfg(feature = "host")]
-pub mod host;
+mod args;
+mod dispatch;
+mod errors;
+mod fetch;
+mod host;
+mod params;
+mod send;
+mod settings;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use console::style;
 use once_cell::sync::OnceCell;
 
-use lib_gistit::errors::{internal::InternalError, io::IoError};
-use lib_gistit::{Error, Result};
+pub use crate::errors::{Error, ErrorKind};
+pub type Result<T> = std::result::Result<T, Error>;
 
 use crate::args::app;
 use crate::settings::Settings;
@@ -59,23 +49,19 @@ pub static LOCALFS_SETTINGS: OnceCell<Settings> = OnceCell::new();
 
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(app().get_matches()));
+
     let cmd_args = if let Some((cmd, args)) = matches.subcommand() {
-        CURRENT_ACTION
-            .set(cmd.to_owned())
-            .map_err(|err| Error::Internal(InternalError::Memory(err)))?;
+        CURRENT_ACTION.set(cmd.to_owned())?;
         (cmd, Some(args))
     } else {
         ("", None)
     };
-    LOCALFS_SETTINGS
-        .set(Settings::default().merge_local().await?)
-        .map_err(|err| Error::Internal(InternalError::Memory(err.to_string())))?;
+
+    LOCALFS_SETTINGS.set(Settings::default().merge_local().await?)?;
 
     match cmd_args {
         ("send", Some(args)) => dispatch_from_args!(send, args),
-        #[cfg(feature = "fetch")]
         ("fetch", Some(args)) => dispatch_from_args!(fetch, args),
-        #[cfg(feature = "host")]
         ("host", Some(args)) => dispatch_from_args!(host, args),
         ("", None) => {
             // Global commands
@@ -83,17 +69,18 @@ async fn run() -> Result<()> {
                 list_bat_colorschemes();
                 std::process::exit(0);
             }
+
             if matches.is_present("silent") {
                 OMIT_STDOUT.store(true, Ordering::Relaxed);
             }
+
             if matches.is_present("config-init") {
                 Settings::save_new().await?;
                 gistit_line_out!("Settings.yaml created!");
                 std::process::exit(0);
             }
-            app()
-                .print_help()
-                .map_err(|err| Error::IO(IoError::StdoutWrite(err.to_string())))?;
+
+            app().print_help()?;
         }
         _ => (),
     };
@@ -102,10 +89,22 @@ async fn run() -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Top level error output
     if let Err(err) = run().await {
-        gistit_error!(err);
+        let omit_stdout = crate::OMIT_STDOUT.load(Ordering::Relaxed);
+
+        if !omit_stdout {
+            eprintln!(
+                "{}: Something went wrong during {}{}: \n    {:?}",
+                style("error").red().bold(),
+                style("gistit-").green().bold(),
+                style(CURRENT_ACTION.get().unwrap_or(&"action".to_string()))
+                    .green()
+                    .bold(),
+                err
+            )
+        }
     };
+
     Ok(())
 }
 
@@ -115,12 +114,11 @@ fn list_bat_colorschemes() {
     if omit_stdout {
         return;
     }
+
     println!("{}", style("Supported colorschemes: \n").green().bold());
-    crate::params::SUPPORTED_BAT_COLORSCHEMES
-        .iter()
-        .for_each(|&c| {
-            println!("    {}", style(c).yellow());
-        });
+    crate::params::SUPPORTED_COLORSCHEMES.iter().for_each(|&c| {
+        println!("    {}", style(c).yellow());
+    });
     println!(
         r#"
 This application uses '{}' to view gistits inside your terminal.
@@ -140,27 +138,6 @@ macro_rules! dispatch_from_args {
         let action = Box::leak(Box::new(action));
         let payload = dispatch::Dispatch::prepare(&**action).await?;
         dispatch::Dispatch::dispatch(&**action, payload).await?;
-    }};
-}
-
-#[macro_export]
-macro_rules! gistit_error {
-    ($err:expr) => {{
-        use crate::CURRENT_ACTION;
-        use console::style;
-        let omit_stdout = crate::OMIT_STDOUT.load(::std::sync::atomic::Ordering::Relaxed);
-
-        if !omit_stdout {
-            eprintln!(
-                "{}: Something went wrong during {}{}: \n    {:?}",
-                style("error").red().bold(),
-                style("gistit-").green().bold(),
-                style(CURRENT_ACTION.get().expect("Internal error"))
-                    .green()
-                    .bold(),
-                $err
-            )
-        }
     }};
 }
 

@@ -16,11 +16,7 @@ use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 
 use crate::encrypt::{decrypt_aes256_u12nonce, encrypt_aes256_u12nonce};
-use crate::errors::file::FileError;
-use crate::{Error, Result};
-
-#[cfg(doc)]
-use crate::errors::{encryption::EncryptionError, io::IoError};
+use crate::{Error, ErrorKind, Result};
 
 /// Allowed file size range in bytes
 const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=50_000;
@@ -605,6 +601,8 @@ const EXTENSION_TO_LANG_MAPPING: Map<&'static str, &'static str> = phf_map! {
     "syntax" => "yaml",
     "yang" => "yang",
     "zig" => "zig",
+    "txt" => "text",
+    "" => "text",
 };
 
 /// Represents a gistit file handler and some extra data
@@ -639,8 +637,7 @@ impl Drop for File {
 #[must_use]
 pub fn name_from_path(path: &Path) -> String {
     path.file_name()
-        // Checked previously
-        .expect("File name to be valid")
+        .unwrap_or(OsStr::new("unknown"))
         .to_string_lossy()
         .to_string()
 }
@@ -669,7 +666,7 @@ impl File {
                 // Intercept OS error 21 (EISDIR), meaning we can't write to a directory
                 #[cfg(target_family = "unix")]
                 if err.raw_os_error() == Some(21) {
-                    Error::File(FileError::NotAFile(name_from_path(path)))
+                    Error::from(ErrorKind::NotAFile)
                 } else {
                     Error::from(err)
                 }
@@ -677,7 +674,7 @@ impl File {
                 // TODO: This needs testing
                 #[cfg(target_os = "windows")]
                 if let Some(1003) = err.raw_os_error() {
-                    Error::File(FileError::NotAFile(name_from_path(path)))
+                    Error::from(ErrorKind::NotAFile)
                 } else {
                     Error::from(err)
                 }
@@ -750,29 +747,26 @@ impl File {
 
     /// Returns the file name
     pub fn name(&self) -> String {
-        self.name
-            .clone()
-            .expect("Opened file to have at least temp name")
+        self.name.clone().unwrap_or("unknown".to_owned())
     }
 
     /// Returns the programming language that maps to this file extension
     pub fn lang(&self) -> &str {
-        self.path
-            .extension()
-            .and_then(OsStr::to_str)
-            .map(|t| EXTENSION_TO_LANG_MAPPING.get(t))
-            // Checked previously
-            .expect("Valid file extension")
-            .expect("Extension to be supported")
+        // SAFETY: If [`Self`] exists, these values are guaranteed to be checked
+        unsafe {
+            self.path
+                .extension()
+                .and_then(OsStr::to_str)
+                .map(|t| EXTENSION_TO_LANG_MAPPING.get(t))
+                .unwrap_unchecked()
+                .unwrap_unchecked()
+        }
     }
 
     /// Returns the file size in bytes, not encoded.
     pub async fn size(&self) -> u64 {
-        self.handler
-            .metadata()
-            .await
-            .expect("The file to be open")
-            .len()
+        // SAFETY: If [`Self`] exists, these values are guaranteed to be checked
+        unsafe { self.handler.metadata().await.unwrap_unchecked().len() }
     }
 
     /// Consumes the [`File`] encrypting it and returning a new instance of [`EncryptedFile`]
@@ -836,7 +830,7 @@ fn parse_encryption_header(bytes: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
     if padding == FILE_HEADER_ENCRYPTION_PADDING.as_bytes() {
         Ok((nonce.to_vec(), rest.to_vec()))
     } else {
-        Err(Error::File(FileError::InvalidEncryptionPadding))
+        Err(ErrorKind::EncryptionPadding.into())
     }
 }
 
@@ -885,17 +879,13 @@ impl EncryptedFile {
     ///
     /// Fails with [`EncryptionError`] if `nonce` or `secret` is incorrect
     pub async fn into_decrypted(self, secret: &str) -> Result<File> {
-        let nonce: [u8; 12] = self
-            .nonce
-            .clone()
-            .try_into()
-            .expect("Shrink nonce to 12 bytes");
+        // SAFETY: If [`Self`] exists then `self.nonce` is for sure bigger than 12 bytes
+        let nonce: [u8; 12] = unsafe { self.nonce.clone().try_into().unwrap_unchecked() };
 
         let decrypted_bytes = decrypt_aes256_u12nonce(secret.as_bytes(), self.data(), &nonce)?;
         let file = File::from_bytes(&decrypted_bytes).await?.with_name(
-            self.name
-                .as_ref()
-                .expect("Opened file to have at least temp name"),
+            // SAFETY: Opened file will have at least a random temp name
+            unsafe { self.name.as_ref().unwrap_unchecked() },
         );
         Ok(file)
     }
@@ -992,9 +982,9 @@ impl Check for File {
         let type_allowed = attr.is_file();
 
         if !size_allowed {
-            return Err(FileError::UnsupportedSize(attr.len()).into());
+            return Err(ErrorKind::FileSize.into());
         } else if !type_allowed {
-            return Err(FileError::NotAFile(self.path.to_string_lossy().to_string()).into());
+            return Err(ErrorKind::NotAFile.into());
         }
         Ok(())
     }
@@ -1002,12 +992,12 @@ impl Check for File {
         let ext = Path::new(self.path.as_os_str())
             .extension()
             .and_then(OsStr::to_str)
-            .ok_or(FileError::MissingExtension)?;
+            .ok_or(ErrorKind::FileExtension)?;
 
         if EXTENSION_TO_LANG_MAPPING.contains_key(ext) {
             Ok(())
         } else {
-            Err(FileError::UnsupportedExtension(ext.to_owned()).into())
+            Err(ErrorKind::FileExtension.into())
         }
     }
 }
@@ -1015,7 +1005,6 @@ impl Check for File {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::encryption::EncryptionError;
     use assert_fs::prelude::*;
     use predicates::prelude::*;
     use tokio::task::spawn_blocking;
@@ -1074,7 +1063,7 @@ mod tests {
     async fn file_structure_new_from_path_fails_if_is_dir() {
         let tmp = assert_fs::TempDir::new().unwrap();
         let read_err = File::from_path(&tmp).await.unwrap_err();
-        assert!(matches!(read_err, Error::File(FileError::NotAFile(_))));
+        assert!(matches!(read_err.kind, ErrorKind::NotAFile));
     }
 
     #[tokio::test]
@@ -1096,10 +1085,7 @@ mod tests {
         let decode_err = File::from_bytes_encoded(corrupted_data.as_bytes(), "nameless")
             .await
             .unwrap_err();
-        assert!(matches!(
-            decode_err,
-            Error::Encryption(EncryptionError::Encoding(_))
-        ));
+        assert!(matches!(decode_err.kind, ErrorKind::Encoding(_)));
     }
 
     #[tokio::test]

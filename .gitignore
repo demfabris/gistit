@@ -6,3 +6,7 @@ dist/**
 /node_modules
 /.pnp
 .pnp.js
+
+target
+graph.png
+*.lock

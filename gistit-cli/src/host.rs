@@ -1,63 +1,36 @@
 //! The host module
-#![allow(unused_variables)]
-#![allow(dead_code)]
-#![allow(unused_imports)]
 use std::ffi::OsStr;
-use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::mpsc::Receiver;
-use unchecked_unwrap::UncheckedUnwrap;
+use std::process::Command;
 
 use async_trait::async_trait;
 use clap::ArgMatches;
-use console::Style;
 use directories::BaseDirs;
 
 use lib_gistit::encrypt::{HashedSecret, Secret};
-use lib_gistit::errors::internal::InternalError;
-use lib_gistit::errors::io::IoError;
 use lib_gistit::file::{File, FileReady};
-use lib_gistit::{Error, Result};
+use lib_gistit::ipc::Bridge;
 
 use crate::dispatch::Dispatch;
-use crate::gistit_line_out;
-use crate::params::{HostParams, Params};
+use crate::params::Params;
+use crate::{gistit_line_out, ErrorKind, Result};
 
 const UNIX_SIGKILL: i32 = 9;
 const UNIX_SIGNOTHING: i32 = 0;
 
-/// The Send action runtime parameters
 #[derive(Debug, Clone)]
-// No way around it, it's arg parsing
-#[allow(clippy::struct_excessive_bools)]
 pub struct Action {
-    /// Start p2p background process
     pub start: bool,
-    /// Auto copy to clipboard
     pub clipboard: bool,
-    /// The seed to derive the keypair
     pub seed: Option<&'static str>,
-    /// Address to listen for connections
     pub listen: &'static str,
-    /// Stop p2p background process
     pub stop: bool,
-    /// Display background process status
     pub status: bool,
-    /// The secret key to protect your gistits.
     pub secret: Option<&'static str>,
-    /// The file to be hosted.
     pub file: Option<&'static OsStr>,
 }
 
 impl Action {
-    /// Parse [`ArgMatches`] into the dispatchable Host action.
-    /// Here we also merge user settings while keeping this order of priority:
-    /// arguments > local settings file > app defaults
-    ///
-    /// # Errors
-    ///
-    /// Fails with argument errors
     pub fn from_args(
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
@@ -68,7 +41,7 @@ impl Action {
             clipboard: args.is_present("clipboard"),
             seed: args.value_of("seed"),
             // SAFETY: Has default value
-            listen: unsafe { args.value_of("listen").unchecked_unwrap() },
+            listen: unsafe { args.value_of("listen").unwrap_unchecked() },
             stop: args.is_present("stop"),
             status: args.is_present("status"),
             secret: args.value_of("secret"),
@@ -149,11 +122,13 @@ impl Dispatch for Action {
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = get_runtime_dir()?;
         let mut node_hash: &str;
-        let (host, port) = self.listen.split_once(':').ok_or(Error::Argument)?;
+        let (host, port) = self.listen.split_once(':').ok_or(ErrorKind::Argument)?;
 
         if !Path::exists(&runtime_dir) {
             std::fs::create_dir(&runtime_dir)?;
         }
+
+        let bridge = Bridge::bounded(&runtime_dir)?;
 
         match config.process_command {
             ProcessCommand::StartWithSeed(seed) => {
@@ -166,6 +141,7 @@ impl Dispatch for Action {
             }
             ProcessCommand::Stop => {
                 gistit_line_out!("Stopping gistit network node process...");
+                bridge.tx.send(b"asdiuauhsduhas").await?;
             }
             ProcessCommand::Status => {
                 todo!()
@@ -187,9 +163,7 @@ impl Dispatch for Action {
 
 #[cfg(target_family = "unix")]
 fn get_runtime_dir() -> Result<PathBuf> {
-    let dirs = BaseDirs::new().ok_or_else(|| {
-        Error::Internal(InternalError::Other("no valid home directory".to_owned()))
-    })?;
+    let dirs = BaseDirs::new().ok_or(ErrorKind::Unknown)?;
     Ok(dirs
         .runtime_dir()
         .unwrap_or_else(|| Path::new("/tmp"))
@@ -197,15 +171,15 @@ fn get_runtime_dir() -> Result<PathBuf> {
 }
 
 fn spawn_daemon_from_args(runtime_dir: &Path, seed: &str, host: &str, port: &str) -> Result<()> {
-    let daemon = Command::new("gistit_daemon")
+    let stdout = std::fs::File::create(runtime_dir.join("gistit.out"))?;
+    let daemon = "/home/fabricio7p/Documents/Projects/gistit/core/target/debug/daemon";
+    let child = Command::new(daemon)
         .args(["--seed", seed])
         .args(["--runtime-dir", runtime_dir.to_string_lossy().as_ref()])
         .args(["--host", host])
         .args(["--port", port])
-        .stdout(Stdio::piped())
-        .output()?;
-
-    println!("{:?}", daemon);
+        .stdout(stdout)
+        .spawn()?;
 
     Ok(())
 }

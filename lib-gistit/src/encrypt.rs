@@ -16,7 +16,6 @@
 //!
 //! The encryption/decryption process relies on `AesGcm` algorithm with 256-bit key and 96-bit
 //! nonce. See [`aes_gcm`] for more info.
-
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 
@@ -25,8 +24,7 @@ use crypto::digest::Digest;
 use crypto::md5::Md5;
 use crypto::scrypt::{scrypt_simple, ScryptParams};
 
-use crate::errors::encryption::EncryptionError;
-use crate::Result;
+use crate::{ErrorKind, Result};
 
 /// Allowed secret character range
 const ALLOWED_SECRET_CHAR_LENGTH_RANGE: std::ops::RangeInclusive<usize> = 5..=50;
@@ -110,7 +108,7 @@ impl Check for Secret {
         if ALLOWED_SECRET_CHAR_LENGTH_RANGE.contains(&self.inner.len()) {
             Ok(())
         } else {
-            Err(EncryptionError::SecretLength.into())
+            Err(ErrorKind::EncryptionPadding.into())
         }
     }
 }
@@ -143,9 +141,7 @@ pub fn encrypt_aes256_u12nonce(secret: &[u8], raw_data: &[u8]) -> Result<(Vec<u8
     let magic: [u8; 12] = rand::random();
     let nonce = Nonce::from_slice(&magic);
 
-    let encrypted = cipher
-        .encrypt(nonce, raw_data.as_ref())
-        .map_err(EncryptionError::Cipher)?;
+    let encrypted = cipher.encrypt(nonce, raw_data.as_ref())?;
 
     Ok((encrypted, nonce.to_vec()))
 }
@@ -166,9 +162,7 @@ pub fn decrypt_aes256_u12nonce(
     let cipher = Aes256Gcm::new(key);
     let nonce = Nonce::from_slice(magic);
 
-    let decrypted = cipher
-        .decrypt(nonce, encrypted_data.as_ref())
-        .map_err(EncryptionError::Cipher)?;
+    let decrypted = cipher.decrypt(nonce, encrypted_data.as_ref())?;
 
     Ok(decrypted)
 }

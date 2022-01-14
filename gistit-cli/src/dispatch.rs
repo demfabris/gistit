@@ -1,31 +1,22 @@
-//! The Dispatch module
-
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use lib_gistit::file::{EncodedFileData, EncryptedFile, File, FileReady};
-use lib_gistit::Result;
 
-use crate::gistit_line_out;
+use crate::{gistit_line_out, Result};
 
 #[cfg(test)]
 use std::time::{SystemTime, UNIX_EPOCH};
-
-#[cfg(doc)]
-use lib_gistit::errors::io::IoError;
 
 #[async_trait]
 pub trait Dispatch {
     type InnerData;
 
-    /// Perform the checks needed
     async fn prepare(&'static self) -> Result<Self::InnerData>;
 
-    /// Execute the action
     async fn dispatch(&'static self, payload: Self::InnerData) -> Result<()>;
 }
 
-#[async_trait]
 pub trait Hasheable {
     fn hash(&self) -> String;
 }
@@ -44,11 +35,6 @@ pub struct GistitPayload {
 }
 
 impl GistitPayload {
-    /// Gets a copy of payload data as base64 decoded bytes
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`IoError`]
     pub async fn to_file(&self) -> Result<Box<dyn FileReady + Send + Sync>> {
         let name = self.gistit.name.clone();
         if let Some(secret) = &self.secret {
@@ -135,8 +121,6 @@ impl GistitInner {
 #[cfg(test)]
 mod tests {
     use lib_gistit::encrypt::encrypt_aes256_u12nonce;
-    use lib_gistit::errors::file::FileError;
-    use lib_gistit::errors::Error;
     use rand::distributions::Alphanumeric;
     use rand::Rng;
 
