@@ -14,11 +14,7 @@
     "MIN": 50,
     "MAX": 100
   },
-  "TIMESTAMP_DELTA_LIMIT_MS": 120000000,
-  "LIFESPAN_VALUE": {
-    "MIN": 300,
-    "MAX": 3600
-  },
+  "LIFESPAN": 3600000,
   "FILE_SIZE": {
     "MIN": 20,
     "MAX": 200000

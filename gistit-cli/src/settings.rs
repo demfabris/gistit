@@ -68,18 +68,14 @@ impl Default for GistitGlobal {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GistitSend {
-    pub colorscheme: Option<String>,
     pub author: Option<String>,
-    pub lifespan: Option<String>,
     pub clipboard: Option<bool>,
 }
 
 impl Default for GistitSend {
     fn default() -> Self {
         Self {
-            colorscheme: Some(String::from("ansi")),
             author: names::Generator::default().next(),
-            lifespan: Some(String::from("3600")),
             clipboard: Some(false),
         }
     }
@@ -121,9 +117,7 @@ impl Mergeable for GistitSend {
         let rhs = maybe_rhs.unwrap_or_default();
         let clipboard = map_false_to_none(self.clipboard);
         Self {
-            colorscheme: self.colorscheme.or(rhs.colorscheme),
             author: self.author.or(rhs.author),
-            lifespan: self.lifespan.or(rhs.lifespan),
             clipboard: clipboard.or(rhs.clipboard),
         }
     }
@@ -266,7 +260,24 @@ gistit_global:
   save_location: null
 
 gistit_send:
-  # Default colorscheme to be used when sending.
+  # Annotate sent gistits with an author name.
+  # Defaults to a random generated `adjective-noun`
+  # (leave null to use default)
+  author: null
+
+  # How long the gistit will be avaiable to be fetched.
+  # VALUES: 300 - 3600
+  lifespan: 3600
+
+  # Always attempt to copy the sent gistit hash to system clipboard.
+  # WARNING: This feature doesn't always work and can prevent you from executing
+  # gistit-cli.
+  #
+  # see how it works at: https://gistit.io/docs/clipboard
+  clipboard: false
+
+gistit_fetch:
+  # Default colorscheme to preview gistits on your terminal.
   # Supported colorschemes:
   # --- 1337
   # --- Coldark-Cold
@@ -292,27 +303,6 @@ gistit_send:
   # --- gruvbox-dark
   # --- gruvbox-light
   # --- zenburn
-  colorscheme: "ansi"
-
-  # Annotate sent gistits with an author name.
-  # Defaults to a random generated `adjective-noun`
-  # (leave null to use default)
-  author: null
-
-  # How long the gistit will be avaiable to be fetched.
-  # VALUES: 300 - 3600
-  lifespan: 3600
-
-  # Always attempt to copy the sent gistit hash to system clipboard.
-  # WARNING: This feature doesn't always work and can prevent you from executing
-  # gistit-cli.
-  #
-  # see how it works at: https://gistit.io/docs/clipboard
-  clipboard: false
-
-gistit_fetch:
-  # Default colorscheme to preview gistits on your terminal.
-  # Same colorschemes supported as `gistit_send`.
   colorscheme: "ansi"
 
   # Automatically save fetched gistits to local fs.

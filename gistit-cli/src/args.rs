@@ -64,33 +64,12 @@ Beware to mistakenly overwriting your settings.",
                         .value_hint(ValueHint::Username),
                 )
                 .arg(
-                    Arg::new("lifespan")
-                        .long("lifespan")
-                        .short('l')
-                        .help("With a custom lifespan")
-                        .requires("file")
-                        .takes_value(true)
-                        .default_value("3600"),
-                )
-                .arg(
                     Arg::new("secret")
                         .long("secret")
                         .short('s')
                         .help("With password encryption")
                         .takes_value(true)
                         .requires("file"),
-                )
-                .arg(
-                    Arg::new("theme")
-                        .long("theme")
-                        .short('t')
-                        .requires("file")
-                        .takes_value(true)
-                        .help("The color scheme to apply syntax highlighting")
-                        .long_help(
-                            "The color scheme to apply syntax highlighting.
-Run `gistit --colorschemes` to list available ones.",
-                        ),
                 )
                 .arg(
                     Arg::new("clipboard")

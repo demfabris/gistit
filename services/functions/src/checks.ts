@@ -51,24 +51,6 @@ export function checkFileSize(size: number): void {
   else throw Error("File size not allowed");
 }
 
-/**
- * Check if timestamp is between margin of error
- * If it took more than 120s to reach server we refuse it
- * @function
- * @param {string} timestamp
- * @param {number} lifespan
- */
-export function checkTimeDelta(timestamp: string, lifespan: number): void {
-  const serverNow = Date.now();
-  const timeDelta = serverNow - Number(timestamp);
-
-  if (Math.abs(timeDelta) > defs.TIMESTAMP_DELTA_LIMIT_MS)
-    throw Error("Time delta beyond allowed limit, check your system time");
-
-  if (paramValueInRange(defs.LIFESPAN_VALUE, lifespan)) return;
-  else throw Error("Invalid lifespan parameter value");
-}
-
 interface RangeObj {
   MIN: number;
   MAX: number;

@@ -6,18 +6,15 @@ use lazy_static::lazy_static;
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use url::Url;
 
-use crate::{ErrorKind, Result};
-
 use crate::fetch::Action as FetchAction;
 use crate::host::Action as HostAction;
 use crate::send::Action as SendAction;
+use crate::{ErrorKind, Result};
 
 /// Allowed description length
 const ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE: RangeInclusive<usize> = 10..=100;
 /// Allowed author info length
 const ALLOWED_AUTHOR_CHAR_LENGTH_RANGE: RangeInclusive<usize> = 3..=30;
-/// Allowed lifespan range
-const ALLOWED_LIFESPAN_VALUE_RANGE: RangeInclusive<u16> = 300..=3600;
 /// Valid hash length
 const GISTIT_HASH_CHAR_LENGTH: usize = 33;
 
@@ -73,8 +70,6 @@ impl HostArgs for HostParams {}
 pub struct SendParams {
     pub author: &'static str,
     pub description: Option<&'static str>,
-    pub colorscheme: String,
-    pub lifespan: u16,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -118,8 +113,6 @@ impl Params {
         Ok(SendParams {
             author: action.author,
             description: action.description,
-            colorscheme: action.theme.clone().ok_or(ErrorKind::Argument)?,
-            lifespan: action.lifespan.parse::<u16>().unwrap(),
         })
     }
 
@@ -204,6 +197,7 @@ impl Check for SendParams {
             },
         )
     }
+
     fn author(&self) -> Result<()>
     where
         Self: SendArgs,
@@ -233,12 +227,14 @@ impl Check for FetchParams {
             }
         })
     }
+
     fn hash(&self) -> Result<()> {
         if let Some(hash) = &self.hash {
             validate_hash(hash)?;
         }
         Ok(())
     }
+
     fn url(&self) -> Result<()> {
         if let Some(url) = self.url {
             let url = Url::parse(url)?;
@@ -271,5 +267,6 @@ pub fn validate_hash(hash: &str) -> Result<()> {
     if !valid {
         return Err(ErrorKind::InvalidParam("invalid gistit hash format.", "--hash").into());
     }
+
     Ok(())
 }

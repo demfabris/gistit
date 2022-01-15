@@ -27,8 +27,6 @@ pub struct GistitPayload {
     pub hash: String,
     pub author: String,
     pub description: Option<String>,
-    pub colorscheme: String,
-    pub lifespan: u16,
     pub secret: Option<String>,
     pub timestamp: String,
     pub gistit: GistitInner,
@@ -63,8 +61,6 @@ impl GistitPayload {
             hash: "#125b0aeb7fa1bd1e597c9d2ea062a555".to_owned(),
             author: "Matthew McConaughey".to_owned(),
             description: Some("A gistit".to_owned()),
-            colorscheme: "ansi".to_owned(),
-            lifespan: 3600,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("System time to work")

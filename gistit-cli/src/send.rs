@@ -37,9 +37,7 @@ pub struct Action {
     pub file: &'static OsStr,
     pub description: Option<&'static str>,
     pub author: &'static str,
-    pub theme: Option<String>,
     pub secret: Option<&'static str>,
-    pub lifespan: &'static str,
     pub clipboard: bool,
     pub dry_run: bool,
 }
@@ -58,17 +56,13 @@ impl Action {
         let rhs_settings = get_runtime_settings()?.gistit_send.clone();
 
         let lhs_settings = Box::new(GistitSend {
-            colorscheme: args.value_of("theme").map(ToOwned::to_owned),
             author: args.value_of("author").map(ToOwned::to_owned),
-            lifespan: args.value_of("lifespan").map(ToOwned::to_owned),
             clipboard: Some(args.is_present("clipboard")),
         });
 
         let merged = lhs_settings.merge(rhs_settings);
-        let (author, theme, lifespan, clipboard) = (
+        let (author, clipboard) = (
             merged.author.ok_or(ErrorKind::Argument)?,
-            merged.colorscheme,
-            merged.lifespan.ok_or(ErrorKind::Argument)?,
             merged.clipboard.ok_or(ErrorKind::Argument)?,
         );
 
@@ -76,9 +70,7 @@ impl Action {
             file,
             description: args.value_of("description"),
             author: Box::leak(Box::new(author)),
-            theme,
             secret: args.value_of("secret"),
-            lifespan: Box::leak(Box::new(lifespan)),
             clipboard,
             dry_run: args.is_present("dry-run"),
         }))
@@ -130,8 +122,6 @@ impl Config {
             hash,
             author: params.author.to_owned(),
             description: params.description.map(ToOwned::to_owned),
-            colorscheme: params.colorscheme.clone(),
-            lifespan: params.lifespan,
             secret: self.maybe_secret.map(|t| t.to_str().to_owned()),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)

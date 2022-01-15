@@ -1,12 +1,8 @@
 import * as __fn from "firebase-functions";
 import * as __adm from "firebase-admin";
-import {
-  checkHash,
-  checkParamsCharLength,
-  checkTimeDelta,
-  checkFileSize,
-} from "./checks";
+import { checkHash, checkParamsCharLength, checkFileSize } from "./checks";
 import { rscryptCompare } from "./rscrypt";
+import { LIFESPAN } from "./defs.json";
 
 __adm.initializeApp();
 const db = __adm.firestore();
@@ -15,8 +11,6 @@ type GistitPayload = {
   hash: string;
   author: string;
   description: string;
-  colorscheme: string;
-  lifespan: number;
   timestamp: string;
   secret: string;
   gistit: {
@@ -33,23 +27,18 @@ export const load = __fn.https.onRequest(async (req, res) => {
       hash,
       author,
       description,
-      colorscheme,
-      lifespan,
       timestamp,
       secret,
       gistit: { name, lang, data, size },
-    } = req.body;
+    } = req.body as GistitPayload;
 
     checkHash(hash);
     checkParamsCharLength(author, description, secret);
-    checkTimeDelta(timestamp, lifespan);
     checkFileSize(size);
 
     await db.collection("gistits").doc(hash).set({
       author,
       description,
-      colorscheme,
-      lifespan,
       secret,
       timestamp: timestamp.toString(),
       gistit: { name, lang, data, size },
@@ -102,13 +91,13 @@ export const createReservedData = __fn.firestore
   .document("gistits/{hash}")
   .onCreate(async (snap, context) => {
     const hash = (context as onChangeContext).params.hash;
-    const { timestamp, lifespan } = snap.data() as GistitPayload;
+    const { timestamp } = snap.data() as GistitPayload;
 
     return db
       .collection("reserved")
       .doc(hash)
       .set({
-        removeAt: timestamp + lifespan * 1000,
+        removeAt: timestamp + LIFESPAN,
         reuploaded: 0,
       });
   });
@@ -117,13 +106,13 @@ export const updateReservedData = __fn.firestore
   .document("gistits/{hash}")
   .onUpdate(async (change, context) => {
     const hash = (context as onChangeContext).params.hash;
-    const { timestamp, lifespan } = change.after.data() as GistitPayload;
+    const { timestamp } = change.after.data() as GistitPayload;
 
     return db
       .collection("reserved")
       .doc(hash)
       .update({
-        removeAt: timestamp + lifespan * 1000,
+        removeAt: timestamp + LIFESPAN,
         reuploaded: __adm.firestore.FieldValue.increment(1),
       });
   });

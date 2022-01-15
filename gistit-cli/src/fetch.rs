@@ -122,10 +122,7 @@ impl Response {
                 success: Some(payload),
                 ..
             } => Ok(payload),
-            Self {
-                error: Some(error_msg),
-                ..
-            } => Err(ErrorKind::FetchUnexpectedResponse.into()),
+            Self { error: Some(_), .. } => Err(ErrorKind::FetchUnexpectedResponse.into()),
             _ => unreachable!("Gistit server is unreachable"),
         }
     }
@@ -142,9 +139,7 @@ fn preview_gistit(action: &Action, payload: &GistitPayload, file: &File) -> Resu
         header_string.push_str(&format!(" | {}", style(description).italic()));
     }
     // If user provided colorscheme we overwrite the stored one
-    let colorscheme = action
-        .colorscheme
-        .unwrap_or_else(|| payload.colorscheme.as_str());
+    let colorscheme = action.colorscheme.unwrap_or("ansi");
 
     let input = bat::Input::from_reader(file.data())
         .name(file.name())
