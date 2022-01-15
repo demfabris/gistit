@@ -18,7 +18,7 @@ use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::params::Params;
 use crate::params::SendParams;
 use crate::settings::{get_runtime_settings, GistitSend, Mergeable};
-use crate::{gistit_line_out, ErrorKind, Result};
+use crate::{gistit_line_out, gistit_warn, ErrorKind, Result};
 
 const SERVER_IDENTIFIER_CHAR: char = '#';
 
@@ -183,6 +183,7 @@ impl Dispatch for Action {
     }
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         if self.dry_run {
+            gistit_warn!("Dry-run mode, exiting...");
             return Ok(());
         }
 
