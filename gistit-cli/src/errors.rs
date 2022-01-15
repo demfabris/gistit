@@ -80,14 +80,11 @@ pub enum ErrorKind {
     Request(reqwest::Error),
     Tui(bat::error::Error),
     SerializeYaml(serde_yaml::Error),
-
     Colorscheme(Option<String>),
     InvalidParam(&'static str, &'static str),
-
     FetchNotFound,
     FetchUnexpectedResponse,
     FetchEnoughRetries,
-
     Parsing,
     Argument,
     Settings,
@@ -125,7 +122,11 @@ impl From<ErrorKind> for Error {
             }
             ErrorKind::InvalidParam(msg, param) => Self {
                 kind,
-                cause: s_string(format!("{}\n{}", msg, style(param).red())),
+                cause: s_string(format!(
+                    "{}\n\nPARAM:\n    {}",
+                    msg,
+                    style(param).bold().red()
+                )),
             },
             ErrorKind::FetchNotFound => Self {
                 kind,
