@@ -137,13 +137,13 @@ and 'Standard Directories' on MacOS.",
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::new("theme")
-                        .long("theme")
-                        .short('t')
+                    Arg::new("colorscheme")
+                        .long("colorscheme")
+                        .short('c')
                         .takes_value(true)
-                        .help("The color scheme to apply syntax highlighting")
+                        .help("The colorscheme to apply syntax highlighting")
                         .long_help(
-                            "The color scheme to apply syntax highlighting.
+                            "The colorscheme to apply syntax highlighting.
 Run `gistit --colorschemes` to list available ones.",
                         ),
                 )

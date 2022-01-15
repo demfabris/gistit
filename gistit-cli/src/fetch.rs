@@ -35,7 +35,6 @@ pub struct Action {
     pub url: Option<&'static str>,
     pub secret: Option<&'static str>,
     pub colorscheme: Option<&'static str>,
-    pub no_syntax_highlighting: bool,
     pub preview: bool,
     pub save: bool,
 }
@@ -47,7 +46,7 @@ impl Action {
         let rhs_settings = get_runtime_settings()?.gistit_fetch.clone();
 
         let lhs_settings = Box::new(GistitFetch {
-            colorscheme: args.value_of("theme").map(ToOwned::to_owned),
+            colorscheme: args.value_of("colorscheme").map(ToOwned::to_owned),
             preview: Some(args.is_present("preview")),
             save: Some(args.is_present("save")),
         });
@@ -63,7 +62,6 @@ impl Action {
             hash: args.value_of("hash"),
             url: args.value_of("url"),
             secret: args.value_of("secret"),
-            no_syntax_highlighting: args.is_present("no-syntax-highlighting"),
             colorscheme: Some(Box::leak(Box::new(colorscheme))),
             preview,
             save,
