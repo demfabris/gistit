@@ -31,7 +31,7 @@ impl From<crate::Settings> for Error {
 impl From<lib_gistit::Error> for Error {
     fn from(err: lib_gistit::Error) -> Self {
         Self {
-            cause: "internal error.",
+            cause: err.cause,
             kind: ErrorKind::Internal(err),
         }
     }
@@ -58,8 +58,8 @@ impl From<reqwest::Error> for Error {
 impl From<bat::error::Error> for Error {
     fn from(err: bat::error::Error) -> Self {
         Self {
-            kind: ErrorKind::Tui(err),
             cause: "failed to print to stdout.",
+            kind: ErrorKind::Tui(err),
         }
     }
 }
@@ -67,8 +67,8 @@ impl From<bat::error::Error> for Error {
 impl From<serde_yaml::Error> for Error {
     fn from(err: serde_yaml::Error) -> Self {
         Self {
-            kind: ErrorKind::SerializeYaml(err),
             cause: "failed to parse yaml file.",
+            kind: ErrorKind::SerializeYaml(err),
         }
     }
 }

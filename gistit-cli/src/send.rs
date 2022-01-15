@@ -151,10 +151,7 @@ impl Response {
                 success: Some(hash),
                 ..
             } => Ok(hash),
-            Self {
-                error: Some(error_msg),
-                ..
-            } => Err(ErrorKind::Unknown.into()),
+            Self { error: Some(_), .. } => Err(ErrorKind::Unknown.into()),
             _ => unreachable!("Gistit server is unreachable"),
         }
     }
@@ -188,8 +185,8 @@ impl Dispatch for Action {
         if self.dry_run {
             return Ok(());
         }
-        gistit_line_out!("Uploading to server...");
 
+        gistit_line_out!("Uploading to server...");
         let payload = config.into_payload().await?;
         let response: Response = reqwest::Client::new()
             .post(GISTIT_SERVER_LOAD_URL.to_string())
@@ -213,15 +210,15 @@ impl Dispatch for Action {
     hash: {} {}
     url: {}{}
             "#,
-            style("SUCCESS").green(),
-            style(&server_hash).yellow(),
+            "SUCCESS",
+            style(&server_hash).bold().blue(),
             if self.clipboard {
                 style("(copied to clipboard)").italic().to_string()
             } else {
                 "".to_string()
             },
-            style("https://gistit.vercel.app/").blue(),
-            style(&server_hash).blue()
+            "https://gistit.vercel.app/",
+            style(&server_hash).bold().blue()
         );
         Ok(())
     }
