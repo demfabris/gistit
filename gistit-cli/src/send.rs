@@ -18,7 +18,7 @@ use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::params::Params;
 use crate::params::SendParams;
 use crate::settings::{get_runtime_settings, GistitSend, Mergeable};
-use crate::{gistit_line_out, gistit_warn, ErrorKind, Result};
+use crate::{prettyln, warnln, ErrorKind, Result};
 
 const SERVER_IDENTIFIER_CHAR: char = '#';
 
@@ -47,11 +47,10 @@ impl Action {
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         let file = args.value_of_os("file").ok_or(ErrorKind::Argument)?;
-        gistit_line_out!(format!(
-            "{} {}",
-            style("Preparing gistit:").bold(),
+        prettyln!(
+            "Preparing gistit: {}",
             style(name_from_path(Path::new(file))).green()
-        ));
+        );
 
         let rhs_settings = get_runtime_settings()?.gistit_send.clone();
 
@@ -170,7 +169,7 @@ impl Dispatch for Action {
 
             if let Some(secret_str) = self.secret {
                 let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
-                gistit_line_out!("Encrypting...");
+                prettyln!("Encrypting...");
 
                 let encrypted_file = file.into_encrypted(secret_str).await?;
                 (Box::new(encrypted_file), Some(hashed_secret))
@@ -183,11 +182,11 @@ impl Dispatch for Action {
     }
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         if self.dry_run {
-            gistit_warn!("Dry-run mode, exiting...");
+            warnln!("Dry-run mode, exiting...");
             return Ok(());
         }
 
-        gistit_line_out!("Uploading to server...");
+        prettyln!("Uploading to server...");
         let payload = config.into_payload().await?;
         let response: Response = reqwest::Client::new()
             .post(GISTIT_SERVER_LOAD_URL.to_string())
@@ -207,11 +206,10 @@ impl Dispatch for Action {
 
         println!(
             r#"
-{}:
+SUCCESS:
     hash: {} {}
     url: {}{}
             "#,
-            "SUCCESS",
             style(&server_hash).bold().blue(),
             if self.clipboard {
                 style("(copied to clipboard)").italic().to_string()

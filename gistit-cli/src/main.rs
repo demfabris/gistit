@@ -76,7 +76,7 @@ async fn run() -> Result<()> {
 
             if matches.is_present("config-init") {
                 Settings::save_new().await?;
-                gistit_line_out!("Settings.yaml created!");
+                prettyln!("Settings.yaml created!");
                 std::process::exit(0);
             }
 
@@ -142,7 +142,7 @@ macro_rules! dispatch_from_args {
 }
 
 #[macro_export]
-macro_rules! gistit_warn {
+macro_rules! warnln {
     ($warn:expr) => {{
         use crate::CURRENT_ACTION;
         use console::style;
@@ -153,17 +153,34 @@ macro_rules! gistit_warn {
                 "{}: in {}{}: \n    {}",
                 style("warning").yellow().bold(),
                 style("gistit-").green().bold(),
-                style(CURRENT_ACTION.get().expect("Internal error"))
+                style(CURRENT_ACTION.get().unwrap_or(&"any".to_owned()))
                     .green()
                     .bold(),
                 $warn
             )
         }
     }};
+    ($msg:literal, $($rest:expr)*) => {{
+        use crate::CURRENT_ACTION;
+        use console::style;
+        let omit_stdout = crate::OMIT_STDOUT.load(::std::sync::atomic::Ordering::Relaxed);
+
+        if !omit_stdout {
+            let msg = format!($msg, $($rest,)*);
+            println!("{}: in {}{}: \n    {}",
+                style("warning").yellow().bold(),
+                style("gistit-").green().bold(),
+                style(CURRENT_ACTION.get().unwrap_or("any"))
+                    .green()
+                    .bold(),
+                msg
+            );
+        }
+    }};
 }
 
 #[macro_export]
-macro_rules! gistit_line_out {
+macro_rules! prettyln {
     ($msg:expr) => {{
         let omit_stdout = crate::OMIT_STDOUT.load(::std::sync::atomic::Ordering::Relaxed);
 
@@ -171,8 +188,16 @@ macro_rules! gistit_line_out {
             println!(
                 "{}{}",
                 console::Emoji("\u{2734}  ", "> "),
-                console::style($msg).bold()
+                console::style($msg).bold(),
             );
+        }
+    }};
+    ($msg:literal, $($rest:expr)*) => {{
+        let omit_stdout = crate::OMIT_STDOUT.load(::std::sync::atomic::Ordering::Relaxed);
+
+        if !omit_stdout {
+            let msg = format!($msg, $($rest,)*);
+            println!("{}{}", console::Emoji("\u{2734}  ", "> "), console::style(msg).bold());
         }
     }};
 }

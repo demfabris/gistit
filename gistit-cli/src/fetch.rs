@@ -16,7 +16,7 @@ use lib_gistit::file::{File, FileReady};
 use crate::dispatch::{Dispatch, GistitPayload};
 use crate::params::{FetchParams, Params};
 use crate::settings::{get_runtime_settings, GistitFetch, Mergeable};
-use crate::{gistit_line_out, gistit_warn, ErrorKind, Result};
+use crate::{prettyln, warnln, ErrorKind, Result};
 
 lazy_static! {
     static ref GISTIT_SECRET_RETRY_COUNT: AtomicU8 = AtomicU8::new(0);
@@ -171,17 +171,16 @@ fn print_success(hash: &str, prevent_ask_tip: bool) {
     let tip = if prevent_ask_tip {
         ""
     } else {
-        "\n(You can disable the asking behavior by using one of the flags: '--save', '--preview')\n"
+        "\nYou can disable the asking behavior by using one of the flags: '--save', '--preview'\n"
     };
     println!(
         r#"
-{}:
+SUCCESS:
     hash: {}
     url: {}{}
 {}"#,
-        style("SUCCESS").green(),
-        style(hash).yellow(),
-        style("https://gistit.vercel.app/").blue(),
+        style(hash).blue(),
+        "https://gistit.vercel.app/",
         style(hash).blue(),
         style(tip).italic(),
     );
@@ -203,7 +202,7 @@ impl Dispatch for Action {
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let json = config.into_json()?;
         // TODO: branch this into '#' and '@'
-        gistit_line_out!("Contacting host...");
+        prettyln!("Contacting host...");
         let first_try = reqwest::Client::new()
             .post(GISTIT_SERVER_GET_URL.to_string())
             .json(&json)
@@ -258,13 +257,11 @@ impl Dispatch for Action {
                 let count = GISTIT_SECRET_RETRY_COUNT.fetch_add(1, Ordering::Relaxed);
                 if count <= 2 {
                     let prompt_msg = if self.secret.is_some() {
-                        gistit_warn!(style("\u{1f512}Secret is invalid").yellow());
-                        style("\nTry again").bold().to_string()
+                        warnln!("Secret is invalid");
+                        "\ntry again".to_owned()
                     } else {
-                        gistit_warn!(
-                            style("\u{1f512}A secret is required for this Gistit").yellow()
-                        );
-                        style("\nSecret").bold().to_string()
+                        warnln!("A secret is required to fetch this gistit");
+                        "\nsecret".to_owned()
                     };
 
                     let new_secret = Password::new().with_prompt(prompt_msg).interact()?;

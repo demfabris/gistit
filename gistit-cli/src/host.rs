@@ -1,10 +1,12 @@
 //! The host module
 use std::ffi::OsStr;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use async_trait::async_trait;
 use clap::ArgMatches;
+use console::style;
 use directories::BaseDirs;
 
 use lib_gistit::encrypt::{HashedSecret, Secret};
@@ -13,21 +15,18 @@ use lib_gistit::ipc::Bridge;
 
 use crate::dispatch::Dispatch;
 use crate::params::Params;
-use crate::{gistit_line_out, ErrorKind, Result};
-
-const UNIX_SIGKILL: i32 = 9;
-const UNIX_SIGNOTHING: i32 = 0;
+use crate::{prettyln, ErrorKind, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
-    pub start: bool,
-    pub clipboard: bool,
-    pub seed: Option<&'static str>,
-    pub listen: &'static str,
+    pub start: Option<&'static str>,
     pub stop: bool,
     pub status: bool,
-    pub secret: Option<&'static str>,
+    pub clipboard: bool,
+    pub host: &'static str,
+    pub port: &'static str,
     pub file: Option<&'static OsStr>,
+    pub secret: Option<&'static str>,
 }
 
 impl Action {
@@ -37,11 +36,11 @@ impl Action {
         // merge settings
 
         Ok(Box::new(Self {
-            start: args.is_present("start"),
+            start: args.value_of("start"),
             clipboard: args.is_present("clipboard"),
-            seed: args.value_of("seed"),
-            // SAFETY: Has default value
-            listen: unsafe { args.value_of("listen").unwrap_unchecked() },
+            // SAFETY: Has default values
+            host: unsafe { args.value_of("host").unwrap_unchecked() },
+            port: unsafe { args.value_of("port").unwrap_unchecked() },
             stop: args.is_present("stop"),
             status: args.is_present("status"),
             secret: args.value_of("secret"),
@@ -51,8 +50,7 @@ impl Action {
 }
 
 pub enum ProcessCommand {
-    StartWithSeed(&'static str),
-    Start,
+    Start(&'static str),
     Stop,
     Status,
     Skip,
@@ -84,13 +82,12 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&'static self) -> Result<Self::InnerData> {
-        let params = Params::from_host(self).check_consume()?;
-        let command = match (self.start, self.seed, self.stop, self.status) {
-            (true, Some(seed), false, false) => ProcessCommand::StartWithSeed(seed),
-            (true, None, false, false) => ProcessCommand::Start,
-            (false, None, true, false) => ProcessCommand::Stop,
-            (false, None, false, true) => ProcessCommand::Status,
-            (_, _, _, _) => ProcessCommand::Skip,
+        Params::from_host(self).check_consume()?;
+        let command = match (self.start, self.stop, self.status) {
+            (Some(seed), false, false) => ProcessCommand::Start(seed),
+            (None, true, false) => ProcessCommand::Stop,
+            (None, false, true) => ProcessCommand::Status,
+            (_, _, _) => ProcessCommand::Skip,
         };
 
         // Construct `FileReady` if a file was provided, that means user wants to host a new file
@@ -105,7 +102,7 @@ impl Dispatch for Action {
             // If secret provided, hash it and encrypt file
             if let Some(secret_str) = self.secret {
                 let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
-                gistit_line_out!("Encrypting...");
+                prettyln!("Encrypting...");
 
                 let encrypted_file = file.into_encrypted(secret_str).await?;
                 (Some(Box::new(encrypted_file)), Some(hashed_secret))
@@ -121,35 +118,30 @@ impl Dispatch for Action {
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = get_runtime_dir()?;
-        let mut node_hash: &str;
-        let (host, port) = self.listen.split_once(':').ok_or(ErrorKind::Argument)?;
 
-        if !Path::exists(&runtime_dir) {
-            std::fs::create_dir(&runtime_dir)?;
-        }
-
-        let bridge = Bridge::bounded(&runtime_dir)?;
-
+        // let bridge = Bridge::connect(&runtime_dir)?;
         match config.process_command {
-            ProcessCommand::StartWithSeed(seed) => {
-                gistit_line_out!("Starting gistit network node process with seed...");
-                spawn_daemon_from_args(&runtime_dir, seed, host, port)?;
-            }
-            ProcessCommand::Start => {
-                gistit_line_out!("Starting gistit network node process...");
-                spawn_daemon_from_args(&runtime_dir, "none", host, port)?;
+            ProcessCommand::Start(seed) => {
+                let pid = spawn(&runtime_dir, seed, self.host, self.port)?;
+                prettyln!(
+                    "Starting gistit network node process, pid: {}",
+                    style(pid).blue()
+                );
             }
             ProcessCommand::Stop => {
-                gistit_line_out!("Stopping gistit network node process...");
-                bridge.tx.send(b"asdiuauhsduhas").await?;
+                prettyln!("Stopping gistit network node process...");
             }
             ProcessCommand::Status => {
-                todo!()
+                if Bridge::check_alive(&runtime_dir) {
+                    prettyln!("Running");
+                } else {
+                    prettyln!("Not running");
+                }
             }
             // Not a process instruction
             ProcessCommand::Skip => {
                 if let Self::InnerData {
-                    maybe_file: Some(file),
+                    maybe_file: Some(_file),
                     ..
                 } = config
                 {
@@ -161,18 +153,17 @@ impl Dispatch for Action {
     }
 }
 
-#[cfg(target_family = "unix")]
 fn get_runtime_dir() -> Result<PathBuf> {
     let dirs = BaseDirs::new().ok_or(ErrorKind::Unknown)?;
     Ok(dirs
         .runtime_dir()
-        .unwrap_or_else(|| Path::new("/tmp"))
-        .to_path_buf())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| std::env::temp_dir()))
 }
 
-fn spawn_daemon_from_args(runtime_dir: &Path, seed: &str, host: &str, port: &str) -> Result<()> {
-    let stdout = std::fs::File::create(runtime_dir.join("gistit.out"))?;
-    let daemon = "/home/fabricio7p/Documents/Projects/gistit/core/target/debug/daemon";
+fn spawn(runtime_dir: &Path, seed: &str, host: &str, port: &str) -> Result<u32> {
+    let stdout = fs::File::create(runtime_dir.join("gistit.out"))?;
+    let daemon = "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
     let child = Command::new(daemon)
         .args(["--seed", seed])
         .args(["--runtime-dir", runtime_dir.to_string_lossy().as_ref()])
@@ -181,5 +172,5 @@ fn spawn_daemon_from_args(runtime_dir: &Path, seed: &str, host: &str, port: &str
         .stdout(stdout)
         .spawn()?;
 
-    Ok(())
+    Ok(child.id())
 }

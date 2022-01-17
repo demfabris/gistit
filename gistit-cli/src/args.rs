@@ -169,18 +169,16 @@ Run `gistit --colorschemes` to list available ones.",
 to peer file sharing.",
                         )
                         .group("process_cmd")
+                        .takes_value(true)
+                        .value_name("seed")
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
-                    Arg::new("seed")
-                        .long("seed")
-                        .help("Seed to derive your ed25519 keypair under peer to peer connections.")
-                        .long_help("Seed to derive your ed25519 keypair under peer to peer connections.
-Use this to have a peristing keypair that enables your peers to recognize you in future connections, provided you entered the same seed.")
-                        .takes_value(true)
-                        .value_name("seed")
-                        .requires("start")
-                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                    Arg::new("stop")
+                        .long("stop")
+                        .group("process_cmd")
+                        .help("Stop gistit node background process")
+                        .conflicts_with_all(&["start", "secret", "file", "status"]),
                 )
                 .arg(
                     Arg::new("clipboard")
@@ -190,23 +188,23 @@ Use this to have a peristing keypair that enables your peers to recognize you in
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
-                    Arg::new("listen")
-                        .long("listen")
-                        .help("The Ipv4 address used to listen for inbound connections. Defaults to '127.0.0.1:0'")
-                        .long_help("The Ipv4 address used to listen for inbound connections. 
-Defaults to '127.0.0.1:0', which means (localhost:random_port)")
+                    Arg::new("host")
+                        .long("host")
+                        .help("The Ipv4 address used to listen for inbound connections. Defaults to '127.0.0.1'")
                         .takes_value(true)
-                        .value_name("address:port")
-                        .default_value("127.0.0.1:0")
+                        .value_name("ivp4-address")
+                        .default_value("127.0.0.1")
                         .value_hint(ValueHint::Hostname)
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
-                    Arg::new("stop")
-                        .long("stop")
-                        .group("process_cmd")
-                        .help("Stop gistit node background process")
-                        .conflicts_with_all(&["start", "secret", "file", "status"]),
+                    Arg::new("port")
+                        .long("port")
+                        .help("The port to listen for connections. Defaults to 0 (random open port)")
+                        .takes_value(true)
+                        .value_name("port")
+                        .default_value("0")
+                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("secret")

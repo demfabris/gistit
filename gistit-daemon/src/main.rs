@@ -31,13 +31,14 @@ use std::convert::Infallible;
 use std::ffi::OsStr;
 use std::net::Ipv4Addr;
 use std::path::Path;
-use unchecked_unwrap::UncheckedUnwrap;
 
-use ::clap::ArgMatches;
+use clap::ArgMatches;
 
-use crate::args::app;
-use crate::errors::ErrorKind;
-use crate::network::{ipv4_to_multiaddr, NetworkConfig};
+use args::app;
+use errors::ErrorKind;
+use network::{ipv4_to_multiaddr, NetworkConfig};
+
+use lib_gistit::ipc::Bridge;
 
 mod args;
 mod errors;
@@ -45,9 +46,6 @@ mod network;
 
 pub type Error = crate::errors::Error;
 pub type Result<T> = std::result::Result<T, Error>;
-
-#[cfg(not(feature = "host"))]
-fn main() {}
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -62,16 +60,16 @@ impl Config {
         // SAFETY: They all have default values
         unsafe {
             Ok(Self {
-                seed: args.value_of("seed").unchecked_unwrap(),
-                runtime_dir: args.value_of_os("runtime-dir").unchecked_unwrap(),
+                seed: args.value_of("seed").unwrap_unchecked(),
+                runtime_dir: args.value_of_os("runtime-dir").unwrap_unchecked(),
                 inbound_addr: args
                     .value_of("host")
-                    .unchecked_unwrap()
+                    .unwrap_unchecked()
                     .parse()
                     .map_err(|_| ErrorKind::InvalidArgs)?,
                 inbound_port: args
                     .value_of("port")
-                    .unchecked_unwrap()
+                    .unwrap_unchecked()
                     .parse()
                     .map_err(|_| ErrorKind::InvalidArgs)?,
             })
@@ -95,7 +93,8 @@ async fn run() -> Result<()> {
         runtime_dir, seed, inbound_addr, inbound_port
     );
 
-    let node = NetworkConfig::new(seed, multiaddr, runtime_dir)?
+    let bridge = Bridge::bounded(runtime_dir)?;
+    let node = NetworkConfig::new(seed, multiaddr, runtime_dir, bridge)?
         .apply()
         .await?;
 
@@ -106,11 +105,10 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "host")]
 #[tokio::main]
 async fn main() {
     if let Err(err) = run().await {
-        println!("{:?}", err);
+        eprintln!("DAEMON ERROR: {:?}", err);
         std::process::exit(1);
     }
 }

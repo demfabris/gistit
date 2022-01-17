@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use lib_gistit::file::{EncodedFileData, EncryptedFile, File, FileReady};
 
-use crate::{gistit_line_out, Result};
+use crate::{prettyln, Result};
 
 #[cfg(test)]
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -36,7 +36,7 @@ impl GistitPayload {
     pub async fn to_file(&self) -> Result<Box<dyn FileReady + Send + Sync>> {
         let name = self.gistit.name.clone();
         if let Some(secret) = &self.secret {
-            gistit_line_out!("Decrypting...");
+            prettyln!("Decrypting...");
             Ok(Box::new(
                 EncryptedFile::from_bytes_encoded(self.gistit.data.inner.as_bytes(), &name)
                     .await?

@@ -1,56 +1,68 @@
 //! Inter process comunication module
 #![allow(clippy::missing_errors_doc)]
 
-// use std::fs::remove_file;
-// use std::ops::Drop;
+use std::fs::{metadata, remove_file};
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use tokio::net::UnixDatagram;
 
 use crate::Result;
 
-const SOCKET_TX: &str = "__gistit_tx";
-const SOCKET_RX: &str = "__gistit_rx";
+const NAMED_SOCKET: &str = "gistit-0";
 
 #[derive(Debug)]
 pub struct Bridge {
-    pub tx: UnixDatagram,
-    pub rx: UnixDatagram,
+    pub sock: UnixDatagram,
+    keep_alive: bool,
     __base: PathBuf,
 }
 
 impl Bridge {
     pub fn bounded(base: &Path) -> Result<Self> {
-        println!("binding tx {:?}", &base.join(SOCKET_TX));
+        println!("binding tx {:?}", &base.join(NAMED_SOCKET));
+        let sock_path = &base.join(NAMED_SOCKET);
+        if metadata(sock_path).is_ok() {
+            remove_file(sock_path)?;
+        }
+
         Ok(Self {
-            tx: UnixDatagram::bind(&base.join(SOCKET_TX))?,
-            rx: UnixDatagram::bind(&base.join(SOCKET_RX))?,
+            sock: UnixDatagram::bind(&base.join(NAMED_SOCKET))?,
+            keep_alive: false,
             __base: base.to_path_buf(),
         })
     }
 
     pub fn connect(base: &Path) -> Result<Self> {
-        let tx = UnixDatagram::unbound()?;
-        let rx = UnixDatagram::unbound()?;
-        println!("connecting tx {:?}", &base.join(SOCKET_TX));
-        tx.connect(&base.join(SOCKET_TX))?;
-        rx.connect(&base.join(SOCKET_RX))?;
+        let sock = UnixDatagram::unbound()?;
+        println!("connecting tx {:?}", &base.join(NAMED_SOCKET));
+        sock.connect(&base.join(NAMED_SOCKET))?;
 
         Ok(Self {
-            tx,
-            rx,
+            sock,
+            keep_alive: true,
             __base: base.to_path_buf(),
         })
     }
+
+    pub fn check_alive(base: &Path) -> bool {
+        if Bridge::connect(base).is_err() {
+            false
+        } else {
+            true
+        }
+    }
 }
 
-// impl Drop for Bridge {
-//     fn drop(&mut self) {
-//         remove_file(self.__base.join(SOCKET_TX)).expect("To remove tx socket");
-//         remove_file(self.__base.join(SOCKET_RX)).expect("To remove rx socket");
-//     }
-// }
+impl Drop for Bridge {
+    fn drop(&mut self) {
+        if !self.keep_alive {
+            remove_file(self.__base.join(NAMED_SOCKET)).expect("to remove named socket");
+        }
+    }
+}
 
+#[derive(Serialize, Deserialize)]
 pub enum Command {
     Init,
 }

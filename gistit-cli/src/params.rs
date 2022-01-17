@@ -81,7 +81,8 @@ pub struct FetchParams {
 
 #[derive(Clone, Default, Debug)]
 pub struct HostParams {
-    pub listen_addr: &'static str,
+    pub host: &'static str,
+    pub port: &'static str,
 }
 
 impl SendParams {
@@ -126,7 +127,8 @@ impl Params {
 
     pub const fn from_host(action: &HostAction) -> HostParams {
         HostParams {
-            listen_addr: action.listen,
+            host: action.host,
+            port: action.port,
         }
     }
 }
@@ -251,8 +253,8 @@ impl Check for HostParams {
     fn listen_addr(&self) -> Result<()> {
         let ipv4_err = || ErrorKind::InvalidParam("invalid ipv4 format.", "--listen");
 
-        let (addr, port) = self.listen_addr.split_once(':').ok_or(ipv4_err())?;
-        addr.parse::<Ipv4Addr>().map_err(|_| ipv4_err())?;
+        let (host, port) = (self.host, self.port);
+        host.parse::<Ipv4Addr>().map_err(|_| ipv4_err())?;
 
         port.parse::<u16>()
             .map_err(|_| ErrorKind::InvalidParam("invalid port.", "--port"))?;

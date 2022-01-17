@@ -82,6 +82,7 @@ pub enum ErrorKind {
     SerializeYaml(serde_yaml::Error),
     Colorscheme(Option<String>),
     InvalidParam(&'static str, &'static str),
+    SignalDaemon,
     FetchNotFound,
     FetchUnexpectedResponse,
     FetchEnoughRetries,
@@ -127,6 +128,10 @@ impl From<ErrorKind> for Error {
                     msg,
                     style(param).bold().red()
                 )),
+            },
+            ErrorKind::SignalDaemon => Self {
+                kind,
+                cause: "failed to signal daemon process. (is it running?)",
             },
             ErrorKind::FetchNotFound => Self {
                 kind,

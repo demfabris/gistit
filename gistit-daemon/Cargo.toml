@@ -4,17 +4,14 @@ categories = ["command-line-utilities", "text-processing"]
 description = "Gistit daemon used for p2p file sharing"
 edition = "2021"
 keywords = ["code", "snippets", "share", "hash"]
-license = "MIT"
+license = "MIT or Apache-2.0"
 name = "gistit-daemon"
 repository = "https://github.com/fabricio7p/gistit"
 version = "0.1.0"
 
 [dependencies]
-notify = "4.0.17"
 async-trait = "0.1.52"
-unchecked_unwrap = "3.0.0"
 base64 = "0.13.0"
-daemonize = "0.4.1"
 directories = "4.0.1"
 lib-gistit = { path = "../lib-gistit/" }
 
@@ -31,9 +28,3 @@ version = "0.41.1"
 default-features = false
 features = ["noise", "kad", "identify", "mdns", "mplex", "tcp-async-io", "dns-async-std", "websocket", "yamux", "request-response"]
 
-[target.'cfg(unix)'.dependencies]
-libc = { version = "0.2.112" }
-
-[target.'cfg(windows)'.dependencies]
-windows-service = { version = "0.4.0" }
-# msvc

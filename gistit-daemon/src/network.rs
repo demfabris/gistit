@@ -33,20 +33,20 @@ pub struct NetworkConfig {
 }
 
 impl NetworkConfig {
-    pub fn new(seed: &str, local_multiaddr: Multiaddr, runtime_dir: &Path) -> Result<Self> {
-        let keypair = if seed == "none" {
-            identity::Keypair::generate_ed25519()
-        } else {
-            let mut bytes: Vec<u8> = seed.as_bytes().to_vec();
-            bytes.resize_with(32, || 0);
-            let mut bytes: [u8; 32] = bytes.try_into().unwrap();
+    pub fn new(
+        seed: &str,
+        local_multiaddr: Multiaddr,
+        runtime_dir: &Path,
+        bridge: Bridge,
+    ) -> Result<Self> {
+        let mut bytes: Vec<u8> = seed.as_bytes().to_vec();
+        bytes.resize_with(32, || 0);
+        let mut bytes: [u8; 32] = bytes.try_into().unwrap();
 
-            let ed25519_secret = identity::ed25519::SecretKey::from_bytes(&mut bytes).unwrap();
-            identity::Keypair::Ed25519(ed25519_secret.into())
-        };
+        let ed25519_secret = identity::ed25519::SecretKey::from_bytes(&mut bytes).unwrap();
+        let keypair = identity::Keypair::Ed25519(ed25519_secret.into());
 
         let peer_id = PeerId::from(keypair.public());
-        let bridge = Bridge::connect(runtime_dir)?;
 
         Ok(Self {
             peer_id,
@@ -96,15 +96,17 @@ impl NetworkNode {
 
     pub async fn run(mut self) -> Result<()> {
         // TODO: routine to check current peers
+        let mut buf = Vec::new();
+        let mut buf = tokio::io::ReadBuf::new(&mut buf);
         loop {
             tokio::select! {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
                     swarm_event.expect("some event")).await,
 
                 bridge_event = poll_fn(|ctx| {
-                    self.bridge.rx.poll_recv_ready(ctx)
+                    self.bridge.sock.poll_recv(ctx, &mut buf)
                 }) => {
-                    println!("stuff");
+                    println!("{:?}", bridge_event.unwrap());
                 },
 
                 // fs_event = poll_fn(|_| {
