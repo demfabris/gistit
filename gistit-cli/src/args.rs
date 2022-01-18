@@ -15,14 +15,8 @@ pub fn app() -> App<'static> {
                 .help("List available colorschemes"),
         )
         .arg(
-            Arg::new("silent")
-                .long("silent")
-                .help("Silent mode, omit stdout")
-                .global(true),
-        )
-        .arg(
-            Arg::new("config-init")
-                .long("config-init")
+            Arg::new("init-config")
+                .long("init-config")
                 .help("Initialize the default settings.yaml file into the project config directory")
                 .long_help(
                     "Initialize the default settings.yaml file into the project config directory.
