@@ -11,8 +11,6 @@ version = "0.1.0"
 
 [dependencies]
 async-trait = "0.1.52"
-base64 = "0.13.0"
-directories = "4.0.1"
 lib-gistit = { path = "../lib-gistit/" }
 
 [dependencies.clap]

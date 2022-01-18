@@ -4,12 +4,15 @@
 use std::fs::{metadata, remove_file};
 use std::path::{Path, PathBuf};
 
+use bincode::{deserialize, serialize};
 use serde::{Deserialize, Serialize};
 use tokio::net::UnixDatagram;
 
+use crate::file::EncodedFileData;
 use crate::Result;
 
 const NAMED_SOCKET: &str = "gistit-0";
+const READBUF_SIZE: usize = 60_000;
 
 #[derive(Debug)]
 pub struct Bridge {
@@ -45,12 +48,25 @@ impl Bridge {
         })
     }
 
-    pub fn check_alive(base: &Path) -> bool {
+    pub fn alive(base: &Path) -> bool {
         if Bridge::connect(base).is_err() {
             false
         } else {
             true
         }
+    }
+
+    pub async fn send(&self, instruction: Instruction) -> Result<()> {
+        let encoded = serialize(&instruction).unwrap();
+        self.sock.send(&encoded).await?;
+        Ok(())
+    }
+
+    pub async fn recv(&self) -> Result<Instruction> {
+        let mut buf = vec![0u8; READBUF_SIZE];
+        self.sock.recv(&mut buf).await?;
+        let target: Instruction = deserialize(&buf).unwrap();
+        Ok(target)
     }
 }
 
@@ -62,7 +78,8 @@ impl Drop for Bridge {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub enum Command {
-    Init,
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Instruction {
+    Shutdown,
+    File(EncodedFileData),
 }

@@ -4,7 +4,6 @@
 use std::iter::once;
 use std::net::Ipv4Addr;
 use std::path::Path;
-use std::sync::mpsc::{channel, Receiver, Sender};
 
 use async_trait::async_trait;
 use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed};
@@ -21,7 +20,7 @@ use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
 use libp2p::{development_transport, Swarm};
 use libp2p::{identity, Multiaddr};
 
-use lib_gistit::ipc::Bridge;
+use lib_gistit::ipc::{Bridge, Instruction};
 
 use crate::Result;
 
@@ -95,25 +94,12 @@ impl NetworkNode {
     }
 
     pub async fn run(mut self) -> Result<()> {
-        // TODO: routine to check current peers
-        let mut buf = Vec::new();
-        let mut buf = tokio::io::ReadBuf::new(&mut buf);
         loop {
             tokio::select! {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
                     swarm_event.expect("some event")).await,
 
-                bridge_event = poll_fn(|ctx| {
-                    self.bridge.sock.poll_recv(ctx, &mut buf)
-                }) => {
-                    println!("{:?}", bridge_event.unwrap());
-                },
-
-                // fs_event = poll_fn(|_| {
-                //     let watcher_rx = self.fs_watcher.channel.1.clone();
-                //     let watcher_rx = watcher_rx.lock().expect("to lock");
-                //     futures::task::Poll::Ready(watcher_rx.recv())
-                // }) => self.handle_fs_event(fs_event.expect("to receive fs event")).await?
+                bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await
             }
         }
     }
@@ -128,8 +114,18 @@ impl NetworkNode {
         println!("{:?}", event);
     }
 
-    async fn handle_bridge_event(&mut self) -> Result<()> {
-        todo!()
+    async fn handle_bridge_event(&mut self, instruction: Instruction) {
+        match instruction {
+            Instruction::Shutdown => {
+                println!("Exiting");
+                drop(self);
+                std::process::exit(0);
+            }
+            Instruction::File(data) => {
+                println!("{:?}", data);
+            }
+            _ => (),
+        }
     }
 }
 

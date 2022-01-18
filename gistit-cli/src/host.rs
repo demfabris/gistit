@@ -11,7 +11,7 @@ use directories::BaseDirs;
 
 use lib_gistit::encrypt::{HashedSecret, Secret};
 use lib_gistit::file::{File, FileReady};
-use lib_gistit::ipc::Bridge;
+use lib_gistit::ipc::{Bridge, Instruction};
 
 use crate::dispatch::Dispatch;
 use crate::params::Params;
@@ -53,7 +53,7 @@ pub enum ProcessCommand {
     Start(&'static str),
     Stop,
     Status,
-    Skip,
+    Other,
 }
 
 pub struct Config {
@@ -87,7 +87,7 @@ impl Dispatch for Action {
             (Some(seed), false, false) => ProcessCommand::Start(seed),
             (None, true, false) => ProcessCommand::Stop,
             (None, false, true) => ProcessCommand::Status,
-            (_, _, _) => ProcessCommand::Skip,
+            (_, _, _) => ProcessCommand::Other,
         };
 
         // Construct `FileReady` if a file was provided, that means user wants to host a new file
@@ -119,7 +119,6 @@ impl Dispatch for Action {
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = get_runtime_dir()?;
 
-        // let bridge = Bridge::connect(&runtime_dir)?;
         match config.process_command {
             ProcessCommand::Start(seed) => {
                 let pid = spawn(&runtime_dir, seed, self.host, self.port)?;
@@ -129,23 +128,29 @@ impl Dispatch for Action {
                 );
             }
             ProcessCommand::Stop => {
+                Bridge::connect(&runtime_dir)?
+                    .send(Instruction::Shutdown)
+                    .await?;
                 prettyln!("Stopping gistit network node process...");
             }
             ProcessCommand::Status => {
-                if Bridge::check_alive(&runtime_dir) {
+                if Bridge::alive(&runtime_dir) {
                     prettyln!("Running");
+                    // TODO: include more info from daemon
                 } else {
                     prettyln!("Not running");
                 }
             }
-            // Not a process instruction
-            ProcessCommand::Skip => {
+            ProcessCommand::Other => {
                 if let Self::InnerData {
-                    maybe_file: Some(_file),
+                    maybe_file: Some(file),
                     ..
                 } = config
                 {
-                    todo!()
+                    prettyln!("Hosting file...");
+                    Bridge::connect(&runtime_dir)?
+                        .send(Instruction::File(file.to_encoded_data()))
+                        .await?;
                 }
             }
         };

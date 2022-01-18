@@ -152,7 +152,8 @@ Run `gistit --colorschemes` to list available ones.",
             App::new("host")
                 .alias("h")
                 .about("Host a gistit for p2p transfer")
-                .group(ArgGroup::new("process_cmd").required(true))
+                .group(ArgGroup::new("process_cmd"))
+                .group(ArgGroup::new("inputfile").conflicts_with("process_cmd"))
                 .arg(
                     Arg::new("status")
                         .long("status")
@@ -210,6 +211,7 @@ to peer file sharing.",
                     Arg::new("secret")
                         .long("secret")
                         .short('s')
+                        .group("inputfile")
                         .help("Encrypts the target file with a secret.")
                         .takes_value(true)
                         .conflicts_with_all(&["stop", "status"]),
@@ -218,6 +220,7 @@ to peer file sharing.",
                     Arg::new("file")
                         .long("file")
                         .short('f')
+                        .group("inputfile")
                         .allow_invalid_utf8(true)
                         .help("Appends this file to your hosted gistits")
                         .multiple_occurrences(false)
