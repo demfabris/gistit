@@ -87,9 +87,9 @@ impl Hasheable for Config {
         ];
 
         let mut md5 = md5::Context::new();
-        to_digest.iter().map(|data| {
-            md5.consume(data);
-        });
+        for digest in to_digest {
+            md5.consume(digest);
+        }
 
         format!("{}{:x}", SERVER_IDENTIFIER_CHAR, md5.compute())
     }
@@ -155,11 +155,6 @@ impl Dispatch for Action {
     }
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
-        if self.dry_run {
-            warnln!("Dry-run mode, exiting...");
-            return Ok(());
-        }
-
         prettyln!("Uploading to server...");
         let payload = config.into_payload().await?;
         let response: Response = reqwest::Client::new()

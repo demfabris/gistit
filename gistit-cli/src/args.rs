@@ -71,13 +71,6 @@ This is our best efforts at persisting the hash into the system clipboard after 
 ",
                         ),
                 )
-                .arg(
-                    Arg::new("dry-run")
-                        .long("dry-run")
-                        .requires("file")
-                        .short('r')
-                        .help("Executes gistit-send in 'dry run' mode"),
-                ),
         )
         .subcommand(
             App::new("fetch")
