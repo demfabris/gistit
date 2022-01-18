@@ -85,11 +85,6 @@ This is our best efforts at persisting the hash into the system clipboard after 
                         .takes_value(true),
                 )
                 .arg(
-                    Arg::new("preview")
-                        .long("preview")
-                        .help("Immediately preview the gistit after successfully fetching"),
-                )
-                .arg(
                     Arg::new("save")
                         .long("save")
                         .help("Save the gistit to local fs after successfully fetching")

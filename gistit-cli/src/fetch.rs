@@ -3,7 +3,6 @@ use std::sync::atomic::AtomicU8;
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
-use dialoguer::{theme::ColorfulTheme, Select};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -155,25 +154,6 @@ fn save_gistit(file: &File) -> Result<()> {
     Ok(())
 }
 
-fn print_success(hash: &str, prevent_ask_tip: bool) {
-    let tip = if prevent_ask_tip {
-        ""
-    } else {
-        "\nYou can disable the asking behavior by using one of the flags: '--save', '--preview'\n"
-    };
-    println!(
-        r#"
-SUCCESS:
-    hash: {}
-    url: {}{}
-{}"#,
-        style(hash).blue(),
-        "https://gistit.vercel.app/",
-        style(hash).blue(),
-        style(tip).italic(),
-    );
-}
-
 #[async_trait]
 impl Dispatch for Action {
     type InnerData = Config;
@@ -186,49 +166,24 @@ impl Dispatch for Action {
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let json = config.into_json()?;
-        // TODO: branch this into '#' and '@'
+
         prettyln!("Contacting host...");
-        let first_try = reqwest::Client::new()
+        let req = reqwest::Client::new()
             .post(GISTIT_SERVER_GET_URL.to_string())
             .json(&json)
             .send()
             .await?;
 
-        match first_try.status() {
+        match req.status() {
             StatusCode::OK => {
-                let response: Response = first_try.json().await?;
+                let response: Response = req.json().await?;
                 let payload = response.into_inner()?;
                 let gistit = payload.to_file()?;
-                let prevent_ask_tip = self.save;
-                print_success(&payload.hash, prevent_ask_tip);
 
                 if self.save {
                     save_gistit(&gistit)?;
                 } else {
-                    // Ask
-                    let choice_idx = Select::with_theme(&ColorfulTheme::default())
-                        .with_prompt("Select what to do next:")
-                        .item("save locally")
-                        .item("preview in terminal")
-                        .item("open in web browser")
-                        .interact()?;
-                    match choice_idx {
-                        // Save locally only
-                        0 => save_gistit(&gistit)?,
-                        // Preview with 'bat' only
-                        1 => {
-                            preview_gistit(self, &payload, &gistit)?;
-                        }
-                        // Open in web browser
-                        2 => {
-                            webbrowser::open(&format!(
-                                "https://gistit.vercel.app/{}",
-                                &payload.hash
-                            ))
-                            .expect("to open web browser");
-                        }
-                        _ => unreachable!(),
-                    }
+                    preview_gistit(self, &payload, &gistit)?;
                 }
                 Ok(())
             }
