@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use lib_gistit::file::{EncodedFileData, EncryptedFile, File, FileReady};
+use lib_gistit::file::{EncodedFileData, File};
 
-use crate::{prettyln, Result};
+use crate::Result;
 
 #[cfg(test)]
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -27,30 +27,17 @@ pub struct GistitPayload {
     pub hash: String,
     pub author: String,
     pub description: Option<String>,
-    pub secret: Option<String>,
     pub timestamp: String,
     pub gistit: GistitInner,
 }
 
 impl GistitPayload {
-    pub async fn to_file(&self) -> Result<Box<dyn FileReady + Send + Sync>> {
+    pub fn to_file(&self) -> Result<File> {
         let name = self.gistit.name.clone();
-        if let Some(secret) = &self.secret {
-            prettyln!("Decrypting...");
-            Ok(Box::new(
-                EncryptedFile::from_bytes_encoded(self.gistit.data.inner.as_bytes(), &name)
-                    .await?
-                    .with_name(&name)
-                    .into_decrypted(secret)
-                    .await?,
-            ))
-        } else {
-            Ok(Box::new(
-                File::from_bytes_encoded(self.gistit.data.inner.as_bytes(), &name)
-                    .await?
-                    .with_name(&name),
-            ))
-        }
+        Ok(File::from_bytes_encoded(
+            self.gistit.data.inner.as_bytes(),
+            &name,
+        )?)
     }
 }
 
@@ -70,13 +57,6 @@ impl GistitPayload {
         }
     }
 
-    fn with_secret(self, secret: &str) -> Self {
-        Self {
-            secret: Some(secret.to_string()),
-            ..self
-        }
-    }
-
     fn with_inner(self, inner: GistitInner) -> Self {
         Self {
             gistit: inner,
@@ -90,21 +70,13 @@ impl GistitPayload {
 pub struct GistitInner {
     pub name: String,
     pub lang: String,
-    pub size: u64,
+    pub size: usize,
     pub data: EncodedFileData,
 }
 
 #[cfg(test)]
-const FILE_HEADER_ENCRYPTION_PADDING: &str = "########";
-#[cfg(test)]
-const EXAMPLE_RUST_FILE: &str = r#"// Wow we are testing
-fn main() {
-    println!("Hello Test");
-}"#;
-
-#[cfg(test)]
 impl GistitInner {
-    fn new(name: &str, lang: &str, size: u64, data: EncodedFileData) -> Self {
+    fn new(name: &str, lang: &str, size: usize, data: EncodedFileData) -> Self {
         Self {
             name: name.to_owned(),
             lang: name.to_owned(),
@@ -116,132 +88,34 @@ impl GistitInner {
 
 #[cfg(test)]
 mod tests {
-    use lib_gistit::encrypt::encrypt_aes256_u12nonce;
-    use rand::distributions::Alphanumeric;
-    use rand::Rng;
 
     use super::*;
 
-    #[tokio::test]
-    async fn dispatch_gistit_payload_to_file_unencrypted() {
-        let encoded_data = base64::encode(EXAMPLE_RUST_FILE);
-        let theirs = File::from_bytes_encoded(encoded_data.as_bytes(), "foo.rs")
-            .await
-            .unwrap()
-            .with_name("foo.rs");
-        let payload = GistitPayload::with_test_info().with_inner(GistitInner::new(
-            &theirs.name(),
-            theirs.lang(),
-            theirs.size().await,
-            theirs.to_encoded_data(),
-        ));
-        assert_eq!(payload.gistit.data.inner.len(), encoded_data.len());
-        // Expect a randomly named file ending with 'foo.rs'
-        assert!(payload.gistit.name.contains("foo.rs"));
-        let ours = *payload.to_file().await.unwrap().inner().await.unwrap();
-        assert_eq!(ours.name(), "foo.rs");
-        assert_eq!(ours.lang(), "rust");
-        assert_eq!(
-            ours.data(),
-            base64::decode(encoded_data).unwrap().as_slice()
-        );
-    }
+    const FILE_HEADER_ENCRYPTION_PADDING: &str = "########";
+    const EXAMPLE_RUST_FILE: &str = r#"// Wow we are testing
+fn main() {
+    println!("Hello Test");
+}"#;
 
-    #[tokio::test]
-    async fn dispatch_gistit_payload_file_encrypted() {
-        let (data, nonce) =
-            encrypt_aes256_u12nonce("secret".as_bytes(), EXAMPLE_RUST_FILE.as_bytes()).unwrap();
-        let mut payload_data = nonce.clone();
-        payload_data.extend(FILE_HEADER_ENCRYPTION_PADDING.as_bytes());
-        payload_data.extend(&data);
-        let payload = GistitPayload::with_test_info()
-            .with_secret("secret")
-            .with_inner(GistitInner::new(
-                "foo.rs",
-                "rust",
-                data.len() as u64,
-                EncodedFileData {
-                    inner: base64::encode(payload_data),
-                },
-            ));
-        // Decryption succeded
-        let file = payload.to_file().await.unwrap();
-        assert_eq!(file.data(), EXAMPLE_RUST_FILE.as_bytes());
-    }
-
-    #[tokio::test]
-    #[should_panic = "encryption header is corrupted"]
-    async fn dispatch_gistit_payload_file_decryption_fails_if_corrupted_header() {
-        let (data, nonce) =
-            encrypt_aes256_u12nonce("secret".as_bytes(), EXAMPLE_RUST_FILE.as_bytes()).unwrap();
-        let mut payload_data = nonce.clone();
-        // Corrupting
-        payload_data.extend([1, 2, 3]);
-        payload_data.extend(FILE_HEADER_ENCRYPTION_PADDING.as_bytes());
-        payload_data.extend(&data);
-        let payload = GistitPayload::with_test_info()
-            .with_secret("secret")
-            .with_inner(GistitInner::new(
-                "foo.rs",
-                "rust",
-                data.len() as u64,
-                EncodedFileData {
-                    inner: base64::encode(payload_data),
-                },
-            ));
-        let _ = payload
-            .to_file()
-            .await
-            .expect("encryption header is corrupted");
-    }
-
-    #[tokio::test]
-    #[should_panic = "decryption fails due to invalid nonce"]
-    async fn dispatch_gistit_payload_file_decryption_fails_invalid_nonce() {
-        let (data, nonce) =
-            encrypt_aes256_u12nonce("secret".as_bytes(), EXAMPLE_RUST_FILE.as_bytes()).unwrap();
-        let mut payload_data = rand::random::<[u8; 12]>().to_vec();
-        // Corrupting
-        payload_data.extend(FILE_HEADER_ENCRYPTION_PADDING.as_bytes());
-        payload_data.extend(&data);
-        let payload = GistitPayload::with_test_info()
-            .with_secret("secret")
-            .with_inner(GistitInner::new(
-                "foo.rs",
-                "rust",
-                data.len() as u64,
-                EncodedFileData {
-                    inner: base64::encode(payload_data),
-                },
-            ));
-        let _ = payload
-            .to_file()
-            .await
-            .expect("decryption fails due to invalid nonce");
-    }
-
-    #[tokio::test]
-    #[should_panic = "decryption fails due to invalid secret"]
-    async fn dispatch_gistit_payload_file_decryption_fails_invalid_secret() {
-        let (data, nonce) =
-            encrypt_aes256_u12nonce("secret".as_bytes(), EXAMPLE_RUST_FILE.as_bytes()).unwrap();
-        let mut payload_data = rand::random::<[u8; 12]>().to_vec();
-        // Corrupting
-        payload_data.extend(FILE_HEADER_ENCRYPTION_PADDING.as_bytes());
-        payload_data.extend(&data);
-        let payload = GistitPayload::with_test_info()
-            .with_secret("the wrong secret")
-            .with_inner(GistitInner::new(
-                "foo.rs",
-                "rust",
-                data.len() as u64,
-                EncodedFileData {
-                    inner: base64::encode(payload_data),
-                },
-            ));
-        let _ = payload
-            .to_file()
-            .await
-            .expect("decryption fails due to invalid secret");
-    }
+    // #[tokio::test]
+    // async fn dispatch_gistit_payload_to_file_unencrypted() {
+    //     let encoded_data = base64::encode(EXAMPLE_RUST_FILE);
+    //     let theirs = File::from_bytes_encoded(encoded_data.as_bytes(), "foo.rs").unwrap();
+    //     let payload = GistitPayload::with_test_info().with_inner(GistitInner::new(
+    //         &theirs.name(),
+    //         theirs.lang(),
+    //         theirs.size(),
+    //         theirs.to_encoded_data(),
+    //     ));
+    //     assert_eq!(payload.gistit.data.inner.len(), encoded_data.len());
+    //     // Expect a randomly named file ending with 'foo.rs'
+    //     assert!(payload.gistit.name.contains("foo.rs"));
+    //     let ours = payload.to_file().unwrap().inner();
+    //     assert_eq!(ours.name(), "foo.rs");
+    //     assert_eq!(ours.lang(), "rust");
+    //     assert_eq!(
+    //         ours.data(),
+    //         base64::decode(encoded_data).unwrap().as_slice()
+    //     );
+    // }
 }

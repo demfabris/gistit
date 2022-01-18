@@ -11,8 +11,7 @@ use serde::Deserialize;
 use url::Url;
 
 use lib_gistit::clipboard::Clipboard;
-use lib_gistit::encrypt::{digest_md5_multi, HashedSecret, Secret};
-use lib_gistit::file::{name_from_path, File, FileReady};
+use lib_gistit::file::{name_from_path, File};
 
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::params::Params;
@@ -37,7 +36,6 @@ pub struct Action {
     pub file: &'static OsStr,
     pub description: Option<&'static str>,
     pub author: &'static str,
-    pub secret: Option<&'static str>,
     pub clipboard: bool,
     pub dry_run: bool,
 }
@@ -69,7 +67,6 @@ impl Action {
             file,
             description: args.value_of("description"),
             author: Box::leak(Box::new(author)),
-            secret: args.value_of("secret"),
             clipboard,
             dry_run: args.is_present("dry-run"),
         }))
@@ -77,61 +74,48 @@ impl Action {
 }
 
 pub struct Config {
-    pub file: Box<dyn FileReady + Send + Sync>,
+    pub file: File,
     pub params: SendParams,
-    pub maybe_secret: Option<HashedSecret>,
 }
 
-#[async_trait]
 impl Hasheable for Config {
     fn hash(&self) -> String {
-        let file_data = self.file.data();
-        let maybe_secret_bytes = self
-            .maybe_secret
-            .as_ref()
-            .map_or("", HashedSecret::to_str)
-            .as_bytes();
+        let to_digest = [
+            self.file.data(),
+            self.params.author.as_bytes(),
+            self.params.description.unwrap_or("").as_bytes(),
+        ];
 
-        let hash = digest_md5_multi(&[file_data, maybe_secret_bytes]);
-        format!("{}{}", SERVER_IDENTIFIER_CHAR, hash)
+        let mut md5 = md5::Context::new();
+        to_digest.iter().map(|data| {
+            md5.consume(data);
+        });
+
+        format!("{}{:x}", SERVER_IDENTIFIER_CHAR, md5.compute())
     }
 }
 
 impl Config {
     #[must_use]
-    fn new(
-        file: Box<dyn FileReady + Send + Sync>,
-        params: SendParams,
-        maybe_secret: Option<HashedSecret>,
-    ) -> Self {
-        Self {
-            file,
-            params,
-            maybe_secret,
-        }
+    fn new(file: File, params: SendParams) -> Self {
+        Self { file, params }
     }
 
     async fn into_payload(self) -> Result<GistitPayload> {
-        let hash = self.hash();
-        let params = self.params;
-        let data = self.file.to_encoded_data();
-        let file_ref = self.file.inner().await.expect("The file to be opened");
-
         Ok(GistitPayload {
-            hash,
-            author: params.author.to_owned(),
-            description: params.description.map(ToOwned::to_owned),
-            secret: self.maybe_secret.map(|t| t.to_str().to_owned()),
+            hash: self.hash(),
+            author: self.params.author.to_owned(),
+            description: self.params.description.map(ToOwned::to_owned),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Check your system time")
                 .as_millis()
                 .to_string(),
             gistit: GistitInner {
-                name: file_ref.name().clone(),
-                lang: file_ref.lang().to_owned(),
-                size: file_ref.size().await,
-                data,
+                name: self.file.name(),
+                lang: self.file.lang().to_owned(),
+                size: self.file.size(),
+                data: self.file.to_encoded_data(),
             },
         })
     }
@@ -163,23 +147,13 @@ impl Dispatch for Action {
     async fn prepare(&'static self) -> Result<Self::InnerData> {
         let params = Params::from_send(self)?.check_consume()?;
 
-        let (file, maybe_hashed_secret): (Box<dyn FileReady + Send + Sync>, Option<HashedSecret>) = {
-            let path = Path::new(self.file);
-            let file = File::from_path(path).await?.check_consume().await?;
+        let path = Path::new(self.file);
+        let file = File::from_path(path)?;
 
-            if let Some(secret_str) = self.secret {
-                let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
-                prettyln!("Encrypting...");
-
-                let encrypted_file = file.into_encrypted(secret_str).await?;
-                (Box::new(encrypted_file), Some(hashed_secret))
-            } else {
-                (Box::new(file), None)
-            }
-        };
-        let config = Config::new(file, params, maybe_hashed_secret);
+        let config = Config::new(file, params);
         Ok(config)
     }
+
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         if self.dry_run {
             warnln!("Dry-run mode, exiting...");

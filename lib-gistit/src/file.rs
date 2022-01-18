@@ -5,24 +5,21 @@
 
 use std::env::temp_dir;
 use std::ffi::OsStr;
+use std::fs;
+use std::io::Read;
+use std::io::Write;
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str;
 
-use async_trait::async_trait;
 use phf::{phf_map, Map};
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
 
-use crate::encrypt::{decrypt_aes256_u12nonce, encrypt_aes256_u12nonce};
-use crate::{Error, ErrorKind, Result};
+use crate::Result;
 
 /// Allowed file size range in bytes
 const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=50_000;
-
-/// The expected file header encryption padding
-const FILE_HEADER_ENCRYPTION_PADDING: &str = "########";
 
 /// Type alias for a base64 encoded and AES256 encrypted file with embedded header
 pub type HeadfulEncryptedB64String = String;
@@ -605,36 +602,23 @@ const EXTENSION_TO_LANG_MAPPING: Map<&'static str, &'static str> = phf_map! {
     "" => "text",
 };
 
-/// Represents a gistit file handler and some extra data
 #[derive(Debug)]
 pub struct File {
-    /// Opened file handler
-    handler: tokio::fs::File,
-    /// Path in system
+    inner: fs::File,
     path: PathBuf,
-    /// Bytes read from file handler
     bytes: Vec<u8>,
-    /// A custom file name
-    name: Option<String>,
-    /// File should be discarded when dropped
-    is_temp: bool,
+    size: usize,
+    temp: bool,
 }
 
 impl Drop for File {
     fn drop(&mut self) {
-        if self.is_temp {
-            if let Err(err) = std::fs::remove_file(&self.path) {
-                eprintln!(
-                    "couldn't delete temp file {:?}\n{}",
-                    self.path,
-                    err.to_string()
-                );
-            }
-        }
+        if self.temp {
+            fs::remove_file(&self.path).expect("failed to remove temp file");
+        }      
     }
 }
 
-#[must_use]
 pub fn name_from_path(path: &Path) -> String {
     path.file_name()
         .unwrap_or(OsStr::new("unknown"))
@@ -642,116 +626,85 @@ pub fn name_from_path(path: &Path) -> String {
         .to_string()
 }
 
-async fn rng_file_with_name(bytes: &[u8], name: &str) -> Result<(tokio::fs::File, PathBuf)> {
+fn spawn_from_bytes(bytes: &[u8], name: &str) -> Result<(fs::File, PathBuf)> {
     let path = rng_temp_file(name);
-    let mut handler = tokio::fs::File::create(&path).await?;
-    handler.write_all(bytes).await?;
+    let mut handler = fs::File::create(&path)?;
+    handler.write_all(bytes)?;
     Ok((handler, path))
 }
 
+fn rng_temp_file(suffix: &str) -> PathBuf {
+    let rng_string: String = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(8)
+        .map(char::from)
+        .collect();
+
+    let mut rng_name = "__gistit-".to_owned();
+    rng_name.push_str(&rng_string);
+    rng_name.push_str(suffix);
+
+    temp_dir().join(&rng_name)
+}
+
 impl File {
-    /// Opens a file from the given `path` and returns a [`File`] handler.
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`IoError`] if the file can't be opened, which probably means the file doesn't
-    /// exist, path is invalid, or file handler is blocked.
-    pub async fn from_path(path: &Path) -> Result<Self> {
-        let mut handler = tokio::fs::File::open(path).await?;
-        let mut bytes: Vec<u8> = Vec::new();
+    pub fn from_path(path: &Path) -> Result<Self> {
+        let mut handler = fs::File::open(path)?;
 
-        tokio::io::AsyncReadExt::read_to_end(&mut handler, &mut bytes)
-            .await
-            .map_err(|err| {
-                // Intercept OS error 21 (EISDIR), meaning we can't write to a directory
-                #[cfg(target_family = "unix")]
-                if err.raw_os_error() == Some(21) {
-                    Error::from(ErrorKind::NotAFile)
-                } else {
-                    Error::from(err)
-                }
-
-                // TODO: This needs testing
-                #[cfg(target_os = "windows")]
-                if let Some(1003) = err.raw_os_error() {
-                    Error::from(ErrorKind::NotAFile)
-                } else {
-                    Error::from(err)
-                }
-            })?;
+        let mut buf: Vec<u8> = Vec::new();
+        let size = handler.read(&mut buf)?;
 
         Ok(Self {
-            handler,
+            inner: handler,
             path: path.to_path_buf(),
-            bytes,
-            name: Some(name_from_path(path)),
-            is_temp: false,
+            bytes: buf,
+            size,
+            temp: false,
         })
     }
 
-    /// Creates a new file in your system `temp` with a random name and writes provided `bytes`
-    /// into it. Returns the new [`File`] handler
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`IoError`] if the file can't be created for some reason. Also if it can't be
-    /// written to.
-    pub async fn from_bytes_encoded(bytes: &[u8], name: &str) -> Result<Self> {
-        let decoded_bytes = base64::decode(bytes)?;
-        let (handler, path) = rng_file_with_name(&decoded_bytes, name).await?;
+    pub fn from_bytes(decoded_bytes: Vec<u8>, name: &str) -> Result<Self> {
+        let (handler, path) = spawn_from_bytes(&decoded_bytes, name)?;
+        let size = decoded_bytes.len();
 
         Ok(Self {
-            handler,
-            name: Some(name_from_path(&path)),
-            path,
+            inner: handler,
+            path: path.to_path_buf(),
             bytes: decoded_bytes,
-            is_temp: true,
+            size,
+            temp: true,
         })
     }
 
-    /// Same as [`Self::from_bytes_encoded`] but doesn't expect encoded bytes
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`IoError`] if the file can't be created for some reason. Also if it can't be
-    /// written to.
-    pub async fn from_bytes(decoded_bytes: &[u8]) -> Result<Self> {
-        let (handler, path) = rng_file_with_name(decoded_bytes, "").await?;
-
-        Ok(Self {
-            handler,
-            name: Some(name_from_path(&path)),
-            path,
-            bytes: decoded_bytes.to_vec(),
-            is_temp: true,
-        })
+    pub fn from_bytes_encoded(bytes: &[u8], name: &str) -> Result<Self> {
+        let decoded_bytes = base64::decode(bytes)?;
+        File::from_bytes(decoded_bytes, name)
     }
 
-    /// Creates/writes the contents as string to the given file path.
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`IoError`] if the file can't be written to.
-    pub async fn save_as(&self, file_path: &Path) -> Result<()> {
-        Ok(tokio::fs::write(file_path, &self.bytes).await?)
+    pub fn inner(&self) -> &fs::File {
+        &self.inner
     }
 
-    /// Set the file name, useful when creating a [`File`] using [`Self::from_bytes`].
-    /// if the [`File`] was created using [`Self::from_path`] it will use the provided file name.
-    #[allow(clippy::missing_const_for_fn)]
-    #[must_use]
-    pub fn with_name(mut self, name: &str) -> Self {
-        self.name = Some(name.to_owned());
-        self
+    pub fn data(&self) -> &[u8] {
+        &self.bytes
     }
 
-    /// Returns the file name
+    pub fn to_encoded_data(&self) -> EncodedFileData {
+        EncodedFileData {
+            inner: base64::encode(&self.bytes),
+        }
+    }
+
+    pub fn save_as(&self, file_path: &Path) -> Result<()> {
+        Ok(fs::write(file_path, &self.bytes)?)
+    }
+
     pub fn name(&self) -> String {
-        self.name.clone().unwrap_or("unknown".to_owned())
+        name_from_path(&self.path)
     }
 
-    /// Returns the programming language that maps to this file extension
     pub fn lang(&self) -> &str {
+        //TODO: Refactor this after removing Check trait
         // SAFETY: If [`Self`] exists, these values are guaranteed to be checked
         unsafe {
             self.path
@@ -763,248 +716,72 @@ impl File {
         }
     }
 
-    /// Returns the file size in bytes, not encoded.
-    pub async fn size(&self) -> u64 {
-        // SAFETY: If [`Self`] exists, these values are guaranteed to be checked
-        unsafe { self.handler.metadata().await.unwrap_unchecked().len() }
+    pub fn size(&self) -> usize {
+        self.size
     }
 
-    /// Consumes the [`File`] encrypting it and returning a new instance of [`EncryptedFile`]
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`EncryptionError`] if something goes wrong during the encryption process. This
-    /// includes unexpected sizes of the nonce, hashed key.
-    /// Will also error out if the provided key and nonce is incorrect.
-    pub async fn into_encrypted(self, secret: &str) -> Result<EncryptedFile> {
-        let (encrypted_bytes, nonce) = encrypt_aes256_u12nonce(secret.as_bytes(), self.data())?;
-        let name = self.name.clone();
-
-        Ok(EncryptedFile {
-            encrypted_bytes,
-            nonce,
-            prev: Some(Box::new(self)),
-            name,
-        })
-    }
-
-    /// Perform needed checks concurrently, consumes `Self` and return.
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`FileError`] if user input isn't valid
-    pub async fn check_consume(self) -> Result<Self> {
-        <Self as Check>::metadata(&self).await?;
-        <Self as Check>::extension(&self)?;
-
-        Ok(self)
-    }
+    // /// Perform needed checks concurrently, consumes `Self` and return.
+    // ///
+    // /// # Errors
+    // ///
+    // /// Fails with [`FileError`] if user input isn't valid
+    // pub async fn check_consume(self) -> Result<Self> {
+    //     <Self as Check>::metadata(&self).await?;
+    //     <Self as Check>::extension(&self)?;
+    //
+    //     Ok(self)
+    // }
 }
 
-/// Represents a encrypted gistit file data.
-/// This data structure is expected to hold encrypted but not encoded bytes in `encrypted_bytes`, the `nonce`
-/// which is a 12 bytes randomly generated byte array, and a pointer to the previous unencrypted [`File`]
-/// handler.
-#[derive(Debug)]
-pub struct EncryptedFile {
-    /// The encrypted bytes
-    encrypted_bytes: Vec<u8>,
-    /// The random sequence used to encrypt
-    nonce: Vec<u8>,
-    /// Pointer to maybe the previous unencrypted
-    prev: Option<Box<File>>,
-    /// Overwrite the random file name during decryption
-    name: Option<String>,
-}
-
-/// Extract and verify the encrypted file header which contains the `nonce` and a expected 8 bytes
-/// long padding defined in [`FILE_HEADER_ENCRYPTION_PADDING`].
-///
-/// # Errors
-///
-/// Fails with [`FileError`] if the padding is invalid or the `nonce` is incorrectly sized.
-fn parse_encryption_header(bytes: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
-    let (header, rest) = bytes.split_at(20);
-    let (nonce, padding) = header.split_at(12);
-
-    if padding == FILE_HEADER_ENCRYPTION_PADDING.as_bytes() {
-        Ok((nonce.to_vec(), rest.to_vec()))
-    } else {
-        Err(ErrorKind::EncryptionPadding.into())
-    }
-}
-
-impl EncryptedFile {
-    /// Creates a new [`EncryptedFile`] handler from encrypted and **encoded** byte array.
-    /// That means it should contain the expected encryption header and be base64 encoded.
-    ///
-    /// Will create a new temporary file in your system `temp` directory and write **decoded** and
-    /// still encrypted contents into it.
-    ///
-    /// **note** that there is no `prev` unencrypted [`File`] handler
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`IoError`] if can't create or write to the file handler.
-    /// Fails with [`FileError`] if the encryption header is invalid.
-    pub async fn from_bytes_encoded(encoded_bytes: &[u8], name: &str) -> Result<Self> {
-        let decoded_bytes = base64::decode(encoded_bytes)?;
-        let path = rng_temp_file(name);
-
-        let (nonce, encrypted_bytes) = parse_encryption_header(&decoded_bytes)?;
-        let mut handler = tokio::fs::File::create(&path).await?;
-        handler.write_all(&encrypted_bytes).await?;
-
-        Ok(Self {
-            encrypted_bytes,
-            nonce,
-            prev: None,
-            name: Some(name_from_path(&path)),
-        })
-    }
-
-    /// Set a file name, if attempt to decrypt without a file name this will be set to a random
-    /// string.
-    #[allow(clippy::missing_const_for_fn)]
-    #[must_use]
-    pub fn with_name(mut self, name: &str) -> Self {
-        self.name = Some(name.to_owned());
-        self
-    }
-
-    /// Converts [`Self`] into [`File`] handler by applying the decryption process with the
-    /// provided secret.
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`EncryptionError`] if `nonce` or `secret` is incorrect
-    pub async fn into_decrypted(self, secret: &str) -> Result<File> {
-        // SAFETY: If [`Self`] exists then `self.nonce` is for sure bigger than 12 bytes
-        let nonce: [u8; 12] = unsafe { self.nonce.clone().try_into().unwrap_unchecked() };
-
-        let decrypted_bytes = decrypt_aes256_u12nonce(secret.as_bytes(), self.data(), &nonce)?;
-        let file = File::from_bytes(&decrypted_bytes).await?.with_name(
-            // SAFETY: Opened file will have at least a random temp name
-            unsafe { self.name.as_ref().unwrap_unchecked() },
-        );
-        Ok(file)
-    }
-}
-
-/// Returns a new randomnly generated file path in your system `temp` directory
-fn rng_temp_file(suffix: &str) -> PathBuf {
-    let rng_string: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(8)
-        .map(char::from)
-        .collect();
-
-    let mut rng_file_name = "__gistit_tmp_".to_owned();
-    rng_file_name.push_str(&rng_string);
-    rng_file_name.push_str(suffix);
-
-    temp_dir().join(&rng_file_name)
-}
-
-/// Represents the opened file handler
-#[async_trait]
-pub trait FileReady {
-    /// Returns a reference to the original [`File`] handler if any.
-    async fn inner(self: Box<Self>) -> Option<Box<File>>;
-
-    /// Returns a reference to the underlying data. Can be encrypted depending on the source
-    fn data(&self) -> &[u8];
-
-    /// Converts [`Self`] into the sendable form of the data
-    fn to_encoded_data(&self) -> EncodedFileData;
-}
-
-#[async_trait]
-impl FileReady for EncryptedFile {
-    async fn inner(self: Box<Self>) -> Option<Box<File>> {
-        self.prev
-    }
-
-    fn data(&self) -> &[u8] {
-        &self.encrypted_bytes
-    }
-
-    fn to_encoded_data(&self) -> EncodedFileData {
-        let mut headful_data = self.nonce.clone();
-        headful_data.extend(FILE_HEADER_ENCRYPTION_PADDING.as_bytes());
-        headful_data.extend_from_slice(&self.encrypted_bytes);
-
-        EncodedFileData {
-            inner: base64::encode(headful_data),
-        }
-    }
-}
-
-#[async_trait]
-impl FileReady for File {
-    async fn inner(self: Box<Self>) -> Option<Box<Self>> {
-        Some(self)
-    }
-
-    fn data(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    fn to_encoded_data(&self) -> EncodedFileData {
-        EncodedFileData {
-            inner: base64::encode(&self.bytes),
-        }
-    }
-}
-
-#[async_trait]
-trait Check {
-    /// Checks the file metadata for type and size
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`UnsuportedFile`] if size and type isn't allowed.
-    async fn metadata(&self) -> Result<()>;
-
-    /// Checks the file extension against [`EXTENSION_TO_LANG_MAPPING`]
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`UnsuportedFile`] if file extension isn't supported.
-    fn extension(&self) -> Result<()>;
-}
-
-#[async_trait]
-impl Check for File {
-    async fn metadata(&self) -> Result<()> {
-        let attr = self.handler.metadata().await?;
-        let size_allowed = ALLOWED_FILE_SIZE_RANGE.contains(&attr.len());
-        let type_allowed = attr.is_file();
-
-        if !size_allowed {
-            return Err(ErrorKind::FileSize.into());
-        } else if !type_allowed {
-            return Err(ErrorKind::NotAFile.into());
-        }
-        Ok(())
-    }
-    fn extension(&self) -> Result<()> {
-        let ext = Path::new(self.path.as_os_str())
-            .extension()
-            .and_then(OsStr::to_str)
-            .ok_or(ErrorKind::FileExtension)?;
-
-        if EXTENSION_TO_LANG_MAPPING.contains_key(ext) {
-            Ok(())
-        } else {
-            Err(ErrorKind::FileExtension.into())
-        }
-    }
-}
+// #[async_trait]
+// trait Check {
+//     /// Checks the file metadata for type and size
+//     ///
+//     /// # Errors
+//     ///
+//     /// Fails with [`UnsuportedFile`] if size and type isn't allowed.
+//     async fn metadata(&self) -> Result<()>;
+//
+//     /// Checks the file extension against [`EXTENSION_TO_LANG_MAPPING`]
+//     ///
+//     /// # Errors
+//     ///
+//     /// Fails with [`UnsuportedFile`] if file extension isn't supported.
+//     fn extension(&self) -> Result<()>;
+// }
+//
+// #[async_trait]
+// impl Check for File {
+//     async fn metadata(&self) -> Result<()> {
+//         let attr = self.handler.metadata().await?;
+//         let size_allowed = ALLOWED_FILE_SIZE_RANGE.contains(&attr.len());
+//         let type_allowed = attr.is_file();
+//
+//         if !size_allowed {
+//             return Err(ErrorKind::FileSize.into());
+//         } else if !type_allowed {
+//             return Err(ErrorKind::NotAFile.into());
+//         }
+//         Ok(())
+//     }
+//     fn extension(&self) -> Result<()> {
+//         let ext = Path::new(self.path.as_os_str())
+//             .extension()
+//             .and_then(OsStr::to_str)
+//             .ok_or(ErrorKind::FileExtension)?;
+//
+//         if EXTENSION_TO_LANG_MAPPING.contains_key(ext) {
+//             Ok(())
+//         } else {
+//             Err(ErrorKind::FileExtension.into())
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ErrorKind;
     use assert_fs::prelude::*;
     use predicates::prelude::*;
     use tokio::task::spawn_blocking;
@@ -1033,10 +810,9 @@ mod tests {
             .take(512)
             .map(char::from)
             .collect();
-        let (file, path) = rng_file_with_name(data.as_bytes(), "foo.txt")
-            .await
-            .unwrap();
+        let (file, path) = spawn_from_bytes(data.as_bytes(), "foo.txt").unwrap();
         let read_bytes = tokio::fs::read(path).await.unwrap();
+
         assert_eq!(data, std::str::from_utf8(&read_bytes).unwrap());
     }
 
@@ -1053,8 +829,8 @@ mod tests {
         input_file.touch().unwrap();
         input_file.write_binary(data.as_bytes()).unwrap();
 
-        let file = File::from_path(&input_file).await.unwrap();
-        assert_eq!(file.size().await, 512);
+        let file = File::from_path(&input_file).unwrap();
+        assert_eq!(file.size(), 512);
         assert_eq!(file.bytes, data.as_bytes());
         assert_eq!(file.name(), "foo.txt".to_owned());
     }
@@ -1062,7 +838,8 @@ mod tests {
     #[tokio::test]
     async fn file_structure_new_from_path_fails_if_is_dir() {
         let tmp = assert_fs::TempDir::new().unwrap();
-        let read_err = File::from_path(&tmp).await.unwrap_err();
+        let read_err = File::from_path(&tmp).unwrap_err();
+
         assert!(matches!(read_err.kind, ErrorKind::NotAFile));
     }
 
@@ -1074,17 +851,16 @@ mod tests {
             .map(char::from)
             .collect();
         let encoded_data = base64::encode(&data);
-        let file = File::from_bytes_encoded(encoded_data.as_bytes(), "nameless")
-            .await
-            .unwrap();
+        let file = File::from_bytes_encoded(encoded_data.as_bytes(), "nameless").unwrap();
+
         assert_eq!(file.bytes, data.as_bytes());
 
         // Fails when encoding is corrupted
         let mut corrupted_data = "¨¨¨¨".to_owned();
         corrupted_data.extend(encoded_data.chars());
-        let decode_err = File::from_bytes_encoded(corrupted_data.as_bytes(), "nameless")
-            .await
-            .unwrap_err();
+        let decode_err =
+            File::from_bytes_encoded(corrupted_data.as_bytes(), "nameless").unwrap_err();
+
         assert!(matches!(decode_err.kind, ErrorKind::Encoding(_)));
     }
 
@@ -1095,7 +871,8 @@ mod tests {
             .take(512)
             .map(char::from)
             .collect();
-        let file = File::from_bytes(data.as_bytes()).await.unwrap();
+        let file = File::from_bytes(data.as_bytes().to_owned(), "nameless").unwrap();
+
         assert_eq!(file.bytes, data.as_bytes());
     }
 
@@ -1112,12 +889,13 @@ mod tests {
         tmp_file.touch().unwrap();
         tmp_file.write_binary(data.as_bytes()).unwrap();
 
-        let file = File::from_path(&tmp_file).await.unwrap();
-        file.save_as(&tmp.join("bar.txt")).await.unwrap();
+        let file = File::from_path(&tmp_file).unwrap();
+        file.save_as(&tmp.join("bar.txt")).unwrap();
         tmp.assert(predicates::path::exists());
 
         let other = tmp.child("bar.txt");
-        let other = tokio::fs::read(other).await.unwrap();
+        let other = fs::read(other).unwrap();
+
         assert_eq!(data.as_bytes(), other);
     }
 
@@ -1126,21 +904,21 @@ mod tests {
         let tmp = assert_fs::TempDir::new().unwrap();
 
         let rust = tmp.child("foo.rs");
-        let js = tmp.child("bar.js");
-        let cpp = tmp.child("lol.cpp");
-        let brainfuck = tmp.child("rly.bf");
         rust.touch().unwrap();
+
+        let js = tmp.child("bar.js");
         js.touch().unwrap();
+
+        let cpp = tmp.child("lol.cpp");
         cpp.touch().unwrap();
+
+        let brainfuck = tmp.child("rly.bf");
         brainfuck.touch().unwrap();
 
-        assert_eq!(File::from_path(&rust).await.unwrap().lang(), "rust");
-        assert_eq!(File::from_path(&js).await.unwrap().lang(), "javascript");
-        assert_eq!(File::from_path(&cpp).await.unwrap().lang(), "cpp");
-        assert_eq!(
-            File::from_path(&brainfuck).await.unwrap().lang(),
-            "brainfuck"
-        );
+        assert_eq!(File::from_path(&rust).unwrap().lang(), "rust");
+        assert_eq!(File::from_path(&js).unwrap().lang(), "javascript");
+        assert_eq!(File::from_path(&cpp).unwrap().lang(), "cpp");
+        assert_eq!(File::from_path(&brainfuck).unwrap().lang(), "brainfuck");
     }
 
     #[tokio::test]
@@ -1150,129 +928,29 @@ mod tests {
             .take(512)
             .map(char::from)
             .collect();
+
         let tmp = assert_fs::TempDir::new().unwrap();
         let tmp_file = tmp.child("foo");
         tmp_file.touch().unwrap();
         tmp_file.write_binary(data.as_bytes()).unwrap();
 
-        let file = File::from_path(&tmp_file).await.unwrap();
+        let file = File::from_path(&tmp_file).unwrap();
+
         assert_eq!(file.name(), "foo");
-        let file = file.with_name("bar");
-        assert_eq!(file.name(), "bar");
-        assert_eq!(file.size().await, 512);
-    }
-
-    #[tokio::test]
-    async fn file_structure_into_encrypted() {
-        let secret = "secret";
-        let data: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(512)
-            .map(char::from)
-            .collect();
-        let tmp = assert_fs::TempDir::new().unwrap();
-        let tmp_file = tmp.child("foo");
-        tmp_file.touch().unwrap();
-        tmp_file.write_binary(data.as_bytes()).unwrap();
-
-        let file = Box::new(File::from_path(&tmp_file).await.unwrap());
-        let encrypted = File::from_path(&tmp_file)
-            .await
-            .unwrap()
-            .into_encrypted(secret)
-            .await
-            .unwrap();
-        // original file is intact
-        tmp_file.assert(predicates::str::contains(&data));
-        assert_ne!(file.data(), encrypted.data());
-        // file prev encrypted is the same decrypted one
-        assert_eq!(file.data(), encrypted.prev.unwrap().data());
-    }
-
-    #[tokio::test]
-    async fn file_encrypted_structure_from_bytes_encoded() {
-        let secret = "secret";
-        let data = "I'm a decrypted string".to_owned();
-        let tmp = assert_fs::TempDir::new().unwrap();
-        let tmp_file = tmp.child("foo");
-        tmp_file.touch().unwrap();
-        tmp_file.write_binary(data.as_bytes()).unwrap();
-
-        let encoded_data = File::from_path(&tmp_file)
-            .await
-            .unwrap()
-            .into_encrypted(secret)
-            .await
-            .unwrap()
-            .to_encoded_data();
-        let encrypted =
-            EncryptedFile::from_bytes_encoded(encoded_data.inner.as_bytes(), "nameless")
-                .await
-                .unwrap();
-        assert_ne!(encrypted.data(), data.as_bytes());
-        assert!(matches!(encrypted.prev, None));
-    }
-
-    #[tokio::test]
-    async fn file_encrypted_structure_into_decrypted() {
-        let secret = "secret";
-        let data = "I'm a decrypted string".to_owned();
-        let tmp = assert_fs::TempDir::new().unwrap();
-        let tmp_file = tmp.child("foo");
-
-        tmp_file.touch().unwrap();
-        tmp_file.write_binary(data.as_bytes()).unwrap();
-
-        let encrypted_file = File::from_path(&tmp_file)
-            .await
-            .unwrap()
-            .into_encrypted(secret)
-            .await
-            .unwrap();
-        let encoded_encrypted_data = encrypted_file.to_encoded_data();
-        let decrypted_file = encrypted_file.into_decrypted(secret).await.unwrap();
-
-        assert_eq!(decrypted_file.data(), data.as_bytes());
-    }
-
-    #[tokio::test]
-    async fn file_encryption_header_data() {
-        let secret = "secret";
-        let data = "Matthew McConaughey".to_owned();
-        let tmp = assert_fs::TempDir::new().unwrap();
-        let tmp_file = tmp.child("foo");
-
-        tmp_file.touch().unwrap();
-        tmp_file.write_binary(data.as_bytes()).unwrap();
-
-        let encoded_encrypted_data = File::from_path(&tmp_file)
-            .await
-            .unwrap()
-            .into_encrypted(secret)
-            .await
-            .unwrap()
-            .to_encoded_data();
-        let (nonce, rest) = parse_encryption_header(
-            base64::decode(encoded_encrypted_data.inner)
-                .unwrap()
-                .as_slice(),
-        )
-        .unwrap();
-        let nonce: [u8; 12] = nonce.try_into().unwrap();
-        let decrypted_data = decrypt_aes256_u12nonce(secret.as_bytes(), &rest, &nonce).unwrap();
-        assert_eq!(decrypted_data, data.as_bytes());
+        assert_eq!(file.size(), 512);
     }
 
     #[tokio::test]
     async fn file_temp_fs_file_deleted_on_drop() {
         let data = "Matthew McConaughey".to_owned();
-        let file = File::from_bytes(data.as_bytes()).await.unwrap();
+        let file = File::from_bytes(data.as_bytes().to_owned(), "nameless").unwrap();
         let path = file.path.clone();
-        assert!(tokio::fs::metadata(&path).await.unwrap().is_file());
-        {
-            file;
-        }
-        let not_found = tokio::fs::metadata(&path).await.unwrap_err().kind();
+
+        assert!(fs::metadata(&path).unwrap().is_file());
+
+        drop(file);
+        let not_found = fs::metadata(&path).unwrap_err().kind();
+
         assert!(matches!(not_found, std::io::ErrorKind::NotFound));
     }
 }

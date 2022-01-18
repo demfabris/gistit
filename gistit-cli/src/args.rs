@@ -58,14 +58,6 @@ Beware to mistakenly overwriting your settings.",
                         .value_hint(ValueHint::Username),
                 )
                 .arg(
-                    Arg::new("secret")
-                        .long("secret")
-                        .short('s')
-                        .help("With password encryption")
-                        .takes_value(true)
-                        .requires("file"),
-                )
-                .arg(
                     Arg::new("clipboard")
                         .long("clipboard")
                         .short('c')
@@ -122,13 +114,6 @@ and 'Standard Directories' on MacOS.",
                         .help("Fetch and open a gistit on your default browser")
                         .takes_value(true)
                         .value_hint(ValueHint::Url),
-                )
-                .arg(
-                    Arg::new("secret")
-                        .long("secret")
-                        .short('s')
-                        .help("The secret to decrypt the fetched gistit")
-                        .takes_value(true),
                 )
                 .arg(
                     Arg::new("colorscheme")
@@ -200,15 +185,6 @@ to peer file sharing.",
                         .value_name("port")
                         .default_value("0")
                         .conflicts_with_all(&["secret", "file", "stop", "status"]),
-                )
-                .arg(
-                    Arg::new("secret")
-                        .long("secret")
-                        .short('s')
-                        .group("inputfile")
-                        .help("Encrypts the target file with a secret.")
-                        .takes_value(true)
-                        .conflicts_with_all(&["stop", "status"]),
                 )
                 .arg(
                     Arg::new("file")

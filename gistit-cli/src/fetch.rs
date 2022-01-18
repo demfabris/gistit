@@ -1,22 +1,21 @@
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::AtomicU8;
 
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
-use dialoguer::{theme::ColorfulTheme, Password, Select};
+use dialoguer::{theme::ColorfulTheme, Select};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 use url::Url;
 
-use lib_gistit::encrypt::Secret;
-use lib_gistit::file::{File, FileReady};
+use lib_gistit::file::File;
 
 use crate::dispatch::{Dispatch, GistitPayload};
 use crate::params::{FetchParams, Params};
 use crate::settings::{get_runtime_settings, GistitFetch, Mergeable};
-use crate::{prettyln, warnln, ErrorKind, Result};
+use crate::{prettyln, ErrorKind, Result};
 
 lazy_static! {
     static ref GISTIT_SECRET_RETRY_COUNT: AtomicU8 = AtomicU8::new(0);
@@ -33,9 +32,7 @@ lazy_static! {
 pub struct Action {
     pub hash: Option<&'static str>,
     pub url: Option<&'static str>,
-    pub secret: Option<&'static str>,
     pub colorscheme: Option<&'static str>,
-    pub preview: bool,
     pub save: bool,
 }
 
@@ -47,23 +44,19 @@ impl Action {
 
         let lhs_settings = Box::new(GistitFetch {
             colorscheme: args.value_of("colorscheme").map(ToOwned::to_owned),
-            preview: Some(args.is_present("preview")),
             save: Some(args.is_present("save")),
         });
 
         let merged = lhs_settings.merge(rhs_settings);
-        let (colorscheme, preview, save) = (
+        let (colorscheme, save) = (
             merged.colorscheme.ok_or(ErrorKind::Argument)?,
-            merged.preview.ok_or(ErrorKind::Argument)?,
             merged.save.ok_or(ErrorKind::Argument)?,
         );
 
         Ok(Box::new(Self {
             hash: args.value_of("hash"),
             url: args.value_of("url"),
-            secret: args.value_of("secret"),
             colorscheme: Some(Box::leak(Box::new(colorscheme))),
-            preview,
             save,
         }))
     }
@@ -71,16 +64,12 @@ impl Action {
 
 pub struct Config {
     pub params: FetchParams,
-    pub maybe_secret: Option<String>,
 }
 
 impl Config {
     #[must_use]
-    const fn new(params: FetchParams, maybe_secret: Option<String>) -> Self {
-        Self {
-            params,
-            maybe_secret,
-        }
+    const fn new(params: FetchParams) -> Self {
+        Self { params }
     }
 
     fn into_json(self) -> Result<serde_json::Value> {
@@ -102,7 +91,6 @@ impl Config {
         };
         Ok(json!({
             "hash": final_hash,
-            "secret": self.maybe_secret,
         }))
     }
 }
@@ -154,7 +142,7 @@ fn preview_gistit(action: &Action, payload: &GistitPayload, file: &File) -> Resu
         .print()?)
 }
 
-async fn save_gistit(file: &File) -> Result<()> {
+fn save_gistit(file: &File) -> Result<()> {
     let save_location = get_runtime_settings()?
         .clone()
         .gistit_global
@@ -163,7 +151,7 @@ async fn save_gistit(file: &File) -> Result<()> {
         .ok_or(ErrorKind::Settings)?;
 
     let file_path = save_location.join(file.name());
-    file.save_as(&file_path).await?;
+    file.save_as(&file_path)?;
     Ok(())
 }
 
@@ -192,10 +180,7 @@ impl Dispatch for Action {
 
     async fn prepare(&'static self) -> Result<Self::InnerData> {
         let params = Params::from_fetch(self).check_consume()?;
-        if let Some(secret_str) = self.secret {
-            Secret::new(secret_str).check_consume()?;
-        }
-        let config = Config::new(params, self.secret.map(ToOwned::to_owned));
+        let config = Config::new(params);
         Ok(config)
     }
 
@@ -213,18 +198,13 @@ impl Dispatch for Action {
             StatusCode::OK => {
                 let response: Response = first_try.json().await?;
                 let payload = response.into_inner()?;
-                let gistit = payload.to_file().await?;
-                let file = gistit.inner().await.expect("File to be open");
-                let prevent_ask_tip = self.preview || self.save;
+                let gistit = payload.to_file()?;
+                let prevent_ask_tip = self.save;
                 print_success(&payload.hash, prevent_ask_tip);
 
-                if self.preview {
-                    preview_gistit(self, &payload, &file)?;
-                }
                 if self.save {
-                    save_gistit(&file).await?;
-                }
-                if !self.save && !self.preview {
+                    save_gistit(&gistit)?;
+                } else {
                     // Ask
                     let choice_idx = Select::with_theme(&ColorfulTheme::default())
                         .with_prompt("Select what to do next:")
@@ -234,10 +214,10 @@ impl Dispatch for Action {
                         .interact()?;
                     match choice_idx {
                         // Save locally only
-                        0 => save_gistit(&file).await?,
+                        0 => save_gistit(&gistit)?,
                         // Preview with 'bat' only
                         1 => {
-                            preview_gistit(self, &payload, &file)?;
+                            preview_gistit(self, &payload, &gistit)?;
                         }
                         // Open in web browser
                         2 => {
@@ -251,33 +231,6 @@ impl Dispatch for Action {
                     }
                 }
                 Ok(())
-            }
-            StatusCode::UNAUTHORIZED => {
-                // Password is incorrect or missing. Check retry counter
-                let count = GISTIT_SECRET_RETRY_COUNT.fetch_add(1, Ordering::Relaxed);
-                if count <= 2 {
-                    let prompt_msg = if self.secret.is_some() {
-                        warnln!("Secret is invalid");
-                        "\ntry again".to_owned()
-                    } else {
-                        warnln!("A secret is required to fetch this gistit");
-                        "\nsecret".to_owned()
-                    };
-
-                    let new_secret = Password::new().with_prompt(prompt_msg).interact()?;
-                    drop(first_try);
-
-                    // Rebuild the action object and recurse down the same path
-                    let mut action = self.clone();
-                    action.secret = Some(Box::leak(Box::new(new_secret)));
-                    let action = Box::leak(Box::new(action.clone()));
-                    let new_config = Dispatch::prepare(&*action).await?;
-                    Dispatch::dispatch(&*action, new_config).await?;
-                    Ok(())
-                } else {
-                    // Enough retries
-                    Err(ErrorKind::FetchEnoughRetries.into())
-                }
             }
             StatusCode::NOT_FOUND => Err(ErrorKind::FetchNotFound.into()),
             _ => Err(ErrorKind::FetchUnexpectedResponse.into()),

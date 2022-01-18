@@ -10,8 +10,7 @@ use directories::ProjectDirs;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
-use lib_gistit::encrypt::digest_md5;
-use lib_gistit::file::{File, FileReady};
+use lib_gistit::file::File;
 
 use crate::LOCALFS_SETTINGS;
 use crate::{ErrorKind, Result};
@@ -85,7 +84,6 @@ impl Default for GistitSend {
 pub struct GistitFetch {
     pub colorscheme: Option<String>,
     pub save: Option<bool>,
-    pub preview: Option<bool>,
 }
 
 impl Default for GistitFetch {
@@ -93,7 +91,6 @@ impl Default for GistitFetch {
         Self {
             colorscheme: Some(String::from("ansi")),
             save: Some(false),
-            preview: Some(false),
         }
     }
 }
@@ -127,11 +124,9 @@ impl Mergeable for GistitFetch {
     fn merge(self: Box<Self>, maybe_rhs: Option<Self>) -> Self {
         let rhs = maybe_rhs.unwrap_or_default();
         let save = map_false_to_none(self.save);
-        let preview = map_false_to_none(self.preview);
         Self {
             colorscheme: self.colorscheme.or(rhs.colorscheme),
             save: save.or(rhs.save),
-            preview: preview.or(rhs.preview),
         }
     }
 }
@@ -188,10 +183,10 @@ impl Settings {
     /// # Errors
     ///
     /// Fails with [`SettingsError`] if any invalid value is found in the settings file.
-    pub async fn merge_local(self) -> Result<Self> {
+    pub fn merge_local(self) -> Result<Self> {
         let path = project_dirs().config_dir().join(GISTIT_SETTINGS_FILE_NAME);
 
-        if let Ok(handler) = File::from_path(&path).await {
+        if let Ok(handler) = File::from_path(&path) {
             // Checking Md5Sum is quicker than matching fields one by one
             if user_has_default_settings(handler.data()) {
                 return Ok(self);
@@ -227,19 +222,23 @@ impl Settings {
     /// # Errors
     ///
     /// Fails with [`IoError`] if something goes wrong opening/writing to the file.
-    pub async fn save_new() -> Result<()> {
-        Ok(File::from_bytes(SETTINGS_FILE_TEMPLATE.as_bytes())
-            .await?
-            .save_as(&project_dirs().config_dir().join(GISTIT_SETTINGS_FILE_NAME))
-            .await?)
+    pub fn save_new() -> Result<()> {
+        Ok(File::from_bytes(
+            SETTINGS_FILE_TEMPLATE.as_bytes().to_owned(),
+            GISTIT_SETTINGS_FILE_NAME,
+        )?
+        .save_as(&project_dirs().config_dir().join(GISTIT_SETTINGS_FILE_NAME))?)
     }
 }
 
 /// Check if local settings file match app defaults. Useful to skip deserializing if the user has
 /// default settings in usage.
 fn user_has_default_settings(theirs: &[u8]) -> bool {
-    digest_md5(theirs) == digest_md5(SETTINGS_FILE_TEMPLATE.as_bytes())
+    let theirs_hash = md5::compute(theirs);
+    &format!("{:x}", theirs_hash) == DEFAULT_SETTINGS_MD5
 }
+
+const DEFAULT_SETTINGS_MD5: &str = "db9fdcdb6f1314f3388659349436a786";
 
 /// Default settings file content as str
 pub const SETTINGS_FILE_TEMPLATE: &str = r#"---
@@ -264,10 +263,6 @@ gistit_send:
   # Defaults to a random generated `adjective-noun`
   # (leave null to use default)
   author: null
-
-  # How long the gistit will be avaiable to be fetched.
-  # VALUES: 300 - 3600
-  lifespan: 3600
 
   # Always attempt to copy the sent gistit hash to system clipboard.
   # WARNING: This feature doesn't always work and can prevent you from executing
@@ -309,9 +304,4 @@ gistit_fetch:
   # Save location is specified in `global > save_location`
   # (setting this flag will stop asking behavior)
   save: false
-
-  # Automatically preview a fetched gistit.
-  # This will launch bat to preview the file in your terminal.
-  # (setting this flag will stop asking behavior)
-  preview: false
-"#;
+  "#;

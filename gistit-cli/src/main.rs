@@ -53,7 +53,7 @@ async fn run() -> Result<()> {
         ("", None)
     };
 
-    LOCALFS_SETTINGS.set(Settings::default().merge_local().await?)?;
+    LOCALFS_SETTINGS.set(Settings::default().merge_local()?)?;
 
     match cmd_args {
         ("send", Some(args)) => dispatch_from_args!(send, args),
@@ -65,8 +65,8 @@ async fn run() -> Result<()> {
                 std::process::exit(0);
             }
 
-            if matches.is_present("config-init") {
-                Settings::save_new().await?;
+            if matches.is_present("init-config") {
+                Settings::save_new()?;
                 prettyln!("Settings.yaml created!");
                 std::process::exit(0);
             }

@@ -6,7 +6,6 @@ pub struct Error {
 
 #[derive(Debug)]
 pub enum ErrorKind {
-    Cipher(aes_gcm::Error),
     Encoding(base64::DecodeError),
     IO(std::io::Error),
     NotFound(which::Error),
@@ -22,7 +21,6 @@ pub enum ErrorKind {
 impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
         match kind {
-            ErrorKind::Cipher(e) => e.into(),
             ErrorKind::Encoding(e) => e.into(),
             ErrorKind::IO(e) => e.into(),
             ErrorKind::NotFound(e) => e.into(),
@@ -57,15 +55,6 @@ please consider installing of the above programs to have more reliable results."
                 cause: "enviroment variable 'DISPLAY' is not set.
 clipboard is likely not working",
             }
-        }
-    }
-}
-
-impl From<aes_gcm::Error> for Error {
-    fn from(err: aes_gcm::Error) -> Self {
-        Self {
-            kind: ErrorKind::Cipher(err),
-            cause: "the encryption process failed",
         }
     }
 }

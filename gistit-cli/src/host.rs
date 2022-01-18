@@ -9,8 +9,7 @@ use clap::ArgMatches;
 use console::style;
 use directories::BaseDirs;
 
-use lib_gistit::encrypt::{HashedSecret, Secret};
-use lib_gistit::file::{File, FileReady};
+use lib_gistit::file::File;
 use lib_gistit::ipc::{Bridge, Instruction};
 
 use crate::dispatch::Dispatch;
@@ -26,7 +25,6 @@ pub struct Action {
     pub host: &'static str,
     pub port: &'static str,
     pub file: Option<&'static OsStr>,
-    pub secret: Option<&'static str>,
 }
 
 impl Action {
@@ -43,7 +41,6 @@ impl Action {
             port: unsafe { args.value_of("port").unwrap_unchecked() },
             stop: args.is_present("stop"),
             status: args.is_present("status"),
-            secret: args.value_of("secret"),
             file: args.value_of_os("file"),
         }))
     }
@@ -58,20 +55,14 @@ pub enum ProcessCommand {
 
 pub struct Config {
     process_command: ProcessCommand,
-    maybe_secret: Option<HashedSecret>,
-    maybe_file: Option<Box<dyn FileReady + Send + Sync>>,
+    maybe_file: Option<File>,
 }
 
 impl Config {
     #[must_use]
-    pub fn new(
-        process_command: ProcessCommand,
-        maybe_secret: Option<HashedSecret>,
-        maybe_file: Option<Box<dyn FileReady + Send + Sync>>,
-    ) -> Self {
+    pub fn new(process_command: ProcessCommand, maybe_file: Option<File>) -> Self {
         Self {
             process_command,
-            maybe_secret,
             maybe_file,
         }
     }
@@ -92,28 +83,14 @@ impl Dispatch for Action {
 
         // Construct `FileReady` if a file was provided, that means user wants to host a new file
         // and the background process should be running.
-        let (maybe_file, maybe_hashed_secret): (
-            Option<Box<dyn FileReady + Send + Sync>>,
-            Option<HashedSecret>,
-        ) = if let Some(file) = self.file {
+        let maybe_file = if let Some(file) = self.file {
             let path = Path::new(file);
-            let file = File::from_path(path).await?.check_consume().await?;
-
-            // If secret provided, hash it and encrypt file
-            if let Some(secret_str) = self.secret {
-                let hashed_secret = Secret::new(secret_str).check_consume()?.into_hashed()?;
-                prettyln!("Encrypting...");
-
-                let encrypted_file = file.into_encrypted(secret_str).await?;
-                (Some(Box::new(encrypted_file)), Some(hashed_secret))
-            } else {
-                (Some(Box::new(file)), None)
-            }
+            Some(File::from_path(path)?)
         } else {
-            (None, None)
+            None
         };
 
-        Ok(Config::new(command, maybe_hashed_secret, maybe_file))
+        Ok(Config::new(command, maybe_file))
     }
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
