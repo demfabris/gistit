@@ -645,9 +645,10 @@ fn rng_temp_file(suffix: &str) -> PathBuf {
 impl File {
     pub fn from_path(path: &Path) -> Result<Self> {
         let mut handler = fs::File::open(path)?;
+        let mut buf = Vec::with_capacity(50_000);
 
-        let mut buf: Vec<u8> = Vec::new();
-        let size = handler.read(&mut buf)?;
+        let size = handler.read_to_end(&mut buf)?;
+        buf.shrink_to_fit();
 
         Ok(Self {
             inner: handler,

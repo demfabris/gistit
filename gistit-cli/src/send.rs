@@ -36,14 +36,13 @@ pub struct Action {
     pub description: Option<&'static str>,
     pub author: &'static str,
     pub clipboard: bool,
-    pub dry_run: bool,
 }
 
 impl Action {
     pub fn from_args(
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        let file = args.value_of_os("file").ok_or(ErrorKind::Argument)?;
+        let file = args.value_of_os("FILE").ok_or(ErrorKind::Argument)?;
         prettyln!(
             "Preparing gistit: {}",
             style(name_from_path(Path::new(file))).green()
@@ -67,7 +66,6 @@ impl Action {
             description: args.value_of("description"),
             author: Box::leak(Box::new(author)),
             clipboard,
-            dry_run: args.is_present("dry-run"),
         }))
     }
 }

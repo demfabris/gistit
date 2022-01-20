@@ -111,20 +111,17 @@ impl Response {
 }
 
 fn preview_gistit(action: &Action, payload: &GistitPayload, file: &File) -> Result<bool> {
-    let mut header_string = style(file.name()).green().to_string();
-    header_string.push_str(&format!(
-        " | {}",
-        style(payload.author.clone()).blue().bold()
-    ));
+    let mut header_string = style(&payload.gistit.name).green().to_string();
+    header_string.push_str(&format!(" | {}", style(&payload.author).blue().bold()));
 
-    if let Some(description) = payload.description.clone() {
+    if let Some(ref description) = payload.description {
         header_string.push_str(&format!(" | {}", style(description).italic()));
     }
     // If user provided colorscheme we overwrite the stored one
     let colorscheme = action.colorscheme.unwrap_or("ansi");
 
     let input = bat::Input::from_reader(file.data())
-        .name(file.name())
+        .name(&payload.gistit.name)
         .title(header_string);
 
     Ok(bat::PrettyPrinter::new()
@@ -183,6 +180,18 @@ impl Dispatch for Action {
                 } else {
                     preview_gistit(self, &payload, &gistit)?;
                 }
+
+                println!(
+                    r#"
+SUCCESS:
+    hash: {}
+
+You can preview it online at: {}/{}
+                    "#,
+                    style(&payload.hash).blue().bold(),
+                    "https://gistit.vercel.app",
+                    style(&payload.hash).blue().bold(),
+                );
                 Ok(())
             }
             StatusCode::NOT_FOUND => Err(ErrorKind::FetchNotFound.into()),

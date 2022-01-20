@@ -26,17 +26,14 @@ export function checkHash(hash: string): void {
  * @function
  * @param {string} author
  * @param {string} description
- * @param {string} secret
  */
 export function checkParamsCharLength(
   author: string,
-  description: string,
-  secret: string
+  description: string
 ): void {
   if (
     paramValueInRange(defs.AUTHOR_CHAR_LENGTH, author?.length) &&
-    paramValueInRange(defs.DESCRIPTION_CHAR_LENGTH, description?.length) &&
-    paramValueInRange(defs.SECRET_CHAR_LENGTH, secret?.length)
+    paramValueInRange(defs.DESCRIPTION_CHAR_LENGTH, description?.length)
   )
     return;
   else throw Error("Invalid author, description or secret character length");

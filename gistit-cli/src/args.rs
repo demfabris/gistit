@@ -9,67 +9,60 @@ pub fn app() -> App<'static> {
         .version(crate_version!())
         .about(crate_description!())
         .author(crate_authors!())
+        .after_help(
+            "Note: `gistit -h` prints a short and concise overview while `gistit --help` gives all \
+                 details.",
+        )
+        .arg(
+            Arg::new("FILE")
+                .help("File to send/upload.")
+                .allow_invalid_utf8(true)
+                .takes_value(true)
+                .value_hint(ValueHint::FilePath)
+        )
+        .arg(
+            Arg::new("description")
+                .long("description")
+                .short('d')
+                .help("With a description")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::new("author")
+                .long("author")
+                .short('a')
+                .help("With author information. Defaults to a random generated name")
+                .takes_value(true)
+                .value_hint(ValueHint::Username),
+        )
+        .arg(
+            Arg::new("clipboard")
+                .long("clipboard")
+                .short('c')
+                .help("Copies the result hash to the system clipboard")
+                .long_help(
+                    "Copies the result hash to the system clipboard.
+This program will attempt to find a suitable clipboard program in your system and use it.
+If none was found it defaults to ANSI escape sequence OSC52.
+This is our best efforts at persisting the hash into the system clipboard after the program exits.
+",
+                ),
+        )
         .arg(
             Arg::new("colorschemes")
                 .long("colorschemes")
+                .conflicts_with("FILE")
                 .help("List available colorschemes"),
         )
         .arg(
             Arg::new("init-config")
                 .long("init-config")
                 .help("Initialize the default settings.yaml file into the project config directory")
+                .conflicts_with("FILE")
                 .long_help(
                     "Initialize the default settings.yaml file into the project config directory.
 This flag can be also used to reset settings to default.
 Beware to mistakenly overwriting your settings.",
-                )
-                .global(true),
-        )
-        .subcommand(
-            App::new("send")
-                .alias("s")
-                .about("Send the gistit to the cloud")
-                .arg(
-                    Arg::new("file")
-                        .long("file")
-                        .short('f')
-                        .allow_invalid_utf8(true)
-                        .help("The file to be sent [required]")
-                        .required(true)
-                        .multiple_occurrences(false) // currently not supported
-                        .takes_value(true)
-                        .value_hint(ValueHint::FilePath),
-                )
-                .arg(
-                    Arg::new("description")
-                        .long("description")
-                        .short('d')
-                        .help("With a description")
-                        .takes_value(true)
-                        .requires("file")
-                )
-                .arg(
-                    Arg::new("author")
-                        .long("author")
-                        .short('a')
-                        .help("With author information. Defaults to a random generated name")
-                        .takes_value(true)
-                        .requires("file")
-                        .value_hint(ValueHint::Username),
-                )
-                .arg(
-                    Arg::new("clipboard")
-                        .long("clipboard")
-                        .short('c')
-                        .requires("file")
-                        .help("Copies the result hash to the system clipboard")
-                        .long_help(
-                            "Copies the result hash to the system clipboard.
-This program will attempt to find a suitable clipboard program in your system and use it.
-If none was found it defaults to ANSI escape sequence OSC52.
-This is our best efforts at persisting the hash into the system clipboard after the program exits.
-",
-                        ),
                 )
         )
         .subcommand(

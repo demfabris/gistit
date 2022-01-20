@@ -29,6 +29,8 @@ mod params;
 mod send;
 mod settings;
 
+use std::process::exit;
+
 use console::style;
 use once_cell::sync::OnceCell;
 
@@ -45,6 +47,7 @@ pub static LOCALFS_SETTINGS: OnceCell<Settings> = OnceCell::new();
 
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(app().get_matches()));
+    LOCALFS_SETTINGS.set(Settings::default().merge_local()?)?;
 
     let cmd_args = if let Some((cmd, args)) = matches.subcommand() {
         CURRENT_ACTION.set(cmd.to_owned())?;
@@ -53,28 +56,27 @@ async fn run() -> Result<()> {
         ("", None)
     };
 
-    LOCALFS_SETTINGS.set(Settings::default().merge_local()?)?;
+    if matches.is_present("colorschemes") {
+        list_bat_colorschemes();
+        exit(0);
+    }
+
+    if matches.is_present("init-config") {
+        Settings::save_new()?;
+        prettyln!("Settings.yaml created!");
+        exit(0);
+    }
+
+    if matches.is_present("FILE") {
+        dispatch_from_args!(send, matches);
+    }
 
     match cmd_args {
-        ("send", Some(args)) => dispatch_from_args!(send, args),
         ("fetch", Some(args)) => dispatch_from_args!(fetch, args),
         ("host", Some(args)) => dispatch_from_args!(host, args),
-        ("", None) => {
-            if matches.is_present("colorschemes") {
-                list_bat_colorschemes();
-                std::process::exit(0);
-            }
-
-            if matches.is_present("init-config") {
-                Settings::save_new()?;
-                prettyln!("Settings.yaml created!");
-                std::process::exit(0);
-            }
-
-            app().print_help()?;
-        }
         _ => (),
     };
+
     Ok(())
 }
 

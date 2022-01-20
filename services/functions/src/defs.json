@@ -10,10 +10,6 @@
     "MIN": 3,
     "MAX": 30
   },
-  "SECRET_CHAR_LENGTH": {
-    "MIN": 50,
-    "MAX": 100
-  },
   "LIFESPAN": 3600000,
   "FILE_SIZE": {
     "MIN": 20,
