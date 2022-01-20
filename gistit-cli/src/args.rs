@@ -70,12 +70,10 @@ Beware to mistakenly overwriting your settings.",
                 .alias("f")
                 .about("Fetch a gistit wherever it is")
                 .arg(
-                    Arg::new("hash")
-                        .long("hash")
-                        .short('x')
+                    Arg::new("HASH")
                         .help("Fetch a gistit via it's hash")
-                        .required_unless_present("url")
-                        .takes_value(true),
+                        .takes_value(true)
+                        .required(true),
                 )
                 .arg(
                     Arg::new("save")
@@ -88,18 +86,8 @@ and 'Standard Directories' on MacOS.",
                         ),
                 )
                 .arg(
-                    Arg::new("url")
-                        .long("url")
-                        .short('u')
-                        .required_unless_present("hash")
-                        .help("Fetch and open a gistit on your default browser")
-                        .takes_value(true)
-                        .value_hint(ValueHint::Url),
-                )
-                .arg(
                     Arg::new("colorscheme")
                         .long("colorscheme")
-                        .short('c')
                         .takes_value(true)
                         .help("The colorscheme to apply syntax highlighting")
                         .long_help(

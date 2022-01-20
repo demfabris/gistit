@@ -6,7 +6,6 @@ use std::path::Path;
 
 use lazy_static::lazy_static;
 use ngrammatic::{Corpus, CorpusBuilder, Pad};
-use url::Url;
 
 use lib_gistit::file::EXTENSION_TO_LANG_MAPPING;
 
@@ -140,11 +139,6 @@ fn extension(file_path: &Path) -> Result<()> {
     }
 }
 
-fn url(url: &str) -> Result<()> {
-    url.parse::<Url>()?;
-    Ok(())
-}
-
 pub trait Check {
     fn check(&self) -> Result<()>;
 }
@@ -165,12 +159,7 @@ impl Check for SendAction {
 
 impl Check for FetchAction {
     fn check(&self) -> Result<()> {
-        if let Some(value) = self.hash {
-            hash(&value)?;
-        }
-        if let Some(value) = self.url {
-            url(&value)?;
-        }
+        hash(self.hash)?;
         if let Some(value) = self.colorscheme {
             colorscheme(&value)?;
         }

@@ -5,8 +5,7 @@ use clap::ArgMatches;
 use console::style;
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use lib_gistit::file::File;
@@ -29,8 +28,7 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct Action {
-    pub hash: Option<&'static str>,
-    pub url: Option<&'static str>,
+    pub hash: &'static str,
     pub colorscheme: Option<&'static str>,
     pub save: bool,
 }
@@ -53,41 +51,21 @@ impl Action {
         );
 
         Ok(Box::new(Self {
-            hash: args.value_of("hash"),
-            url: args.value_of("url"),
+            hash: args.value_of("HASH").ok_or(ErrorKind::Argument)?,
             colorscheme: Some(Box::leak(Box::new(colorscheme))),
             save,
         }))
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Config {
-    hash: Option<&'static str>,
-    url: Option<&'static str>,
+    hash: &'static str,
 }
 
 impl Config {
     fn into_json(self) -> Result<serde_json::Value> {
-        let final_hash = match self {
-            Self {
-                hash: Some(hash), ..
-            } => hash.to_string(),
-            Self {
-                url: Some(url),
-                hash: None,
-                ..
-            } => Url::parse(url)?
-                .path()
-                // Removing `/` prefix from URL parsing
-                .split_at(1)
-                .1
-                .to_owned(),
-            _ => unreachable!(),
-        };
-        Ok(json!({
-            "hash": final_hash,
-        }))
+        Ok(serde_json::to_value(self)?)
     }
 }
 
@@ -154,10 +132,7 @@ impl Dispatch for Action {
 
     async fn prepare(&'static self) -> Result<Self::InnerData> {
         <Self as Check>::check(self)?;
-        let config = Config {
-            hash: self.hash,
-            url: self.url,
-        };
+        let config = Config { hash: self.hash };
         Ok(config)
     }
 
