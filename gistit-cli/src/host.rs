@@ -13,7 +13,7 @@ use lib_gistit::file::File;
 use lib_gistit::ipc::{Bridge, Instruction};
 
 use crate::dispatch::Dispatch;
-use crate::params::Params;
+use crate::params::Check;
 use crate::{prettyln, ErrorKind, Result};
 
 #[derive(Debug, Clone)]
@@ -54,18 +54,8 @@ pub enum ProcessCommand {
 }
 
 pub struct Config {
-    process_command: ProcessCommand,
+    command: ProcessCommand,
     maybe_file: Option<File>,
-}
-
-impl Config {
-    #[must_use]
-    pub fn new(process_command: ProcessCommand, maybe_file: Option<File>) -> Self {
-        Self {
-            process_command,
-            maybe_file,
-        }
-    }
 }
 
 #[async_trait]
@@ -73,7 +63,8 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&'static self) -> Result<Self::InnerData> {
-        Params::from_host(self).check_consume()?;
+        <Self as Check>::check(self)?;
+
         let command = match (self.start, self.stop, self.status) {
             (Some(seed), false, false) => ProcessCommand::Start(seed),
             (None, true, false) => ProcessCommand::Stop,
@@ -89,14 +80,18 @@ impl Dispatch for Action {
         } else {
             None
         };
+        let config = Config {
+            command,
+            maybe_file,
+        };
 
-        Ok(Config::new(command, maybe_file))
+        Ok(config)
     }
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = get_runtime_dir()?;
 
-        match config.process_command {
+        match config.command {
             ProcessCommand::Start(seed) => {
                 let pid = spawn(&runtime_dir, seed, self.host, self.port)?;
                 prettyln!(

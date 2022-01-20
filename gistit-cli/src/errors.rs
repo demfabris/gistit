@@ -73,6 +73,15 @@ impl From<serde_yaml::Error> for Error {
     }
 }
 
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Self {
+            cause: "failed to parse json file.",
+            kind: ErrorKind::SerializeJson(err),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ErrorKind {
     IO(std::io::Error),
@@ -80,12 +89,15 @@ pub enum ErrorKind {
     Request(reqwest::Error),
     Tui(bat::error::Error),
     SerializeYaml(serde_yaml::Error),
+    SerializeJson(serde_json::Error),
     Colorscheme(Option<String>),
     InvalidParam(&'static str, &'static str),
     SignalDaemon,
     FetchNotFound,
     FetchUnexpectedResponse,
     FetchEnoughRetries,
+    FileExtension,
+    FileSize,
     Parsing,
     Argument,
     Settings,
@@ -109,6 +121,7 @@ impl From<ErrorKind> for Error {
             ErrorKind::Request(e) => e.into(),
             ErrorKind::Tui(e) => e.into(),
             ErrorKind::SerializeYaml(e) => e.into(),
+            ErrorKind::SerializeJson(e) => e.into(),
             ErrorKind::Colorscheme(ref maybe_close_match) => {
                 let suggest = maybe_close_match
                     .as_ref()
@@ -128,6 +141,14 @@ impl From<ErrorKind> for Error {
                     msg,
                     style(param).bold().red()
                 )),
+            },
+            ErrorKind::FileExtension => Self {
+                kind,
+                cause: "file extension not currently supported.",
+            },
+            ErrorKind::FileSize => Self {
+                kind,
+                cause: "file size not allowed.",
             },
             ErrorKind::SignalDaemon => Self {
                 kind,

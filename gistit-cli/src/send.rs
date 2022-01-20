@@ -14,10 +14,9 @@ use lib_gistit::clipboard::Clipboard;
 use lib_gistit::file::{name_from_path, File};
 
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
-use crate::params::Params;
-use crate::params::SendParams;
+use crate::params::Check;
 use crate::settings::{get_runtime_settings, GistitSend, Mergeable};
-use crate::{prettyln, warnln, ErrorKind, Result};
+use crate::{prettyln, ErrorKind, Result};
 
 const SERVER_IDENTIFIER_CHAR: char = '#';
 
@@ -73,17 +72,19 @@ impl Action {
     }
 }
 
+#[derive(Debug)]
 pub struct Config {
-    pub file: File,
-    pub params: SendParams,
+    file: File,
+    description: Option<&'static str>,
+    author: &'static str,
 }
 
 impl Hasheable for Config {
     fn hash(&self) -> String {
         let to_digest = [
             self.file.data(),
-            self.params.author.as_bytes(),
-            self.params.description.unwrap_or("").as_bytes(),
+            self.author.as_bytes(),
+            self.description.unwrap_or("").as_bytes(),
         ];
 
         let mut md5 = md5::Context::new();
@@ -96,16 +97,11 @@ impl Hasheable for Config {
 }
 
 impl Config {
-    #[must_use]
-    fn new(file: File, params: SendParams) -> Self {
-        Self { file, params }
-    }
-
-    async fn into_payload(self) -> Result<GistitPayload> {
-        Ok(GistitPayload {
+    fn into_json(self) -> Result<serde_json::Value> {
+        let payload = GistitPayload {
             hash: self.hash(),
-            author: self.params.author.to_owned(),
-            description: self.params.description.map(ToOwned::to_owned),
+            author: self.author.to_owned(),
+            description: self.description.map(ToOwned::to_owned),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Check your system time")
@@ -117,7 +113,8 @@ impl Config {
                 size: self.file.size(),
                 data: self.file.to_encoded_data(),
             },
-        })
+        };
+        Ok(serde_json::to_value(payload)?)
     }
 }
 
@@ -145,21 +142,24 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&'static self) -> Result<Self::InnerData> {
-        let params = Params::from_send(self)?.check_consume()?;
+        <Self as Check>::check(self)?;
 
         let path = Path::new(self.file);
         let file = File::from_path(path)?;
 
-        let config = Config::new(file, params);
+        let config = Config {
+            file,
+            description: self.description,
+            author: self.author,
+        };
         Ok(config)
     }
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         prettyln!("Uploading to server...");
-        let payload = config.into_payload().await?;
         let response: Response = reqwest::Client::new()
             .post(GISTIT_SERVER_LOAD_URL.to_string())
-            .json(&payload)
+            .json(&config.into_json()?)
             .send()
             .await?
             .json()

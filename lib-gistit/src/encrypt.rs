@@ -19,7 +19,6 @@
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 
-use async_trait::async_trait;
 use crypto::digest::Digest;
 use crypto::md5::Md5;
 use crypto::scrypt::{scrypt_simple, ScryptParams};
@@ -93,23 +92,6 @@ impl HashedSecret {
     #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
         self.inner.clone().into_bytes()
-    }
-}
-
-#[async_trait]
-trait Check {
-    /// Check for allowed secret length
-    fn length(&self) -> Result<()>;
-}
-
-#[async_trait]
-impl Check for Secret {
-    fn length(&self) -> Result<()> {
-        if ALLOWED_SECRET_CHAR_LENGTH_RANGE.contains(&self.inner.len()) {
-            Ok(())
-        } else {
-            Err(ErrorKind::EncryptionPadding.into())
-        }
     }
 }
 

@@ -12,7 +12,7 @@ use url::Url;
 use lib_gistit::file::File;
 
 use crate::dispatch::{Dispatch, GistitPayload};
-use crate::params::{FetchParams, Params};
+use crate::params::Check;
 use crate::settings::{get_runtime_settings, GistitFetch, Mergeable};
 use crate::{prettyln, ErrorKind, Result};
 
@@ -61,22 +61,19 @@ impl Action {
     }
 }
 
+#[derive(Debug)]
 pub struct Config {
-    pub params: FetchParams,
+    hash: Option<&'static str>,
+    url: Option<&'static str>,
 }
 
 impl Config {
-    #[must_use]
-    const fn new(params: FetchParams) -> Self {
-        Self { params }
-    }
-
     fn into_json(self) -> Result<serde_json::Value> {
-        let final_hash = match &self.params {
-            FetchParams {
+        let final_hash = match self {
+            Self {
                 hash: Some(hash), ..
             } => hash.to_string(),
-            FetchParams {
+            Self {
                 url: Some(url),
                 hash: None,
                 ..
@@ -159,18 +156,19 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&'static self) -> Result<Self::InnerData> {
-        let params = Params::from_fetch(self).check_consume()?;
-        let config = Config::new(params);
+        <Self as Check>::check(self)?;
+        let config = Config {
+            hash: self.hash,
+            url: self.url,
+        };
         Ok(config)
     }
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
-        let json = config.into_json()?;
-
         prettyln!("Contacting host...");
         let req = reqwest::Client::new()
             .post(GISTIT_SERVER_GET_URL.to_string())
-            .json(&json)
+            .json(&config.into_json()?)
             .send()
             .await?;
 

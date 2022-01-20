@@ -9,10 +9,8 @@ pub enum ErrorKind {
     Encoding(base64::DecodeError),
     IO(std::io::Error),
     NotFound(which::Error),
-    EncryptionPadding,
-    FileExtension,
-    FileSize,
     NotAFile,
+    EncryptionPadding,
     UnsupportedPlatform,
     MissingClipboardBinary,
     DisplayNotSet,
@@ -24,21 +22,13 @@ impl From<ErrorKind> for Error {
             ErrorKind::Encoding(e) => e.into(),
             ErrorKind::IO(e) => e.into(),
             ErrorKind::NotFound(e) => e.into(),
-            ErrorKind::EncryptionPadding => Self {
-                kind,
-                cause: "unable to parse encrypted data, nonce or padding are missplaced.",
-            },
-            ErrorKind::FileExtension => Self {
-                kind,
-                cause: "file extension not currently supported.",
-            },
-            ErrorKind::FileSize => Self {
-                kind,
-                cause: "file size not allowed.",
-            },
             ErrorKind::NotAFile => Self {
                 kind,
                 cause: "input is not a file",
+            },
+            ErrorKind::EncryptionPadding => Self {
+                kind,
+                cause: "unable to parse encrypted data, nonce or padding are missplaced.",
             },
             ErrorKind::UnsupportedPlatform => Self {
                 kind,

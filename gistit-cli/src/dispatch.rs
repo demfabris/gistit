@@ -97,25 +97,25 @@ fn main() {
     println!("Hello Test");
 }"#;
 
-    // #[tokio::test]
-    // async fn dispatch_gistit_payload_to_file_unencrypted() {
-    //     let encoded_data = base64::encode(EXAMPLE_RUST_FILE);
-    //     let theirs = File::from_bytes_encoded(encoded_data.as_bytes(), "foo.rs").unwrap();
-    //     let payload = GistitPayload::with_test_info().with_inner(GistitInner::new(
-    //         &theirs.name(),
-    //         theirs.lang(),
-    //         theirs.size(),
-    //         theirs.to_encoded_data(),
-    //     ));
-    //     assert_eq!(payload.gistit.data.inner.len(), encoded_data.len());
-    //     // Expect a randomly named file ending with 'foo.rs'
-    //     assert!(payload.gistit.name.contains("foo.rs"));
-    //     let ours = payload.to_file().unwrap().inner();
-    //     assert_eq!(ours.name(), "foo.rs");
-    //     assert_eq!(ours.lang(), "rust");
-    //     assert_eq!(
-    //         ours.data(),
-    //         base64::decode(encoded_data).unwrap().as_slice()
-    //     );
-    // }
+    #[tokio::test]
+    async fn dispatch_gistit_payload_to_file_unencrypted() {
+        let encoded_data = base64::encode(EXAMPLE_RUST_FILE);
+        let theirs = File::from_bytes_encoded(encoded_data.as_bytes(), "foo.rs").unwrap();
+        let payload = GistitPayload::with_test_info().with_inner(GistitInner::new(
+            &theirs.name(),
+            theirs.lang(),
+            theirs.size(),
+            theirs.to_encoded_data(),
+        ));
+        assert_eq!(payload.gistit.data.inner.len(), encoded_data.len());
+        // Expect a randomly named file ending with 'foo.rs'
+        assert!(payload.gistit.name.contains("foo.rs"));
+        let ours = payload.to_file().unwrap();
+        assert_eq!(ours.name(), "foo.rs");
+        assert_eq!(ours.lang(), "rust");
+        assert_eq!(
+            ours.data(),
+            base64::decode(encoded_data).unwrap().as_slice()
+        );
+    }
 }

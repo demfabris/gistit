@@ -6,9 +6,7 @@
 use std::env::temp_dir;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::Read;
-use std::io::Write;
-use std::ops::RangeInclusive;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str;
 
@@ -17,9 +15,6 @@ use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
-
-/// Allowed file size range in bytes
-const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=50_000;
 
 /// Type alias for a base64 encoded and AES256 encrypted file with embedded header
 pub type HeadfulEncryptedB64String = String;
@@ -39,7 +34,7 @@ pub struct EncodedFileData {
 ///
 /// Filled with [Programming languages](https://gist.github.com/ppisarczyk/43962d06686722d26d176fad46879d41)
 /// and some google help.
-const EXTENSION_TO_LANG_MAPPING: Map<&'static str, &'static str> = phf_map! {
+pub const EXTENSION_TO_LANG_MAPPING: Map<&'static str, &'static str> = phf_map! {
     "abap" => "abap",
     "as" => "actionscript",
     "ada" => "ada",
@@ -615,7 +610,7 @@ impl Drop for File {
     fn drop(&mut self) {
         if self.temp {
             fs::remove_file(&self.path).expect("failed to remove temp file");
-        }      
+        }
     }
 }
 
@@ -719,64 +714,7 @@ impl File {
     pub fn size(&self) -> usize {
         self.size
     }
-
-    // /// Perform needed checks concurrently, consumes `Self` and return.
-    // ///
-    // /// # Errors
-    // ///
-    // /// Fails with [`FileError`] if user input isn't valid
-    // pub async fn check_consume(self) -> Result<Self> {
-    //     <Self as Check>::metadata(&self).await?;
-    //     <Self as Check>::extension(&self)?;
-    //
-    //     Ok(self)
-    // }
 }
-
-// #[async_trait]
-// trait Check {
-//     /// Checks the file metadata for type and size
-//     ///
-//     /// # Errors
-//     ///
-//     /// Fails with [`UnsuportedFile`] if size and type isn't allowed.
-//     async fn metadata(&self) -> Result<()>;
-//
-//     /// Checks the file extension against [`EXTENSION_TO_LANG_MAPPING`]
-//     ///
-//     /// # Errors
-//     ///
-//     /// Fails with [`UnsuportedFile`] if file extension isn't supported.
-//     fn extension(&self) -> Result<()>;
-// }
-//
-// #[async_trait]
-// impl Check for File {
-//     async fn metadata(&self) -> Result<()> {
-//         let attr = self.handler.metadata().await?;
-//         let size_allowed = ALLOWED_FILE_SIZE_RANGE.contains(&attr.len());
-//         let type_allowed = attr.is_file();
-//
-//         if !size_allowed {
-//             return Err(ErrorKind::FileSize.into());
-//         } else if !type_allowed {
-//             return Err(ErrorKind::NotAFile.into());
-//         }
-//         Ok(())
-//     }
-//     fn extension(&self) -> Result<()> {
-//         let ext = Path::new(self.path.as_os_str())
-//             .extension()
-//             .and_then(OsStr::to_str)
-//             .ok_or(ErrorKind::FileExtension)?;
-//
-//         if EXTENSION_TO_LANG_MAPPING.contains_key(ext) {
-//             Ok(())
-//         } else {
-//             Err(ErrorKind::FileExtension.into())
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
