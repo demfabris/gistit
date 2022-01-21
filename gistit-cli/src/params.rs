@@ -10,7 +10,7 @@ use ngrammatic::{Corpus, CorpusBuilder, Pad};
 use lib_gistit::file::EXTENSION_TO_LANG_MAPPING;
 
 use crate::fetch::Action as FetchAction;
-use crate::host::Action as HostAction;
+use crate::node::Action as NodeAction;
 use crate::send::Action as SendAction;
 use crate::{ErrorKind, Result};
 
@@ -168,7 +168,7 @@ impl Check for FetchAction {
     }
 }
 
-impl Check for HostAction {
+impl Check for NodeAction {
     fn check(&self) -> Result<()> {
         if let Some(value) = self.file {
             let file_path = Path::new(&value);

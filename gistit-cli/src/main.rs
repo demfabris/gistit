@@ -24,7 +24,7 @@ mod args;
 mod dispatch;
 mod errors;
 mod fetch;
-mod host;
+mod node;
 mod params;
 mod send;
 mod settings;
@@ -74,8 +74,8 @@ async fn run() -> Result<()> {
             let payload = action.prepare().await?;
             action.dispatch(payload).await?;
         }
-        ("host", Some(args)) => {
-            let action = Box::leak(Box::new(host::Action::from_args(args)?));
+        ("node", Some(args)) => {
+            let action = Box::leak(Box::new(node::Action::from_args(args)?));
             let payload = action.prepare().await?;
             action.dispatch(payload).await?;
         }

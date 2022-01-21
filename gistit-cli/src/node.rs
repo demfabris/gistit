@@ -18,13 +18,13 @@ use crate::{prettyln, ErrorKind, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
+    pub file: Option<&'static OsStr>,
     pub start: Option<&'static str>,
     pub stop: bool,
     pub status: bool,
-    pub clipboard: bool,
     pub host: &'static str,
     pub port: &'static str,
-    pub file: Option<&'static OsStr>,
+    pub clipboard: bool,
 }
 
 impl Action {
@@ -41,7 +41,7 @@ impl Action {
             port: unsafe { args.value_of("port").unwrap_unchecked() },
             stop: args.is_present("stop"),
             status: args.is_present("status"),
-            file: args.value_of_os("file"),
+            file: args.value_of_os("FILE"),
         }))
     }
 }

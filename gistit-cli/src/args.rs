@@ -97,17 +97,19 @@ Run `gistit --colorschemes` to list available ones.",
                 )
         )
         .subcommand(
-            App::new("host")
-                .alias("h")
-                .about("Host a gistit for p2p transfer")
+            App::new("node")
+                .alias("n")
+                .about("Start a p2p gistit node for file transfer")
                 .group(ArgGroup::new("process_cmd"))
                 .group(ArgGroup::new("inputfile").conflicts_with("process_cmd"))
                 .arg(
-                    Arg::new("status")
-                        .long("status")
-                        .help("Display the status of your gistit network node process")
-                        .group("process_cmd")
-                        .conflicts_with_all(&["secret", "file", "start", "stop"]),
+                    Arg::new("FILE")
+                        .group("inputfile")
+                        .help("Appends this file to your hosted gistits")
+                        .allow_invalid_utf8(true)
+                        .takes_value(true)
+                        .value_hint(ValueHint::FilePath)
+                        .conflicts_with_all(&["stop", "status", "start"]),
                 )
                 .arg(
                     Arg::new("start")
@@ -115,26 +117,25 @@ Run `gistit --colorschemes` to list available ones.",
                         .help("Start encrypted private network node.")
                         .long_help(
                             "Spawn the gistit network node background process to enable peer 
-to peer file sharing.",
-                        )
+to peer file sharing.")
                         .group("process_cmd")
                         .takes_value(true)
                         .value_name("seed")
-                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                        .conflicts_with_all(&["FILE", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("stop")
                         .long("stop")
                         .group("process_cmd")
                         .help("Stop gistit node background process")
-                        .conflicts_with_all(&["start", "secret", "file", "status"]),
+                        .conflicts_with_all(&["start", "FILE", "status"]),
                 )
                 .arg(
-                    Arg::new("clipboard")
-                        .long("clipboard")
-                        .requires("start")
-                        .help("Attempt to copy your gistit node hash into clipboard")
-                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                    Arg::new("status")
+                        .long("status")
+                        .help("Display the status of your gistit network node process")
+                        .group("process_cmd")
+                        .conflicts_with_all(&["FILE", "start", "stop"]),
                 )
                 .arg(
                     Arg::new("host")
@@ -144,7 +145,7 @@ to peer file sharing.",
                         .value_name("ivp4-address")
                         .default_value("127.0.0.1")
                         .value_hint(ValueHint::Hostname)
-                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                        .conflicts_with_all(&["FILE", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("port")
@@ -153,19 +154,14 @@ to peer file sharing.",
                         .takes_value(true)
                         .value_name("port")
                         .default_value("0")
-                        .conflicts_with_all(&["secret", "file", "stop", "status"]),
+                        .conflicts_with_all(&["FILE", "stop", "status"]),
                 )
                 .arg(
-                    Arg::new("file")
-                        .long("file")
-                        .short('f')
-                        .group("inputfile")
-                        .allow_invalid_utf8(true)
-                        .help("Appends this file to your hosted gistits")
-                        .multiple_occurrences(false)
-                        .takes_value(true)
-                        .value_hint(ValueHint::FilePath)
-                        .conflicts_with_all(&["stop", "status"]),
-                ),
+                    Arg::new("clipboard")
+                        .long("clipboard")
+                        .requires("start")
+                        .help("Attempt to copy your gistit node hash into clipboard")
+                        .conflicts_with_all(&["FILE", "stop", "status"]),
+                )
         )
 }

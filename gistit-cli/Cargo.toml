@@ -17,7 +17,7 @@ ngrammatic = "0.3.4"
 console = "0.15.0"
 url = "2.2.2"
 reqwest = { version = "0.11.9", features = ["json"] }
-serde = { version = "1.0.133", features = ["derive"] }
+serde = { version = "1.0.134", features = ["derive"] }
 serde_json = "1.0.75"
 serde_yaml = "0.8.23"
 base64 = "0.13.0"
@@ -35,14 +35,14 @@ predicates = "2.1.1"
 
 [build-dependencies]
 clap_complete = { version = "3.0.4", optional = true }
-clap = { version = "3.0.9", optional = true, features = ["cargo"] }
+clap = { version = "3.0.10", optional = true, features = ["cargo"] }
 
 [dependencies.clap]
-version = "3.0.9"
+version = "3.0.10"
 features = ["cargo"]
 
 [dependencies.bat]
-version = "0.18.3"
+version = "0.19.0"
 default-features = false
 features = ["atty", "regex-onig", "paging"]
 
@@ -54,16 +54,9 @@ features = ["windows-console-colors"]
 features = ["macros", "fs", "rt", "rt-multi-thread", "sync", "io-util"]
 version = "1.15.0"
 
-# [target.'cfg(unix)'.dependencies]
-# libc = { version = "0.2.112" }
-
-# [target.'cfg(windows)'.dependencies]
-# windows-service = { version = "0.4.0" }
-# msvc
-
 [profile.release]
 lto = true
 codegen-units = 1
-# opt-level = "z"
+opt-level = "z"
 # panic = "abort"
 # strip = true
