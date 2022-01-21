@@ -11,7 +11,7 @@ use serde::Deserialize;
 use url::Url;
 
 use lib_gistit::clipboard::Clipboard;
-use lib_gistit::file::{name_from_path, File};
+use lib_gistit::file::File;
 
 use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::params::Check;
@@ -32,7 +32,8 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct Action {
-    pub file: &'static OsStr,
+    pub file_path: Option<&'static OsStr>,
+    pub maybe_stdin: Option<String>,
     pub description: Option<&'static str>,
     pub author: &'static str,
     pub clipboard: bool,
@@ -41,12 +42,9 @@ pub struct Action {
 impl Action {
     pub fn from_args(
         args: &'static ArgMatches,
+        maybe_stdin: Option<String>,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        let file = args.value_of_os("FILE").ok_or(ErrorKind::Argument)?;
-        prettyln!(
-            "Preparing gistit: {}",
-            style(name_from_path(Path::new(file))).green()
-        );
+        prettyln!("Preparing gistit...",);
 
         let rhs_settings = get_runtime_settings()?.gistit_send.clone();
 
@@ -62,7 +60,8 @@ impl Action {
         );
 
         Ok(Box::new(Self {
-            file,
+            file_path: args.value_of_os("FILE"),
+            maybe_stdin,
             description: args.value_of("description"),
             author: Box::leak(Box::new(author)),
             clipboard,
@@ -142,8 +141,13 @@ impl Dispatch for Action {
     async fn prepare(&'static self) -> Result<Self::InnerData> {
         <Self as Check>::check(self)?;
 
-        let path = Path::new(self.file);
-        let file = File::from_path(path)?;
+        let file = if let Some(file) = self.file_path {
+            File::from_path(Path::new(file))?
+        } else if let Some(ref stdin) = self.maybe_stdin {
+            File::from_bytes(stdin.as_bytes().to_vec(), "stdin")?
+        } else {
+            return Err(ErrorKind::Argument.into());
+        };
 
         let config = Config {
             file,

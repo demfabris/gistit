@@ -148,11 +148,12 @@ impl Check for SendAction {
         if let Some(value) = self.description {
             description(value)?;
         }
+        if let Some(file_path_osstr) = self.file_path {
+            let file_path = Path::new(file_path_osstr);
+            metadata(&file_path)?;
+            extension(&file_path)?;
+        }
         author(self.author)?;
-        // File checks
-        let file_path = Path::new(self.file);
-        metadata(&file_path)?;
-        extension(&file_path)?;
         Ok(())
     }
 }

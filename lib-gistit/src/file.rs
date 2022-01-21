@@ -603,15 +603,6 @@ pub struct File {
     path: PathBuf,
     bytes: Vec<u8>,
     size: usize,
-    temp: bool,
-}
-
-impl Drop for File {
-    fn drop(&mut self) {
-        if self.temp {
-            fs::remove_file(&self.path).expect("failed to remove temp file");
-        }
-    }
 }
 
 pub fn name_from_path(path: &Path) -> String {
@@ -655,7 +646,6 @@ impl File {
             path: path.to_path_buf(),
             bytes: buf,
             size,
-            temp: false,
         })
     }
 
@@ -668,7 +658,6 @@ impl File {
             path: path.to_path_buf(),
             bytes: decoded_bytes,
             size,
-            temp: true,
         })
     }
 
@@ -683,6 +672,10 @@ impl File {
 
     pub fn data(&self) -> &[u8] {
         &self.bytes
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     pub fn to_encoded_data(&self) -> EncodedFileData {
@@ -700,15 +693,11 @@ impl File {
     }
 
     pub fn lang(&self) -> &str {
-        //TODO: Refactor this after removing Check trait
-        // SAFETY: If [`Self`] exists, these values are guaranteed to be checked
-        unsafe {
-            self.path
-                .extension()
-                .and_then(OsStr::to_str)
-                .map(|t| EXTENSION_TO_LANG_MAPPING.get(t))
-                .unwrap_unchecked()
-                .unwrap_unchecked()
+        if let Some(ext) = self.path.extension() {
+            let ext_str = OsStr::to_str(ext).expect("file to contain valid utf8 extension");
+            EXTENSION_TO_LANG_MAPPING.get(ext_str).unwrap_or(&"text")
+        } else {
+            "text"
         }
     }
 

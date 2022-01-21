@@ -29,6 +29,7 @@ mod params;
 mod send;
 mod settings;
 
+use std::io::{self, BufRead};
 use std::process::exit;
 
 use console::style;
@@ -67,14 +68,28 @@ async fn run() -> Result<()> {
         exit(0);
     }
 
-    if matches.is_present("FILE") {
-        dispatch_from_args!(send, matches);
-    }
-
     match cmd_args {
-        ("fetch", Some(args)) => dispatch_from_args!(fetch, args),
-        ("host", Some(args)) => dispatch_from_args!(host, args),
-        _ => (),
+        ("fetch", Some(args)) => {
+            let action = Box::leak(Box::new(fetch::Action::from_args(args)?));
+            let payload = action.prepare().await?;
+            action.dispatch(payload).await?;
+        }
+        ("host", Some(args)) => {
+            let action = Box::leak(Box::new(host::Action::from_args(args)?));
+            let payload = action.prepare().await?;
+            action.dispatch(payload).await?;
+        }
+        _ => {
+            let default_action = Box::leak(Box::new(if matches.is_present("FILE") {
+                send::Action::from_args(matches, None)?
+            } else {
+                let stdin = read_stdin();
+                send::Action::from_args(matches, Some(stdin))?
+            }));
+
+            let payload = default_action.prepare().await?;
+            default_action.dispatch(payload).await?;
+        }
     };
 
     Ok(())
@@ -114,15 +129,22 @@ For more information please visit:
     );
 }
 
-#[macro_export]
-macro_rules! dispatch_from_args {
-    ($mod:path, $args:expr) => {{
-        use $mod as module;
-        let action = module::Action::from_args($args)?;
-        let action = Box::leak(Box::new(action));
-        let payload = dispatch::Dispatch::prepare(&**action).await?;
-        dispatch::Dispatch::dispatch(&**action, payload).await?;
-    }};
+const MAX_BYTES_FROM_STDIN: usize = 50_000;
+
+fn read_stdin() -> String {
+    let mut buf = String::new();
+    let mut threshold = MAX_BYTES_FROM_STDIN;
+    let stdin = io::stdin();
+    let mut handle = stdin.lock();
+
+    while let Ok(read) = handle.read_line(&mut buf) {
+        if threshold <= 0 || read == 0 {
+            break;
+        }
+        threshold -= read;
+    }
+
+    buf
 }
 
 #[macro_export]
