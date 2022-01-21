@@ -49,8 +49,8 @@ This is our best efforts at persisting the hash into the system clipboard after 
                 ),
         )
         .arg(
-            Arg::new("colorschemes")
-                .long("colorschemes")
+            Arg::new("list-colorschemes")
+                .long("list-colorschemes")
                 .conflicts_with("FILE")
                 .help("List available colorschemes"),
         )

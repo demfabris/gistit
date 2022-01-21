@@ -57,7 +57,7 @@ async fn run() -> Result<()> {
         ("", None)
     };
 
-    if matches.is_present("colorschemes") {
+    if matches.is_present("list-colorschemes") {
         list_bat_colorschemes();
         exit(0);
     }
