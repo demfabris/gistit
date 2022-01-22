@@ -163,7 +163,7 @@ macro_rules! warnln {
             $warn
         )
     }};
-    ($msg:literal, $($rest:expr)*) => {{
+    ($msg:literal, $($rest:expr),* $(,)*) => {{
         use crate::CURRENT_ACTION;
         use console::style;
 
@@ -188,7 +188,7 @@ macro_rules! prettyln {
             console::style($msg).bold(),
         );
     }};
-    ($msg:literal, $($rest:expr)*) => {{
+    ($msg:literal, $($rest:expr),* $(,)*) => {{
         let msg = format!($msg, $($rest,)*);
         println!("{}{}", console::Emoji("\u{2734}  ", "> "), console::style(msg).bold());
     }};
