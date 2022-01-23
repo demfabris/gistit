@@ -137,7 +137,7 @@ impl Bridge<Client> {
 pub enum Instruction {
     Shutdown,
     Listen { host: Ipv4Addr, port: u16 },
-    Dial { raw_address: String },
+    Dial { peer_id: String },
     File(EncodedFileData),
     // Daemon responses
     Response(ServerResponse),

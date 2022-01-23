@@ -129,24 +129,16 @@ impl Dispatch for Action {
                 }
             }
             ProcessCommand::Join(address) => {
-                let pid = spawn(&runtime_dir, "none")?;
-                prettyln!(
-                    "Starting gistit network node process, pid: {}",
-                    style(pid).blue()
-                );
-
-                bridge.connect_blocking()?;
-                bridge
-                    .send(Instruction::Listen {
-                        host: config.host,
-                        port: config.port,
-                    })
-                    .await?;
-                bridge
-                    .send(Instruction::Dial {
-                        raw_address: address.to_owned(),
-                    })
-                    .await?;
+                if !bridge.alive() {
+                    prettyln!("Gistit node must be running to join a peer");
+                } else {
+                    bridge.connect_blocking()?;
+                    bridge
+                        .send(Instruction::Dial {
+                            peer_id: address.to_owned(),
+                        })
+                        .await?;
+                }
             }
             ProcessCommand::Stop => {
                 prettyln!("Stopping gistit network node process...");

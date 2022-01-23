@@ -18,7 +18,7 @@ use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
 use libp2p::identity::Keypair;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult};
-use libp2p::multiaddr::multiaddr;
+use libp2p::multiaddr::{multiaddr, Protocol};
 use libp2p::request_response::{
     ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent,
@@ -78,6 +78,8 @@ const BOOTNODES: [&'static str; 4] = [
     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
 
+const BOOTADDR: &str = "/dnsaddr/bootstrap.libp2p.io";
+
 impl NetworkNode {
     pub async fn new(config: NetworkConfig) -> Result<Self> {
         let req_res = RequestResponse::new(
@@ -92,7 +94,7 @@ impl NetworkNode {
             let store = MemoryStore::new(config.peer_id);
             let mut behaviour = Kademlia::with_config(config.peer_id, store, cfg);
 
-            let bootaddr = Multiaddr::from_str("/dnsaddr/bootstrap.libp2p.io")?;
+            let bootaddr = Multiaddr::from_str(BOOTADDR)?;
             for peer in &BOOTNODES {
                 behaviour.add_address(
                     &PeerId::from_str(peer).expect("peer id to be valid"),
@@ -147,7 +149,9 @@ impl NetworkNode {
                     .send(Instruction::Response(ServerResponse::PeerId(peer_id)))
                     .await?;
             }
-            _ => (),
+            ev => {
+                println!("other event: {:?}", ev);
+            }
         }
         Ok(())
     }
@@ -159,9 +163,16 @@ impl NetworkNode {
                 let addr = multiaddr!(Ip4(host), Tcp(port));
                 self.swarm.listen_on(addr).expect("to listen to addr");
             }
-            Instruction::Dial { raw_address } => {
-                let addr: Multiaddr = raw_address.parse().expect("to be valid multiaddr");
-                println!("{:?}", addr);
+            Instruction::Dial { peer_id } => {
+                let addr: Multiaddr = BOOTADDR.parse().unwrap();
+                let peer_id: PeerId = peer_id.parse().unwrap();
+                self.swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .add_address(&peer_id, addr.clone());
+                self.swarm
+                    .dial(addr.with(Protocol::P2p(peer_id.into())))
+                    .expect("to dial");
             }
             Instruction::Shutdown => {
                 println!("Exiting");
