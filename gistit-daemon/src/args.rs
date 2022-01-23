@@ -8,25 +8,6 @@ pub fn app() -> App<'static> {
         .about(crate_description!())
         .author(crate_authors!())
         .arg(
-            Arg::new("host")
-                .long("host")
-                .help("The ipv4 address to listen for connections")
-                .default_value("127.0.0.1")
-                .takes_value(true)
-                .value_name("ipv4")
-                .value_hint(ValueHint::Hostname)
-                .validator(|input| input.parse::<std::net::Ipv4Addr>()),
-        )
-        .arg(
-            Arg::new("port")
-                .long("port")
-                .help("The port that will be used for connections")
-                .default_value("0")
-                .takes_value(true)
-                .value_name("port")
-                .validator(|input| input.parse::<u16>()),
-        )
-        .arg(
             Arg::new("runtime-dir")
                 .long("runtime-dir")
                 .help("Directory to cache peers")

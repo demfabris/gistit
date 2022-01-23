@@ -1,6 +1,7 @@
 //! The host module
 use std::ffi::OsStr;
 use std::fs;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -10,7 +11,7 @@ use console::style;
 use directories::BaseDirs;
 
 use lib_gistit::file::File;
-use lib_gistit::ipc::{Bridge, Instruction};
+use lib_gistit::ipc::{self, Instruction, ServerResponse};
 
 use crate::dispatch::Dispatch;
 use crate::params::Check;
@@ -20,6 +21,7 @@ use crate::{prettyln, ErrorKind, Result};
 pub struct Action {
     pub file: Option<&'static OsStr>,
     pub start: Option<&'static str>,
+    pub join: Option<&'static str>,
     pub stop: bool,
     pub status: bool,
     pub host: &'static str,
@@ -35,6 +37,7 @@ impl Action {
 
         Ok(Box::new(Self {
             start: args.value_of("start"),
+            join: args.value_of("join"),
             clipboard: args.is_present("clipboard"),
             // SAFETY: Has default values
             host: unsafe { args.value_of("host").unwrap_unchecked() },
@@ -48,6 +51,7 @@ impl Action {
 
 pub enum ProcessCommand {
     Start(&'static str),
+    Join(&'static str),
     Stop,
     Status,
     Other,
@@ -56,6 +60,8 @@ pub enum ProcessCommand {
 pub struct Config {
     command: ProcessCommand,
     maybe_file: Option<File>,
+    host: Ipv4Addr,
+    port: u16,
 }
 
 #[async_trait]
@@ -65,24 +71,34 @@ impl Dispatch for Action {
     async fn prepare(&'static self) -> Result<Self::InnerData> {
         <Self as Check>::check(self)?;
 
-        let command = match (self.start, self.stop, self.status) {
-            (Some(seed), false, false) => ProcessCommand::Start(seed),
-            (None, true, false) => ProcessCommand::Stop,
-            (None, false, true) => ProcessCommand::Status,
-            (_, _, _) => ProcessCommand::Other,
+        let command = match (self.start, self.join, self.stop, self.status) {
+            (Some(seed), None, false, false) => ProcessCommand::Start(seed),
+            (None, Some(address), false, false) => ProcessCommand::Join(address),
+            (None, None, true, false) => ProcessCommand::Stop,
+            (None, None, false, true) => ProcessCommand::Status,
+            (_, _, _, _) => ProcessCommand::Other,
         };
 
-        // Construct `FileReady` if a file was provided, that means user wants to host a new file
-        // and the background process should be running.
         let maybe_file = if let Some(file) = self.file {
             let path = Path::new(file);
             Some(File::from_path(path)?)
         } else {
             None
         };
+
+        // SAFETY: Previously checked in [`Check::check`]
+        let (host, port) = unsafe {
+            (
+                self.host.parse::<Ipv4Addr>().unwrap_unchecked(),
+                self.port.parse::<u16>().unwrap_unchecked(),
+            )
+        };
+
         let config = Config {
             command,
             maybe_file,
+            host,
+            port,
         };
 
         Ok(config)
@@ -90,25 +106,56 @@ impl Dispatch for Action {
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = get_runtime_dir()?;
+        let mut bridge = ipc::client(&runtime_dir)?;
 
         match config.command {
             ProcessCommand::Start(seed) => {
-                let pid = spawn(&runtime_dir, seed, self.host, self.port)?;
+                let pid = spawn(&runtime_dir, seed)?;
                 prettyln!(
                     "Starting gistit network node process, pid: {}",
                     style(pid).blue()
                 );
+
+                bridge.connect_blocking()?;
+                bridge
+                    .send(Instruction::Listen {
+                        host: config.host,
+                        port: config.port,
+                    })
+                    .await?;
+
+                if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv().await? {
+                    print_success(self.clipboard, id);
+                }
+            }
+            ProcessCommand::Join(address) => {
+                let pid = spawn(&runtime_dir, "none")?;
+                prettyln!(
+                    "Starting gistit network node process, pid: {}",
+                    style(pid).blue()
+                );
+
+                bridge.connect_blocking()?;
+                bridge
+                    .send(Instruction::Listen {
+                        host: config.host,
+                        port: config.port,
+                    })
+                    .await?;
+                bridge
+                    .send(Instruction::Dial {
+                        raw_address: address.to_owned(),
+                    })
+                    .await?;
             }
             ProcessCommand::Stop => {
-                Bridge::connect(&runtime_dir)?
-                    .send(Instruction::Shutdown)
-                    .await?;
                 prettyln!("Stopping gistit network node process...");
+                bridge.connect_blocking()?;
+                bridge.send(Instruction::Shutdown).await?;
             }
             ProcessCommand::Status => {
-                if Bridge::alive(&runtime_dir) {
+                if bridge.alive() {
                     prettyln!("Running");
-                    // TODO: include more info from daemon
                 } else {
                     prettyln!("Not running");
                 }
@@ -120,7 +167,8 @@ impl Dispatch for Action {
                 } = config
                 {
                     prettyln!("Hosting file...");
-                    Bridge::connect(&runtime_dir)?
+                    bridge.connect_blocking()?;
+                    bridge
                         .send(Instruction::File(file.to_encoded_data()))
                         .await?;
                 }
@@ -138,16 +186,30 @@ fn get_runtime_dir() -> Result<PathBuf> {
         .unwrap_or_else(|| std::env::temp_dir()))
 }
 
-fn spawn(runtime_dir: &Path, seed: &str, host: &str, port: &str) -> Result<u32> {
+fn spawn(runtime_dir: &Path, seed: &str) -> Result<u32> {
     let stdout = fs::File::create(runtime_dir.join("gistit.out"))?;
     let daemon = "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
     let child = Command::new(daemon)
         .args(["--seed", seed])
         .args(["--runtime-dir", runtime_dir.to_string_lossy().as_ref()])
-        .args(["--host", host])
-        .args(["--port", port])
         .stdout(stdout)
         .spawn()?;
 
     Ok(child.id())
+}
+
+fn print_success(has_clipboard: bool, peer_id: String) {
+    let clipboard_msg = if has_clipboard {
+        "(copied to clipboard)".to_owned()
+    } else {
+        "".to_owned()
+    };
+    println!(
+        r#"
+SUCCESS:
+    peer id: {} {}
+"#,
+        peer_id,
+        style(clipboard_msg).italic()
+    );
 }

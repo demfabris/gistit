@@ -1,43 +1,44 @@
 //! The network module
 #![allow(clippy::missing_errors_doc)]
 
+use std::collections::HashMap;
+use std::io;
 use std::iter::once;
 use std::net::Ipv4Addr;
-use std::path::Path;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::time::Duration;
 
 use async_trait::async_trait;
+use libp2p::core::either::EitherError;
 use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed};
 use libp2p::core::{PeerId, ProtocolName};
-use libp2p::futures::{self, future::poll_fn};
+use libp2p::futures::channel::oneshot;
 use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
 use libp2p::identity::Keypair;
+use libp2p::kad::record::store::MemoryStore;
+use libp2p::kad::{GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult};
 use libp2p::multiaddr::multiaddr;
 use libp2p::request_response::{
     ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent,
 };
-use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmEvent};
 use libp2p::{development_transport, Swarm};
-use libp2p::{identity, Multiaddr};
+use libp2p::{identity, Multiaddr, NetworkBehaviour};
 
-use lib_gistit::ipc::{Bridge, Instruction};
+use lib_gistit::ipc::{self, Bridge, Instruction, Server, ServerResponse};
 
 use crate::Result;
 
 pub struct NetworkConfig {
     peer_id: PeerId,
     keypair: Keypair,
-    local_multiaddr: Multiaddr,
-    bridge: Bridge,
+    runtime_dir: PathBuf,
 }
 
 impl NetworkConfig {
-    pub fn new(
-        seed: &str,
-        local_multiaddr: Multiaddr,
-        runtime_dir: &Path,
-        bridge: Bridge,
-    ) -> Result<Self> {
+    pub fn new(seed: &str, runtime_dir: PathBuf) -> Result<Self> {
         let mut bytes: Vec<u8> = seed.as_bytes().to_vec();
         bytes.resize_with(32, || 0);
         let mut bytes: [u8; 32] = bytes.try_into().unwrap();
@@ -50,8 +51,7 @@ impl NetworkConfig {
         Ok(Self {
             peer_id,
             keypair,
-            local_multiaddr,
-            bridge,
+            runtime_dir,
         })
     }
 
@@ -62,42 +62,69 @@ impl NetworkConfig {
 
 /// The main event loop
 pub struct NetworkNode {
-    /// p2p Swarm, acts like a receiver
-    swarm: Swarm<RequestResponse<GistitExchangeCodec>>,
-    bridge: Bridge,
+    swarm: Swarm<GistitNetworkBehaviour>,
+    bridge: Bridge<Server>,
+    // pending_dial: HashMap<PeerId, oneshot::Sender<Result<(), Box<dyn Error + Send>>>>,
+    // pending_start_providing: HashMap<QueryId, oneshot::Sender<()>>,
+    // pending_get_providers: HashMap<QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    // pending_request_file:
+    //     HashMap<RequestId, oneshot::Sender<Result<String, Box<dyn Error + Send>>>>,
 }
+
+const BOOTNODES: [&'static str; 4] = [
+    "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+    "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+    "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+    "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+];
 
 impl NetworkNode {
     pub async fn new(config: NetworkConfig) -> Result<Self> {
-        let mut swarm = SwarmBuilder::new(
-            development_transport(config.keypair).await.unwrap(), // TODO: dont panic
-            RequestResponse::new(
-                GistitExchangeCodec,
-                once((GistitExchangeProtocol, ProtocolSupport::Full)),
-                RequestResponseConfig::default(),
-            ),
+        let req_res = RequestResponse::new(
+            GistitExchangeCodec,
+            once((GistitExchangeProtocol, ProtocolSupport::Full)),
+            RequestResponseConfig::default(),
+        );
+
+        let kademlia = {
+            let mut cfg = KademliaConfig::default();
+            cfg.set_query_timeout(Duration::from_secs(5 * 60));
+            let store = MemoryStore::new(config.peer_id);
+            let mut behaviour = Kademlia::with_config(config.peer_id, store, cfg);
+
+            let bootaddr = Multiaddr::from_str("/dnsaddr/bootstrap.libp2p.io")?;
+            for peer in &BOOTNODES {
+                behaviour.add_address(
+                    &PeerId::from_str(peer).expect("peer id to be valid"),
+                    bootaddr.clone(),
+                );
+            }
+
+            behaviour
+        };
+
+        let swarm = Swarm::new(
+            development_transport(config.keypair)
+                .await
+                .expect("start p2p transport"),
+            GistitNetworkBehaviour { req_res, kademlia },
             config.peer_id,
-        )
-        .build();
+        );
 
-        println!("Listening on {:?}", config.local_multiaddr);
-        swarm.listen_on(config.local_multiaddr).unwrap(); //TODO: dont panic
+        let bridge = ipc::server(&config.runtime_dir)?;
 
-        Ok(Self {
-            swarm,
-            bridge: config.bridge,
-        })
+        Ok(Self { swarm, bridge })
     }
 
-    pub fn peer_id(&self) -> Vec<u8> {
-        self.swarm.local_peer_id().to_bytes()
+    pub fn peer_id(&self) -> String {
+        self.swarm.local_peer_id().to_base58()
     }
 
     pub async fn run(mut self) -> Result<()> {
         loop {
             tokio::select! {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
-                    swarm_event.expect("some event")).await,
+                    swarm_event.expect("to recv swarm event")).await?,
 
                 bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await
             }
@@ -107,15 +134,35 @@ impl NetworkNode {
     async fn handle_swarm_event(
         &mut self,
         event: SwarmEvent<
-            RequestResponseEvent<GistitRequest, GistitResponse>,
-            ProtocolsHandlerUpgrErr<std::io::Error>,
+            GistitNetworkEvent,
+            EitherError<ProtocolsHandlerUpgrErr<io::Error>, io::Error>,
         >,
-    ) {
-        println!("{:?}", event);
+    ) -> Result<()> {
+        match event {
+            SwarmEvent::NewListenAddr { address, .. } => {
+                println!("Listening on: {:?}", address);
+                let peer_id = self.swarm.local_peer_id().to_string();
+                self.bridge.connect_blocking()?;
+                self.bridge
+                    .send(Instruction::Response(ServerResponse::PeerId(peer_id)))
+                    .await?;
+            }
+            _ => (),
+        }
+        Ok(())
     }
 
     async fn handle_bridge_event(&mut self, instruction: Instruction) {
         match instruction {
+            Instruction::Listen { host, port } => {
+                println!("Listening on {:?}:{:?}", host, port);
+                let addr = multiaddr!(Ip4(host), Tcp(port));
+                self.swarm.listen_on(addr).expect("to listen to addr");
+            }
+            Instruction::Dial { raw_address } => {
+                let addr: Multiaddr = raw_address.parse().expect("to be valid multiaddr");
+                println!("{:?}", addr);
+            }
             Instruction::Shutdown => {
                 println!("Exiting");
                 drop(self);
@@ -126,6 +173,31 @@ impl NetworkNode {
             }
             _ => (),
         }
+    }
+}
+
+#[derive(NetworkBehaviour)]
+#[behaviour(out_event = "GistitNetworkEvent")]
+struct GistitNetworkBehaviour {
+    req_res: RequestResponse<GistitExchangeCodec>,
+    kademlia: Kademlia<MemoryStore>,
+}
+
+#[derive(Debug)]
+enum GistitNetworkEvent {
+    RequestResponse(RequestResponseEvent<GistitRequest, GistitResponse>),
+    Kademlia(KademliaEvent),
+}
+
+impl From<RequestResponseEvent<GistitRequest, GistitResponse>> for GistitNetworkEvent {
+    fn from(event: RequestResponseEvent<GistitRequest, GistitResponse>) -> Self {
+        GistitNetworkEvent::RequestResponse(event)
+    }
+}
+
+impl From<KademliaEvent> for GistitNetworkEvent {
+    fn from(event: KademliaEvent) -> Self {
+        GistitNetworkEvent::Kademlia(event)
     }
 }
 
@@ -209,9 +281,4 @@ impl RequestResponseCodec for GistitExchangeCodec {
 
         Ok(())
     }
-}
-
-#[must_use]
-pub fn ipv4_to_multiaddr(addr: Ipv4Addr, port: u16) -> Multiaddr {
-    multiaddr!(Ip4(addr), Tcp(port))
 }

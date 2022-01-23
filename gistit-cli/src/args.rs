@@ -121,7 +121,16 @@ to peer file sharing.")
                         .group("process_cmd")
                         .takes_value(true)
                         .value_name("seed")
-                        .conflicts_with_all(&["FILE", "stop", "status"]),
+                        .conflicts_with_all(&["FILE","join", "stop", "status"]),
+                )
+                .arg(
+                    Arg::new("join")
+                        .long("join")
+                        .help("Start gistit node and join a private network.")
+                        .group("process_cmd")
+                        .takes_value(true)
+                        .value_name("address")
+                        .conflicts_with_all(&["FILE", "start", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("stop")
