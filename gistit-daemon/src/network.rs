@@ -1,19 +1,20 @@
 //! The network module
 #![allow(clippy::missing_errors_doc)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::iter::once;
-use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use lib_gistit::ipc::{self, Bridge, Instruction, Server, ServerResponse};
+use log::{debug, info, warn};
+
 use libp2p::core::either::EitherError;
-use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed};
+use libp2p::core::upgrade::{self, read_length_prefixed, write_length_prefixed};
 use libp2p::core::{PeerId, ProtocolName};
-use libp2p::futures::channel::oneshot;
 use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
 use libp2p::identity::Keypair;
 use libp2p::kad::record::store::MemoryStore;
@@ -24,10 +25,10 @@ use libp2p::request_response::{
     RequestResponseEvent,
 };
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmEvent};
-use libp2p::{development_transport, Swarm};
-use libp2p::{identity, Multiaddr, NetworkBehaviour};
-
-use lib_gistit::ipc::{self, Bridge, Instruction, Server, ServerResponse};
+use libp2p::{
+    dns, identity, mplex, noise, tcp, websocket, yamux, Multiaddr, NetworkBehaviour, Swarm,
+    Transport,
+};
 
 use crate::Result;
 
@@ -64,11 +65,10 @@ impl NetworkConfig {
 pub struct NetworkNode {
     swarm: Swarm<GistitNetworkBehaviour>,
     bridge: Bridge<Server>,
-    // pending_dial: HashMap<PeerId, oneshot::Sender<Result<(), Box<dyn Error + Send>>>>,
+    pending_dial: HashSet<PeerId>,
     // pending_start_providing: HashMap<QueryId, oneshot::Sender<()>>,
     // pending_get_providers: HashMap<QueryId, oneshot::Sender<HashSet<PeerId>>>,
-    // pending_request_file:
-    //     HashMap<RequestId, oneshot::Sender<Result<String, Box<dyn Error + Send>>>>,
+    // pending_request_file: HashMap<RequestId, oneshot::Sender<Result<String>>>,
 }
 
 const BOOTNODES: [&'static str; 4] = [
@@ -105,21 +105,40 @@ impl NetworkNode {
             behaviour
         };
 
+        let raw_transport = {
+            let tcp = tcp::TcpConfig::new().nodelay(true);
+            let dns_tcp = dns::DnsConfig::system(tcp).await?;
+            let ws_dns_tcp = websocket::WsConfig::new(dns_tcp.clone());
+            dns_tcp.or_transport(ws_dns_tcp)
+        };
+
+        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+            .into_authentic(&config.keypair)
+            .expect("Signing libp2p-noise static DH keypair failed.");
+
+        let transport = raw_transport
+            .upgrade(upgrade::Version::V1)
+            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+            .multiplex(upgrade::SelectUpgrade::new(
+                yamux::YamuxConfig::default(),
+                mplex::MplexConfig::default(),
+            ))
+            .timeout(Duration::from_secs(60 * 30))
+            .boxed();
+
         let swarm = Swarm::new(
-            development_transport(config.keypair)
-                .await
-                .expect("start p2p transport"),
+            transport,
             GistitNetworkBehaviour { req_res, kademlia },
             config.peer_id,
         );
 
         let bridge = ipc::server(&config.runtime_dir)?;
 
-        Ok(Self { swarm, bridge })
-    }
-
-    pub fn peer_id(&self) -> String {
-        self.swarm.local_peer_id().to_base58()
+        Ok(Self {
+            swarm,
+            bridge,
+            pending_dial: Default::default(),
+        })
     }
 
     pub async fn run(mut self) -> Result<()> {
@@ -128,7 +147,7 @@ impl NetworkNode {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
                     swarm_event.expect("to recv swarm event")).await?,
 
-                bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await
+                bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await?
             }
         }
     }
@@ -142,48 +161,82 @@ impl NetworkNode {
     ) -> Result<()> {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
-                println!("Listening on: {:?}", address);
+                debug!("Daemon: Listening on: {:?}", address);
+
                 let peer_id = self.swarm.local_peer_id().to_string();
+
                 self.bridge.connect_blocking()?;
                 self.bridge
                     .send(Instruction::Response(ServerResponse::PeerId(peer_id)))
                     .await?;
             }
+            ev @ SwarmEvent::ConnectionEstablished { .. } => {
+                info!("{:?}", ev);
+            }
             ev => {
-                println!("other event: {:?}", ev);
+                info!("other event: {:?}", ev);
             }
         }
         Ok(())
     }
 
-    async fn handle_bridge_event(&mut self, instruction: Instruction) {
+    async fn handle_bridge_event(&mut self, instruction: Instruction) -> Result<()> {
         match instruction {
             Instruction::Listen { host, port } => {
-                println!("Listening on {:?}:{:?}", host, port);
+                debug!("Instruction: Listen");
                 let addr = multiaddr!(Ip4(host), Tcp(port));
-                self.swarm.listen_on(addr).expect("to listen to addr");
+                self.swarm.listen_on(addr)?;
             }
             Instruction::Dial { peer_id } => {
+                debug!("Instruction: Dial");
+
                 let addr: Multiaddr = BOOTADDR.parse().unwrap();
-                let peer_id: PeerId = peer_id.parse().unwrap();
+                let peer: PeerId = peer_id.parse().unwrap();
+
+                if self.pending_dial.contains(&peer) {
+                    debug!("Already dialing peer: {}", peer_id);
+                    return Ok(());
+                }
+
                 self.swarm
                     .behaviour_mut()
                     .kademlia
-                    .add_address(&peer_id, addr.clone());
+                    .add_address(&peer, addr.clone());
+
+                self.swarm.dial(addr.with(Protocol::P2p(peer.into())))?;
+                self.pending_dial.insert(peer);
+            }
+            Instruction::Provide { name, .. } => {
+                debug!("Instruction: Provide file {}", name);
+
                 self.swarm
-                    .dial(addr.with(Protocol::P2p(peer_id.into())))
-                    .expect("to dial");
+                    .behaviour_mut()
+                    .kademlia
+                    .start_providing(name.into_bytes().into())
+                    .expect("to start providing");
+            }
+            Instruction::Status => {
+                debug!("Instruction: Status");
+
+                let listeners: Vec<String> =
+                    self.swarm.listeners().map(|f| f.to_string()).collect();
+                let network_info = self.swarm.network_info();
+
+                self.bridge.connect_blocking()?;
+                self.bridge
+                    .send(Instruction::Response(ServerResponse::Status(format!(
+                        "listeners: {:?}, network: {:?}",
+                        listeners, network_info
+                    ))))
+                    .await?;
             }
             Instruction::Shutdown => {
-                println!("Exiting");
-                drop(self);
+                warn!("Exiting...");
                 std::process::exit(0);
-            }
-            Instruction::File(data) => {
-                println!("{:?}", data);
             }
             _ => (),
         }
+        Ok(())
     }
 }
 

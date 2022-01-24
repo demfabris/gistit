@@ -3,10 +3,9 @@ pub enum ErrorKind {
     InvalidArgs,
     FsEvent(String),
     Io(std::io::Error),
-    Multiaddr(libp2p::core::multiaddr::Error),
     InvalidPeerAddress(String),
     InvalidPeerFile,
-    ConnectionSwarm(libp2p::swarm::DialError),
+    P2p(Box<dyn std::error::Error>),
     Internal(lib_gistit::Error),
 }
 
@@ -40,7 +39,15 @@ impl From<std::str::Utf8Error> for Error {
 impl From<libp2p::core::multiaddr::Error> for Error {
     fn from(err: libp2p::core::multiaddr::Error) -> Self {
         Self {
-            kind: ErrorKind::Multiaddr(err),
+            kind: ErrorKind::P2p(Box::new(err)),
+        }
+    }
+}
+
+impl<T: std::error::Error + 'static> From<libp2p::TransportError<T>> for Error {
+    fn from(err: libp2p::TransportError<T>) -> Self {
+        Self {
+            kind: ErrorKind::P2p(Box::new(err)),
         }
     }
 }
@@ -48,7 +55,7 @@ impl From<libp2p::core::multiaddr::Error> for Error {
 impl From<libp2p::swarm::DialError> for Error {
     fn from(err: libp2p::swarm::DialError) -> Self {
         Self {
-            kind: ErrorKind::ConnectionSwarm(err),
+            kind: ErrorKind::P2p(Box::new(err)),
         }
     }
 }

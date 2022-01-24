@@ -3,7 +3,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use async_trait::async_trait;
 use clap::ArgMatches;
@@ -142,12 +142,20 @@ impl Dispatch for Action {
             }
             ProcessCommand::Stop => {
                 prettyln!("Stopping gistit network node process...");
+                fs::remove_file(runtime_dir.join("gistit.log"))?;
                 bridge.connect_blocking()?;
                 bridge.send(Instruction::Shutdown).await?;
             }
             ProcessCommand::Status => {
                 if bridge.alive() {
-                    prettyln!("Running");
+                    bridge.connect_blocking()?;
+                    bridge.send(Instruction::Status).await?;
+
+                    if let Instruction::Response(ServerResponse::Status(status_str)) =
+                        bridge.recv().await?
+                    {
+                        println!("{}", status_str);
+                    }
                 } else {
                     prettyln!("Not running");
                 }
@@ -161,7 +169,10 @@ impl Dispatch for Action {
                     prettyln!("Hosting file...");
                     bridge.connect_blocking()?;
                     bridge
-                        .send(Instruction::File(file.to_encoded_data()))
+                        .send(Instruction::Provide {
+                            name: file.name(),
+                            data: file.to_encoded_data(),
+                        })
                         .await?;
                 }
             }
@@ -179,12 +190,13 @@ fn get_runtime_dir() -> Result<PathBuf> {
 }
 
 fn spawn(runtime_dir: &Path, seed: &str) -> Result<u32> {
-    let stdout = fs::File::create(runtime_dir.join("gistit.out"))?;
+    let stdout = fs::File::create(runtime_dir.join("gistit.log"))?;
     let daemon = "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
     let child = Command::new(daemon)
         .args(["--seed", seed])
         .args(["--runtime-dir", runtime_dir.to_string_lossy().as_ref()])
-        .stdout(stdout)
+        .stderr(stdout)
+        .stdout(Stdio::null())
         .spawn()?;
 
     Ok(child.id())

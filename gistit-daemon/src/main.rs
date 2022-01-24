@@ -61,8 +61,6 @@ async fn run() -> Result<()> {
 
     let node = NetworkConfig::new(seed, runtime_dir)?.apply().await?;
 
-    println!("{:?}", node.peer_id());
-
     node.run().await?;
 
     Ok(())
@@ -70,6 +68,11 @@ async fn run() -> Result<()> {
 
 #[tokio::main]
 async fn main() {
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .write_style(env_logger::WriteStyle::Always)
+        .init();
+
     if let Err(err) = run().await {
         eprintln!("DAEMON ERROR: {:?}", err);
         std::process::exit(1);
