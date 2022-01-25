@@ -16,17 +16,19 @@ use libp2p::core::either::EitherError;
 use libp2p::core::upgrade::{self, read_length_prefixed, write_length_prefixed};
 use libp2p::core::{PeerId, ProtocolName};
 use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
+use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::identity::Keypair;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult};
 use libp2p::multiaddr::{multiaddr, Protocol};
+use libp2p::ping::{Ping, PingEvent, PingFailure};
 use libp2p::request_response::{
     ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent,
 };
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmEvent};
 use libp2p::{
-    dns, identity, mplex, noise, tcp, websocket, yamux, Multiaddr, NetworkBehaviour, Swarm,
+    dns, identity, mplex, noise, ping, tcp, websocket, yamux, Multiaddr, NetworkBehaviour, Swarm,
     Transport,
 };
 
@@ -66,7 +68,7 @@ pub struct NetworkNode {
     swarm: Swarm<GistitNetworkBehaviour>,
     bridge: Bridge<Server>,
     pending_dial: HashSet<PeerId>,
-    // pending_start_providing: HashMap<QueryId, oneshot::Sender<()>>,
+    pending_start_providing: HashSet<QueryId>,
     // pending_get_providers: HashMap<QueryId, oneshot::Sender<HashSet<PeerId>>>,
     // pending_request_file: HashMap<RequestId, oneshot::Sender<Result<String>>>,
 }
@@ -126,9 +128,21 @@ impl NetworkNode {
             .timeout(Duration::from_secs(60 * 30))
             .boxed();
 
+        let identify = Identify::new(IdentifyConfig::new(
+            "/ipfs/0.1.0".into(),
+            config.keypair.public(),
+        ));
+
+        let ping = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
+
         let swarm = Swarm::new(
             transport,
-            GistitNetworkBehaviour { req_res, kademlia },
+            GistitNetworkBehaviour {
+                req_res,
+                kademlia,
+                identify,
+                ping,
+            },
             config.peer_id,
         );
 
@@ -138,6 +152,7 @@ impl NetworkNode {
             swarm,
             bridge,
             pending_dial: Default::default(),
+            pending_start_providing: Default::default(),
         })
     }
 
@@ -156,10 +171,31 @@ impl NetworkNode {
         &mut self,
         event: SwarmEvent<
             GistitNetworkEvent,
-            EitherError<ProtocolsHandlerUpgrErr<io::Error>, io::Error>,
+            EitherError<
+                EitherError<EitherError<ProtocolsHandlerUpgrErr<io::Error>, io::Error>, io::Error>,
+                PingFailure,
+            >,
         >,
     ) -> Result<()> {
         match event {
+            SwarmEvent::Behaviour(GistitNetworkEvent::Kademlia(
+                KademliaEvent::OutboundQueryCompleted {
+                    id,
+                    result: QueryResult::StartProviding(_),
+                    ..
+                },
+            )) => {
+                self.pending_start_providing.remove(&id);
+            }
+            SwarmEvent::Behaviour(GistitNetworkEvent::Kademlia(
+                KademliaEvent::OutboundQueryCompleted {
+                    id,
+                    result: QueryResult::GetProviders(Ok(GetProvidersOk { providers, .. })),
+                    ..
+                },
+            )) => {
+                info!("Got providers: {:?}", providers);
+            }
             SwarmEvent::NewListenAddr { address, .. } => {
                 debug!("Daemon: Listening on: {:?}", address);
 
@@ -170,8 +206,23 @@ impl NetworkNode {
                     .send(Instruction::Response(ServerResponse::PeerId(peer_id)))
                     .await?;
             }
-            ev @ SwarmEvent::ConnectionEstablished { .. } => {
-                info!("{:?}", ev);
+            SwarmEvent::ConnectionEstablished {
+                peer_id, endpoint, ..
+            } => {
+                info!("Connection established {:?}", peer_id);
+                if endpoint.is_dialer() {
+                    self.pending_dial.remove(&peer_id);
+                }
+            }
+            SwarmEvent::OutgoingConnectionError {
+                peer_id: maybe_peer_id,
+                error,
+                ..
+            } => {
+                info!("Outgoing connection error: {:?}", error);
+                if let Some(peer_id) = maybe_peer_id {
+                    self.pending_dial.remove(&peer_id);
+                }
             }
             ev => {
                 info!("other event: {:?}", ev);
@@ -245,12 +296,16 @@ impl NetworkNode {
 struct GistitNetworkBehaviour {
     req_res: RequestResponse<GistitExchangeCodec>,
     kademlia: Kademlia<MemoryStore>,
+    identify: Identify,
+    ping: Ping,
 }
 
 #[derive(Debug)]
 enum GistitNetworkEvent {
     RequestResponse(RequestResponseEvent<GistitRequest, GistitResponse>),
     Kademlia(KademliaEvent),
+    Identify(IdentifyEvent),
+    Ping(PingEvent),
 }
 
 impl From<RequestResponseEvent<GistitRequest, GistitResponse>> for GistitNetworkEvent {
@@ -262,6 +317,18 @@ impl From<RequestResponseEvent<GistitRequest, GistitResponse>> for GistitNetwork
 impl From<KademliaEvent> for GistitNetworkEvent {
     fn from(event: KademliaEvent) -> Self {
         GistitNetworkEvent::Kademlia(event)
+    }
+}
+
+impl From<PingEvent> for GistitNetworkEvent {
+    fn from(event: PingEvent) -> Self {
+        GistitNetworkEvent::Ping(event)
+    }
+}
+
+impl From<IdentifyEvent> for GistitNetworkEvent {
+    fn from(event: IdentifyEvent) -> Self {
+        GistitNetworkEvent::Identify(event)
     }
 }
 
