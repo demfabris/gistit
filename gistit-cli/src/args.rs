@@ -1,5 +1,5 @@
 /// Gistit command line interface
-use clap::{crate_authors, crate_description, crate_version, App, Arg, ArgGroup, ValueHint};
+use clap::{crate_authors, crate_description, crate_version, App, Arg, ValueHint};
 
 /// The gistit application
 #[allow(clippy::too_many_lines)]
@@ -100,17 +100,6 @@ Run `gistit --colorschemes` to list available ones.",
             App::new("node")
                 .alias("n")
                 .about("Start a p2p gistit node for file transfer")
-                .group(ArgGroup::new("process_cmd"))
-                .group(ArgGroup::new("inputfile").conflicts_with("process_cmd"))
-                .arg(
-                    Arg::new("FILE")
-                        .group("inputfile")
-                        .help("Appends this file to your hosted gistits")
-                        .allow_invalid_utf8(true)
-                        .takes_value(true)
-                        .value_hint(ValueHint::FilePath)
-                        .conflicts_with_all(&["stop", "status", "start"]),
-                )
                 .arg(
                     Arg::new("start")
                         .long("start")
@@ -118,33 +107,29 @@ Run `gistit --colorschemes` to list available ones.",
                         .long_help(
                             "Spawn the gistit network node background process to enable peer 
 to peer file sharing.")
-                        .group("process_cmd")
                         .takes_value(true)
                         .value_name("seed")
-                        .conflicts_with_all(&["FILE","join", "stop", "status"]),
+                        .conflicts_with_all(&["join", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("join")
                         .long("join")
-                        .help("Start gistit node and join a private network.")
-                        .group("process_cmd")
+                        .help("Join a private network.")
                         .takes_value(true)
                         .value_name("address")
-                        .conflicts_with_all(&["FILE", "start", "stop", "status"]),
+                        .conflicts_with_all(&["start", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("stop")
                         .long("stop")
-                        .group("process_cmd")
                         .help("Stop gistit node background process")
-                        .conflicts_with_all(&["start", "FILE", "status"]),
+                        .conflicts_with_all(&["start", "status"]),
                 )
                 .arg(
                     Arg::new("status")
                         .long("status")
                         .help("Display the status of your gistit network node process")
-                        .group("process_cmd")
-                        .conflicts_with_all(&["FILE", "start", "stop"]),
+                        .conflicts_with_all(&["start", "stop"]),
                 )
                 .arg(
                     Arg::new("host")
@@ -152,9 +137,9 @@ to peer file sharing.")
                         .help("The Ipv4 address used to listen for inbound connections. Defaults to '127.0.0.1'")
                         .takes_value(true)
                         .value_name("ivp4-address")
-                        .default_value("127.0.0.1")
+                        .default_value("0.0.0.0")
                         .value_hint(ValueHint::Hostname)
-                        .conflicts_with_all(&["FILE", "stop", "status"]),
+                        .conflicts_with_all(&["stop", "status"]),
                 )
                 .arg(
                     Arg::new("port")
@@ -163,14 +148,15 @@ to peer file sharing.")
                         .takes_value(true)
                         .value_name("port")
                         .default_value("0")
-                        .conflicts_with_all(&["FILE", "stop", "status"]),
+                        .conflicts_with_all(&["stop", "status"]),
                 )
                 .arg(
                     Arg::new("clipboard")
                         .long("clipboard")
+                        .short('c')
                         .requires("start")
-                        .help("Attempt to copy your gistit node hash into clipboard")
-                        .conflicts_with_all(&["FILE", "stop", "status"]),
+                        .help("Attempt to copy your gistit node id into clipboard")
+                        .conflicts_with_all(&["stop", "status"]),
                 )
         )
 }

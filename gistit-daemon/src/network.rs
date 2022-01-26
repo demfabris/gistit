@@ -8,8 +8,10 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use either::Either;
 use lib_gistit::ipc::{self, Bridge, Instruction, Server, ServerResponse};
 use log::{debug, info, warn};
+use void::Void;
 
 use libp2p::core::either::EitherError;
 use libp2p::core::upgrade::{self, read_length_prefixed, write_length_prefixed};
@@ -188,8 +190,11 @@ impl NetworkNode {
                         >,
                         PingFailure,
                     >,
-                    ProtocolsHandlerUpgrErr<
-                        EitherError<impl std::error::Error, impl std::error::Error>,
+                    Either<
+                        ProtocolsHandlerUpgrErr<
+                            EitherError<impl std::error::Error, impl std::error::Error>,
+                        >,
+                        Void,
                     >,
                 >,
                 ProtocolsHandlerUpgrErr<std::io::Error>,
@@ -241,7 +246,7 @@ impl NetworkNode {
                 info!("Got providers: {:?}", providers);
             }
             SwarmEvent::NewListenAddr { address, .. } => {
-                debug!("Daemon: Listening on: {:?}", address);
+                debug!("Daemon: Listening on {:?}", address);
 
                 let peer_id = self.swarm.local_peer_id().to_string();
 
@@ -302,13 +307,13 @@ impl NetworkNode {
                 self.swarm.dial(addr.with(Protocol::P2p(peer.into())))?;
                 self.pending_dial.insert(peer);
             }
-            Instruction::Provide { name, .. } => {
-                debug!("Instruction: Provide file {}", name);
+            Instruction::Provide { hash, .. } => {
+                debug!("Instruction: Provide file {}", hash);
 
                 self.swarm
                     .behaviour_mut()
                     .kademlia
-                    .start_providing(name.into_bytes().into())
+                    .start_providing(hash.into_bytes().into())
                     .expect("to start providing");
             }
             Instruction::Status => {

@@ -1,25 +1,21 @@
 //! The host module
-use std::ffi::OsStr;
 use std::fs;
 use std::net::Ipv4Addr;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
-use directories::BaseDirs;
 
-use lib_gistit::file::File;
 use lib_gistit::ipc::{self, Instruction, ServerResponse};
 
-use crate::dispatch::Dispatch;
+use crate::dispatch::{get_runtime_dir, Dispatch};
 use crate::params::Check;
-use crate::{prettyln, ErrorKind, Result};
+use crate::{prettyln, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
-    pub file: Option<&'static OsStr>,
     pub start: Option<&'static str>,
     pub join: Option<&'static str>,
     pub stop: bool,
@@ -44,7 +40,6 @@ impl Action {
             port: unsafe { args.value_of("port").unwrap_unchecked() },
             stop: args.is_present("stop"),
             status: args.is_present("status"),
-            file: args.value_of_os("FILE"),
         }))
     }
 }
@@ -54,12 +49,10 @@ pub enum ProcessCommand {
     Join(&'static str),
     Stop,
     Status,
-    Other,
 }
 
 pub struct Config {
     command: ProcessCommand,
-    maybe_file: Option<File>,
     host: Ipv4Addr,
     port: u16,
 }
@@ -76,14 +69,7 @@ impl Dispatch for Action {
             (None, Some(address), false, false) => ProcessCommand::Join(address),
             (None, None, true, false) => ProcessCommand::Stop,
             (None, None, false, true) => ProcessCommand::Status,
-            (_, _, _, _) => ProcessCommand::Other,
-        };
-
-        let maybe_file = if let Some(file) = self.file {
-            let path = Path::new(file);
-            Some(File::from_path(path)?)
-        } else {
-            None
+            (_, _, _, _) => unreachable!(),
         };
 
         // SAFETY: Previously checked in [`Check::check`]
@@ -96,7 +82,6 @@ impl Dispatch for Action {
 
         let config = Config {
             command,
-            maybe_file,
             host,
             port,
         };
@@ -110,6 +95,11 @@ impl Dispatch for Action {
 
         match config.command {
             ProcessCommand::Start(seed) => {
+                if bridge.alive() {
+                    prettyln!("Running..."); // TODO: change this to status msg
+                    return Ok(());
+                }
+
                 let pid = spawn(&runtime_dir, seed)?;
                 prettyln!(
                     "Starting gistit network node process, pid: {}",
@@ -160,33 +150,9 @@ impl Dispatch for Action {
                     prettyln!("Not running");
                 }
             }
-            ProcessCommand::Other => {
-                if let Self::InnerData {
-                    maybe_file: Some(file),
-                    ..
-                } = config
-                {
-                    prettyln!("Hosting file...");
-                    bridge.connect_blocking()?;
-                    bridge
-                        .send(Instruction::Provide {
-                            name: file.name(),
-                            data: file.to_encoded_data(),
-                        })
-                        .await?;
-                }
-            }
         };
         Ok(())
     }
-}
-
-fn get_runtime_dir() -> Result<PathBuf> {
-    let dirs = BaseDirs::new().ok_or(ErrorKind::Unknown)?;
-    Ok(dirs
-        .runtime_dir()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| std::env::temp_dir()))
 }
 
 fn spawn(runtime_dir: &Path, seed: &str) -> Result<u32> {

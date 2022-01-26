@@ -170,11 +170,6 @@ impl Check for FetchAction {
 
 impl Check for NodeAction {
     fn check(&self) -> Result<()> {
-        if let Some(value) = self.file {
-            let file_path = Path::new(&value);
-            metadata(&file_path)?;
-            extension(&file_path)?;
-        }
         host(&self.host)?;
         port(&self.port)?;
         Ok(())

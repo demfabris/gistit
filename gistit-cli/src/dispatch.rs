@@ -1,9 +1,12 @@
+use std::path::{Path, PathBuf};
+
 use async_trait::async_trait;
+use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
 use lib_gistit::file::{EncodedFileData, File};
 
-use crate::Result;
+use crate::{ErrorKind, Result};
 
 #[cfg(test)]
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -19,6 +22,14 @@ pub trait Dispatch {
 
 pub trait Hasheable {
     fn hash(&self) -> String;
+}
+
+pub fn get_runtime_dir() -> Result<PathBuf> {
+    let dirs = BaseDirs::new().ok_or(ErrorKind::Unknown)?;
+    Ok(dirs
+        .runtime_dir()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| std::env::temp_dir()))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -137,9 +137,10 @@ impl Bridge<Client> {
 pub enum Instruction {
     Listen { host: Ipv4Addr, port: u16 },
     Dial { peer_id: String },
-    Provide { name: String, data: EncodedFileData },
-    Shutdown,
+    Provide { hash: String, data: EncodedFileData },
+    GetProvider { hash: String },
     Status,
+    Shutdown,
     // Daemon responses
     Response(ServerResponse),
 }

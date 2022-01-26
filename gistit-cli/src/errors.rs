@@ -92,6 +92,7 @@ pub enum ErrorKind {
     SerializeJson(serde_json::Error),
     Colorscheme(Option<String>),
     InvalidParam(&'static str, &'static str),
+    Server(String),
     SignalDaemon,
     FetchNotFound,
     FetchUnexpectedResponse,
@@ -141,6 +142,10 @@ impl From<ErrorKind> for Error {
                     msg,
                     style(param).bold().red()
                 )),
+            },
+            ErrorKind::Server(_) => Self {
+                kind,
+                cause: "server error",
             },
             ErrorKind::FileExtension => Self {
                 kind,
