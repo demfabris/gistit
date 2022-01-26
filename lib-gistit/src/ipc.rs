@@ -138,7 +138,7 @@ pub enum Instruction {
     Listen { host: Ipv4Addr, port: u16 },
     Dial { peer_id: String },
     Provide { hash: String, data: EncodedFileData },
-    GetProvider { hash: String },
+    Get { hash: String },
     Status,
     Shutdown,
     // Daemon responses

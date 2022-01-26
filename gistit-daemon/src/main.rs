@@ -73,8 +73,7 @@ async fn main() {
         .write_style(env_logger::WriteStyle::Always)
         .init();
 
-    if let Err(err) = run().await {
+    while let Err(err) = run().await {
         eprintln!("DAEMON ERROR: {:?}", err);
-        std::process::exit(1);
     }
 }

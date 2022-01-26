@@ -94,9 +94,7 @@ fn colorscheme(colorscheme: &str) -> Result<()> {
 }
 
 fn hash(hash: &str) -> Result<()> {
-    let valid =
-        (hash.starts_with('@') || hash.starts_with('#')) && hash.len() == GISTIT_HASH_CHAR_LENGTH;
-    if !valid {
+    if !hash.len() == GISTIT_HASH_CHAR_LENGTH {
         return Err(ErrorKind::InvalidParam("invalid gistit hash format.", "--hash").into());
     }
 

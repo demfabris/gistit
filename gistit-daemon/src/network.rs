@@ -1,7 +1,7 @@
 //! The network module
 #![allow(clippy::missing_errors_doc)]
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::iter::once;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -10,7 +10,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use either::Either;
 use lib_gistit::ipc::{self, Bridge, Instruction, Server, ServerResponse};
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 use void::Void;
 
 use libp2p::core::either::EitherError;
@@ -73,7 +73,7 @@ pub struct NetworkNode {
     bridge: Bridge<Server>,
     pending_dial: HashSet<PeerId>,
     pending_start_providing: HashSet<QueryId>,
-    // pending_get_providers: HashMap<QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pending_get_providers: HashSet<QueryId>,
     // pending_request_file: HashMap<RequestId, oneshot::Sender<Result<String>>>,
 }
 
@@ -163,6 +163,7 @@ impl NetworkNode {
             bridge,
             pending_dial: Default::default(),
             pending_start_providing: Default::default(),
+            pending_get_providers: Default::default(),
         })
     }
 
@@ -211,7 +212,7 @@ impl NetworkNode {
                         ..
                     },
             })) => {
-                info!("Identify: {:?}", listen_addrs);
+                debug!("Identify: {:?}", listen_addrs);
                 if protocols
                     .iter()
                     .any(|p| p.as_bytes() == kad::protocol::DEFAULT_PROTO_NAME)
@@ -234,6 +235,7 @@ impl NetworkNode {
                     ..
                 },
             )) => {
+                info!("Start providing in kad");
                 self.pending_start_providing.remove(&id);
             }
             SwarmEvent::Behaviour(GistitNetworkEvent::Kademlia(
@@ -244,9 +246,10 @@ impl NetworkNode {
                 },
             )) => {
                 info!("Got providers: {:?}", providers);
+                self.pending_get_providers.remove(&id);
             }
             SwarmEvent::NewListenAddr { address, .. } => {
-                debug!("Daemon: Listening on {:?}", address);
+                info!("Daemon: Listening on {:?}", address);
 
                 let peer_id = self.swarm.local_peer_id().to_string();
 
@@ -258,7 +261,7 @@ impl NetworkNode {
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
             } => {
-                info!("Connection established {:?}", peer_id);
+                debug!("Connection established {:?}", peer_id);
                 if endpoint.is_dialer() {
                     self.pending_dial.remove(&peer_id);
                 }
@@ -268,13 +271,13 @@ impl NetworkNode {
                 error,
                 ..
             } => {
-                info!("Outgoing connection error: {:?}", error);
+                debug!("Outgoing connection error: {:?}", error);
                 if let Some(peer_id) = maybe_peer_id {
                     self.pending_dial.remove(&peer_id);
                 }
             }
             ev => {
-                info!("other event: {:?}", ev);
+                trace!("other event: {:?}", ev);
             }
         }
         Ok(())
@@ -283,12 +286,12 @@ impl NetworkNode {
     async fn handle_bridge_event(&mut self, instruction: Instruction) -> Result<()> {
         match instruction {
             Instruction::Listen { host, port } => {
-                debug!("Instruction: Listen");
+                info!("Instruction: Listen");
                 let addr = multiaddr!(Ip4(host), Tcp(port));
                 self.swarm.listen_on(addr)?;
             }
             Instruction::Dial { peer_id } => {
-                debug!("Instruction: Dial");
+                info!("Instruction: Dial");
 
                 // let addr: Multiaddr = BOOTADDR.parse().unwrap();
                 let addr: Multiaddr = "/ip4/192.168.1.77/tcp/4001".parse().unwrap();
@@ -308,7 +311,7 @@ impl NetworkNode {
                 self.pending_dial.insert(peer);
             }
             Instruction::Provide { hash, .. } => {
-                debug!("Instruction: Provide file {}", hash);
+                info!("Instruction: Provide file {}", hash);
 
                 self.swarm
                     .behaviour_mut()
@@ -316,8 +319,18 @@ impl NetworkNode {
                     .start_providing(hash.into_bytes().into())
                     .expect("to start providing");
             }
+            Instruction::Get { hash } => {
+                info!("Instruction: Get providers for {}", hash);
+
+                let query_id = self
+                    .swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .get_providers(hash.into_bytes().into());
+                self.pending_get_providers.insert(query_id);
+            }
             Instruction::Status => {
-                debug!("Instruction: Status");
+                info!("Instruction: Status");
 
                 let listeners: Vec<String> =
                     self.swarm.listeners().map(|f| f.to_string()).collect();
