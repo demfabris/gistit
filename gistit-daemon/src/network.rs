@@ -2,7 +2,6 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::collections::{HashMap, HashSet};
-use std::io;
 use std::iter::once;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -22,14 +21,15 @@ use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult};
 use libp2p::multiaddr::{multiaddr, Protocol};
 use libp2p::ping::{Ping, PingEvent, PingFailure};
+use libp2p::relay::v2::relay;
 use libp2p::request_response::{
     ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent,
 };
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmEvent};
 use libp2p::{
-    dns, identity, mplex, noise, ping, tcp, websocket, yamux, Multiaddr, NetworkBehaviour, Swarm,
-    Transport,
+    autonat, dns, identity, mplex, noise, ping, tcp, websocket, yamux, Multiaddr, NetworkBehaviour,
+    Swarm, Transport,
 };
 
 use crate::Result;
@@ -134,6 +134,9 @@ impl NetworkNode {
         ));
 
         let ping = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
+        let relay = relay::Relay::new(PeerId::from(config.keypair.public()), Default::default());
+        let autonat =
+            autonat::Behaviour::new(PeerId::from(config.keypair.public()), Default::default());
 
         let swarm = Swarm::new(
             transport,
@@ -142,6 +145,8 @@ impl NetworkNode {
                 kademlia,
                 identify,
                 ping,
+                relay,
+                autonat,
             },
             config.peer_id,
         );
@@ -172,8 +177,19 @@ impl NetworkNode {
         event: SwarmEvent<
             GistitNetworkEvent,
             EitherError<
-                EitherError<EitherError<ProtocolsHandlerUpgrErr<io::Error>, io::Error>, io::Error>,
-                PingFailure,
+                EitherError<
+                    EitherError<
+                        EitherError<
+                            EitherError<ProtocolsHandlerUpgrErr<std::io::Error>, std::io::Error>,
+                            std::io::Error,
+                        >,
+                        PingFailure,
+                    >,
+                    ProtocolsHandlerUpgrErr<
+                        EitherError<impl std::error::Error, impl std::error::Error>,
+                    >,
+                >,
+                ProtocolsHandlerUpgrErr<std::io::Error>,
             >,
         >,
     ) -> Result<()> {
@@ -241,7 +257,8 @@ impl NetworkNode {
             Instruction::Dial { peer_id } => {
                 debug!("Instruction: Dial");
 
-                let addr: Multiaddr = BOOTADDR.parse().unwrap();
+                // let addr: Multiaddr = BOOTADDR.parse().unwrap();
+                let addr: Multiaddr = "/ip4/192.168.1.77/tcp/4001/p2p/12D3KooWBGU63fxaXEK5qspXQwJ2Nq52qqJu3a3pqu3SRbV6r9w1/p2p-circuit".parse().expect("to be valid multiaddr");
                 let peer: PeerId = peer_id.parse().unwrap();
 
                 if self.pending_dial.contains(&peer) {
@@ -298,6 +315,8 @@ struct GistitNetworkBehaviour {
     kademlia: Kademlia<MemoryStore>,
     identify: Identify,
     ping: Ping,
+    relay: relay::Relay,
+    autonat: autonat::Behaviour,
 }
 
 #[derive(Debug)]
@@ -306,6 +325,8 @@ enum GistitNetworkEvent {
     Kademlia(KademliaEvent),
     Identify(IdentifyEvent),
     Ping(PingEvent),
+    Relay(relay::Event),
+    Autonat(autonat::Event),
 }
 
 impl From<RequestResponseEvent<GistitRequest, GistitResponse>> for GistitNetworkEvent {
@@ -329,6 +350,18 @@ impl From<PingEvent> for GistitNetworkEvent {
 impl From<IdentifyEvent> for GistitNetworkEvent {
     fn from(event: IdentifyEvent) -> Self {
         GistitNetworkEvent::Identify(event)
+    }
+}
+
+impl From<relay::Event> for GistitNetworkEvent {
+    fn from(event: relay::Event) -> Self {
+        GistitNetworkEvent::Relay(event)
+    }
+}
+
+impl From<autonat::Event> for GistitNetworkEvent {
+    fn from(event: autonat::Event) -> Self {
+        GistitNetworkEvent::Autonat(event)
     }
 }
 
