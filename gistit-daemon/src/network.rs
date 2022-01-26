@@ -106,6 +106,7 @@ impl NetworkNode {
                 );
             }
 
+            behaviour.bootstrap().expect("to bootstrap");
             behaviour
         };
 
@@ -205,6 +206,7 @@ impl NetworkNode {
                         ..
                     },
             })) => {
+                info!("Identify: {:?}", listen_addrs);
                 if protocols
                     .iter()
                     .any(|p| p.as_bytes() == kad::protocol::DEFAULT_PROTO_NAME)
@@ -219,7 +221,7 @@ impl NetworkNode {
             }
             //
             // Kademlia events
-            // 
+            //
             SwarmEvent::Behaviour(GistitNetworkEvent::Kademlia(
                 KademliaEvent::OutboundQueryCompleted {
                     id,
