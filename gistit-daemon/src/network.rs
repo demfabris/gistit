@@ -1,33 +1,40 @@
 //! The network module
 #![allow(clippy::missing_errors_doc)]
 
-use std::collections::HashMap;
-use std::io;
+use std::collections::HashSet;
 use std::iter::once;
-use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use either::Either;
+use lib_gistit::ipc::{self, Bridge, Instruction, Server, ServerResponse};
+use log::{debug, info, trace, warn};
+use void::Void;
+
 use libp2p::core::either::EitherError;
-use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed};
+use libp2p::core::upgrade::{self, read_length_prefixed, write_length_prefixed};
 use libp2p::core::{PeerId, ProtocolName};
-use libp2p::futures::channel::oneshot;
 use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
+use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p::identity::Keypair;
 use libp2p::kad::record::store::MemoryStore;
-use libp2p::kad::{GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult};
-use libp2p::multiaddr::multiaddr;
+use libp2p::kad::{
+    self, GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult,
+};
+use libp2p::multiaddr::{multiaddr, Protocol};
+use libp2p::ping::{Ping, PingEvent, PingFailure};
+use libp2p::relay::v2::relay;
 use libp2p::request_response::{
     ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent,
 };
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmEvent};
-use libp2p::{development_transport, Swarm};
-use libp2p::{identity, Multiaddr, NetworkBehaviour};
-
-use lib_gistit::ipc::{self, Bridge, Instruction, Server, ServerResponse};
+use libp2p::{
+    autonat, dns, identity, mplex, noise, ping, tcp, websocket, yamux, Multiaddr, NetworkBehaviour,
+    Swarm, Transport,
+};
 
 use crate::Result;
 
@@ -64,11 +71,10 @@ impl NetworkConfig {
 pub struct NetworkNode {
     swarm: Swarm<GistitNetworkBehaviour>,
     bridge: Bridge<Server>,
-    // pending_dial: HashMap<PeerId, oneshot::Sender<Result<(), Box<dyn Error + Send>>>>,
-    // pending_start_providing: HashMap<QueryId, oneshot::Sender<()>>,
-    // pending_get_providers: HashMap<QueryId, oneshot::Sender<HashSet<PeerId>>>,
-    // pending_request_file:
-    //     HashMap<RequestId, oneshot::Sender<Result<String, Box<dyn Error + Send>>>>,
+    pending_dial: HashSet<PeerId>,
+    pending_start_providing: HashSet<QueryId>,
+    pending_get_providers: HashSet<QueryId>,
+    // pending_request_file: HashMap<RequestId, oneshot::Sender<Result<String>>>,
 }
 
 const BOOTNODES: [&'static str; 4] = [
@@ -77,6 +83,8 @@ const BOOTNODES: [&'static str; 4] = [
     "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
+
+const BOOTADDR: &str = "/dnsaddr/bootstrap.libp2p.io";
 
 impl NetworkNode {
     pub async fn new(config: NetworkConfig) -> Result<Self> {
@@ -92,7 +100,7 @@ impl NetworkNode {
             let store = MemoryStore::new(config.peer_id);
             let mut behaviour = Kademlia::with_config(config.peer_id, store, cfg);
 
-            let bootaddr = Multiaddr::from_str("/dnsaddr/bootstrap.libp2p.io")?;
+            let bootaddr = Multiaddr::from_str(BOOTADDR)?;
             for peer in &BOOTNODES {
                 behaviour.add_address(
                     &PeerId::from_str(peer).expect("peer id to be valid"),
@@ -100,24 +108,63 @@ impl NetworkNode {
                 );
             }
 
+            behaviour.bootstrap().expect("to bootstrap");
             behaviour
         };
 
+        let raw_transport = {
+            let tcp = tcp::TcpConfig::new().nodelay(true);
+            let dns_tcp = dns::DnsConfig::system(tcp).await?;
+            let ws_dns_tcp = websocket::WsConfig::new(dns_tcp.clone());
+            dns_tcp.or_transport(ws_dns_tcp)
+        };
+
+        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+            .into_authentic(&config.keypair)
+            .expect("Signing libp2p-noise static DH keypair failed.");
+
+        let transport = raw_transport
+            .upgrade(upgrade::Version::V1)
+            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+            .multiplex(upgrade::SelectUpgrade::new(
+                yamux::YamuxConfig::default(),
+                mplex::MplexConfig::default(),
+            ))
+            .timeout(Duration::from_secs(60 * 30))
+            .boxed();
+
+        let identify = Identify::new(IdentifyConfig::new(
+            "/ipfs/0.1.0".into(),
+            config.keypair.public(),
+        ));
+
+        let ping = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
+        let relay = relay::Relay::new(PeerId::from(config.keypair.public()), Default::default());
+        let autonat =
+            autonat::Behaviour::new(PeerId::from(config.keypair.public()), Default::default());
+
         let swarm = Swarm::new(
-            development_transport(config.keypair)
-                .await
-                .expect("start p2p transport"),
-            GistitNetworkBehaviour { req_res, kademlia },
+            transport,
+            GistitNetworkBehaviour {
+                req_res,
+                kademlia,
+                identify,
+                ping,
+                relay,
+                autonat,
+            },
             config.peer_id,
         );
 
         let bridge = ipc::server(&config.runtime_dir)?;
 
-        Ok(Self { swarm, bridge })
-    }
-
-    pub fn peer_id(&self) -> String {
-        self.swarm.local_peer_id().to_base58()
+        Ok(Self {
+            swarm,
+            bridge,
+            pending_dial: Default::default(),
+            pending_start_providing: Default::default(),
+            pending_get_providers: Default::default(),
+        })
     }
 
     pub async fn run(mut self) -> Result<()> {
@@ -126,7 +173,7 @@ impl NetworkNode {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
                     swarm_event.expect("to recv swarm event")).await?,
 
-                bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await
+                bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await?
             }
         }
     }
@@ -135,44 +182,175 @@ impl NetworkNode {
         &mut self,
         event: SwarmEvent<
             GistitNetworkEvent,
-            EitherError<ProtocolsHandlerUpgrErr<io::Error>, io::Error>,
+            EitherError<
+                EitherError<
+                    EitherError<
+                        EitherError<
+                            EitherError<ProtocolsHandlerUpgrErr<std::io::Error>, std::io::Error>,
+                            std::io::Error,
+                        >,
+                        PingFailure,
+                    >,
+                    Either<
+                        ProtocolsHandlerUpgrErr<
+                            EitherError<impl std::error::Error, impl std::error::Error>,
+                        >,
+                        Void,
+                    >,
+                >,
+                ProtocolsHandlerUpgrErr<std::io::Error>,
+            >,
         >,
     ) -> Result<()> {
         match event {
+            SwarmEvent::Behaviour(GistitNetworkEvent::Identify(IdentifyEvent::Received {
+                peer_id,
+                info:
+                    IdentifyInfo {
+                        listen_addrs,
+                        protocols,
+                        ..
+                    },
+            })) => {
+                debug!("Identify: {:?}", listen_addrs);
+                if protocols
+                    .iter()
+                    .any(|p| p.as_bytes() == kad::protocol::DEFAULT_PROTO_NAME)
+                {
+                    for addr in listen_addrs {
+                        self.swarm
+                            .behaviour_mut()
+                            .kademlia
+                            .add_address(&peer_id, addr);
+                    }
+                }
+            }
+            //
+            // Kademlia events
+            //
+            SwarmEvent::Behaviour(GistitNetworkEvent::Kademlia(
+                KademliaEvent::OutboundQueryCompleted {
+                    id,
+                    result: QueryResult::StartProviding(_),
+                    ..
+                },
+            )) => {
+                info!("Start providing in kad");
+                self.pending_start_providing.remove(&id);
+            }
+            SwarmEvent::Behaviour(GistitNetworkEvent::Kademlia(
+                KademliaEvent::OutboundQueryCompleted {
+                    id,
+                    result: QueryResult::GetProviders(Ok(GetProvidersOk { providers, .. })),
+                    ..
+                },
+            )) => {
+                info!("Got providers: {:?}", providers);
+                self.pending_get_providers.remove(&id);
+            }
             SwarmEvent::NewListenAddr { address, .. } => {
-                println!("Listening on: {:?}", address);
+                info!("Daemon: Listening on {:?}", address);
+
                 let peer_id = self.swarm.local_peer_id().to_string();
+
                 self.bridge.connect_blocking()?;
                 self.bridge
                     .send(Instruction::Response(ServerResponse::PeerId(peer_id)))
                     .await?;
             }
-            _ => (),
+            SwarmEvent::ConnectionEstablished {
+                peer_id, endpoint, ..
+            } => {
+                debug!("Connection established {:?}", peer_id);
+                if endpoint.is_dialer() {
+                    self.pending_dial.remove(&peer_id);
+                }
+            }
+            SwarmEvent::OutgoingConnectionError {
+                peer_id: maybe_peer_id,
+                error,
+                ..
+            } => {
+                debug!("Outgoing connection error: {:?}", error);
+                if let Some(peer_id) = maybe_peer_id {
+                    self.pending_dial.remove(&peer_id);
+                }
+            }
+            ev => {
+                trace!("other event: {:?}", ev);
+            }
         }
         Ok(())
     }
 
-    async fn handle_bridge_event(&mut self, instruction: Instruction) {
+    async fn handle_bridge_event(&mut self, instruction: Instruction) -> Result<()> {
         match instruction {
             Instruction::Listen { host, port } => {
-                println!("Listening on {:?}:{:?}", host, port);
+                info!("Instruction: Listen");
                 let addr = multiaddr!(Ip4(host), Tcp(port));
-                self.swarm.listen_on(addr).expect("to listen to addr");
+                self.swarm.listen_on(addr)?;
             }
-            Instruction::Dial { raw_address } => {
-                let addr: Multiaddr = raw_address.parse().expect("to be valid multiaddr");
-                println!("{:?}", addr);
+            Instruction::Dial { peer_id } => {
+                info!("Instruction: Dial");
+
+                // let addr: Multiaddr = BOOTADDR.parse().unwrap();
+                let addr: Multiaddr = "/ip4/192.168.1.77/tcp/4001".parse().unwrap();
+                let peer: PeerId = peer_id.parse().unwrap();
+
+                if self.pending_dial.contains(&peer) {
+                    debug!("Already dialing peer: {}", peer_id);
+                    return Ok(());
+                }
+
+                self.swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .add_address(&peer, addr.clone());
+
+                self.swarm.dial(addr.with(Protocol::P2p(peer.into())))?;
+                self.pending_dial.insert(peer);
+            }
+            Instruction::Provide { hash, .. } => {
+                info!("Instruction: Provide file {}", hash);
+
+                self.swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .start_providing(hash.into_bytes().into())
+                    .expect("to start providing");
+            }
+            Instruction::Get { hash } => {
+                info!("Instruction: Get providers for {}", hash);
+
+                let query_id = self
+                    .swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .get_providers(hash.into_bytes().into());
+                self.pending_get_providers.insert(query_id);
+            }
+            Instruction::Status => {
+                info!("Instruction: Status");
+
+                let listeners: Vec<String> =
+                    self.swarm.listeners().map(|f| f.to_string()).collect();
+                let network_info = self.swarm.network_info();
+
+                self.bridge.connect_blocking()?;
+                self.bridge
+                    .send(Instruction::Response(ServerResponse::Status(format!(
+                        "listeners: {:?}, network: {:?}",
+                        listeners, network_info
+                    ))))
+                    .await?;
             }
             Instruction::Shutdown => {
-                println!("Exiting");
-                drop(self);
+                warn!("Exiting...");
                 std::process::exit(0);
-            }
-            Instruction::File(data) => {
-                println!("{:?}", data);
             }
             _ => (),
         }
+        Ok(())
     }
 }
 
@@ -181,12 +359,20 @@ impl NetworkNode {
 struct GistitNetworkBehaviour {
     req_res: RequestResponse<GistitExchangeCodec>,
     kademlia: Kademlia<MemoryStore>,
+    identify: Identify,
+    ping: Ping,
+    relay: relay::Relay,
+    autonat: autonat::Behaviour,
 }
 
 #[derive(Debug)]
 enum GistitNetworkEvent {
     RequestResponse(RequestResponseEvent<GistitRequest, GistitResponse>),
     Kademlia(KademliaEvent),
+    Identify(IdentifyEvent),
+    Ping(PingEvent),
+    Relay(relay::Event),
+    Autonat(autonat::Event),
 }
 
 impl From<RequestResponseEvent<GistitRequest, GistitResponse>> for GistitNetworkEvent {
@@ -198,6 +384,30 @@ impl From<RequestResponseEvent<GistitRequest, GistitResponse>> for GistitNetwork
 impl From<KademliaEvent> for GistitNetworkEvent {
     fn from(event: KademliaEvent) -> Self {
         GistitNetworkEvent::Kademlia(event)
+    }
+}
+
+impl From<PingEvent> for GistitNetworkEvent {
+    fn from(event: PingEvent) -> Self {
+        GistitNetworkEvent::Ping(event)
+    }
+}
+
+impl From<IdentifyEvent> for GistitNetworkEvent {
+    fn from(event: IdentifyEvent) -> Self {
+        GistitNetworkEvent::Identify(event)
+    }
+}
+
+impl From<relay::Event> for GistitNetworkEvent {
+    fn from(event: relay::Event) -> Self {
+        GistitNetworkEvent::Relay(event)
+    }
+}
+
+impl From<autonat::Event> for GistitNetworkEvent {
+    fn from(event: autonat::Event) -> Self {
+        GistitNetworkEvent::Autonat(event)
     }
 }
 

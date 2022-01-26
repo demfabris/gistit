@@ -135,10 +135,12 @@ impl Bridge<Client> {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Instruction {
-    Shutdown,
     Listen { host: Ipv4Addr, port: u16 },
-    Dial { raw_address: String },
-    File(EncodedFileData),
+    Dial { peer_id: String },
+    Provide { hash: String, data: EncodedFileData },
+    Get { hash: String },
+    Status,
+    Shutdown,
     // Daemon responses
     Response(ServerResponse),
 }
@@ -146,4 +148,5 @@ pub enum Instruction {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ServerResponse {
     PeerId(String),
+    Status(String),
 }

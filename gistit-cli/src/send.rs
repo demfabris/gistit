@@ -12,13 +12,12 @@ use url::Url;
 
 use lib_gistit::clipboard::Clipboard;
 use lib_gistit::file::File;
+use lib_gistit::ipc::{self, Instruction};
 
-use crate::dispatch::{Dispatch, GistitInner, GistitPayload, Hasheable};
+use crate::dispatch::{get_runtime_dir, Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::params::Check;
 use crate::settings::{get_runtime_settings, GistitSend, Mergeable};
 use crate::{prettyln, ErrorKind, Result};
-
-const SERVER_IDENTIFIER_CHAR: char = '#';
 
 lazy_static! {
     static ref GISTIT_SERVER_LOAD_URL: Url = Url::parse(
@@ -89,7 +88,7 @@ impl Hasheable for Config {
             md5.consume(digest);
         }
 
-        format!("{}{:x}", SERVER_IDENTIFIER_CHAR, md5.compute())
+        format!("{:x}", md5.compute())
     }
 }
 
@@ -128,7 +127,9 @@ impl Response {
                 success: Some(hash),
                 ..
             } => Ok(hash),
-            Self { error: Some(_), .. } => Err(ErrorKind::Unknown.into()),
+            Self {
+                error: Some(err), ..
+            } => Err(ErrorKind::Server(err).into()),
             _ => unreachable!("Gistit server is unreachable"),
         }
     }
@@ -158,22 +159,37 @@ impl Dispatch for Action {
     }
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
-        prettyln!("Uploading to server...");
-        let response: Response = reqwest::Client::new()
-            .post(GISTIT_SERVER_LOAD_URL.to_string())
-            .json(&config.into_json()?)
-            .send()
-            .await?
-            .json()
-            .await?;
+        let runtime_dir = get_runtime_dir()?;
+        let mut bridge = ipc::client(&runtime_dir)?;
+        let hash = config.hash();
 
-        let server_hash = response.into_inner()?;
-        if self.clipboard {
-            Clipboard::new(server_hash.clone())
-                .try_into_selected()?
-                .into_provider()
-                .set_contents()?;
-        }
+        if bridge.alive() {
+            prettyln!("Hosting gistit...");
+            bridge.connect_blocking()?;
+            bridge
+                .send(Instruction::Provide {
+                    hash: config.hash(),
+                    data: config.file.to_encoded_data(),
+                })
+                .await?;
+        } else {
+            prettyln!("Uploading to server...");
+            let response: Response = reqwest::Client::new()
+                .post(GISTIT_SERVER_LOAD_URL.to_string())
+                .json(&config.into_json()?)
+                .send()
+                .await?
+                .json()
+                .await?;
+            let _ = response.into_inner()?;
+
+            if self.clipboard {
+                Clipboard::new(hash.clone())
+                    .try_into_selected()?
+                    .into_provider()
+                    .set_contents()?;
+            }
+        };
 
         println!(
             r#"
@@ -181,14 +197,14 @@ SUCCESS:
     hash: {} {}
     url: {}{}
             "#,
-            style(&server_hash).bold().blue(),
+            style(&hash).bold().blue(),
             if self.clipboard {
                 style("(copied to clipboard)").italic().to_string()
             } else {
                 "".to_string()
             },
             "https://gistit.vercel.app/",
-            style(&server_hash).bold().blue()
+            style(&hash).bold().blue()
         );
         Ok(())
     }
