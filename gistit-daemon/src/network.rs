@@ -15,10 +15,12 @@ use libp2p::core::either::EitherError;
 use libp2p::core::upgrade::{self, read_length_prefixed, write_length_prefixed};
 use libp2p::core::{PeerId, ProtocolName};
 use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p::identity::Keypair;
 use libp2p::kad::record::store::MemoryStore;
-use libp2p::kad::{GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult};
+use libp2p::kad::{
+    self, GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult,
+};
 use libp2p::multiaddr::{multiaddr, Protocol};
 use libp2p::ping::{Ping, PingEvent, PingFailure};
 use libp2p::relay::v2::relay;
@@ -194,6 +196,30 @@ impl NetworkNode {
         >,
     ) -> Result<()> {
         match event {
+            SwarmEvent::Behaviour(GistitNetworkEvent::Identify(IdentifyEvent::Received {
+                peer_id,
+                info:
+                    IdentifyInfo {
+                        listen_addrs,
+                        protocols,
+                        ..
+                    },
+            })) => {
+                if protocols
+                    .iter()
+                    .any(|p| p.as_bytes() == kad::protocol::DEFAULT_PROTO_NAME)
+                {
+                    for addr in listen_addrs {
+                        self.swarm
+                            .behaviour_mut()
+                            .kademlia
+                            .add_address(&peer_id, addr);
+                    }
+                }
+            }
+            //
+            // Kademlia events
+            // 
             SwarmEvent::Behaviour(GistitNetworkEvent::Kademlia(
                 KademliaEvent::OutboundQueryCompleted {
                     id,
@@ -258,7 +284,7 @@ impl NetworkNode {
                 debug!("Instruction: Dial");
 
                 // let addr: Multiaddr = BOOTADDR.parse().unwrap();
-                let addr: Multiaddr = "/ip4/192.168.1.77/tcp/4001/p2p/12D3KooWBGU63fxaXEK5qspXQwJ2Nq52qqJu3a3pqu3SRbV6r9w1/p2p-circuit".parse().expect("to be valid multiaddr");
+                let addr: Multiaddr = "/ip4/192.168.1.77/tcp/4001".parse().unwrap();
                 let peer: PeerId = peer_id.parse().unwrap();
 
                 if self.pending_dial.contains(&peer) {
