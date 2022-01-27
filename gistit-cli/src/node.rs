@@ -8,11 +8,14 @@ use std::process::{Command, Stdio};
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
+use dialoguer::Confirm;
+use serde::{Deserialize, Serialize};
 
 use lib_gistit::ipc::{self, Instruction, ServerResponse};
 
 use crate::dispatch::{get_runtime_dir, Dispatch};
 use crate::params::Check;
+use crate::settings::project_dirs;
 use crate::{prettyln, Result};
 
 #[derive(Debug, Clone)]
@@ -47,7 +50,7 @@ impl Action {
     }
 }
 
-pub enum ProcessCommand {
+enum ProcessCommand {
     Init(&'static str),
     Join(&'static str),
     Start,
@@ -59,6 +62,33 @@ pub struct Config {
     command: ProcessCommand,
     host: Ipv4Addr,
     port: u16,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct GistitNodeKey {
+    pub identity: Identity,
+}
+
+impl GistitNodeKey {
+    pub fn from_file(path: &Path) -> Result<Self> {
+        Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Identity {
+    #[serde(rename = "PeerID")]
+    pub peer_id: String,
+    pub priv_key: String,
+}
+
+impl zeroize::Zeroize for GistitNodeKey {
+    fn zeroize(&mut self) {
+        self.identity.peer_id.zeroize();
+        self.identity.priv_key.zeroize();
+    }
 }
 
 #[async_trait]
@@ -100,13 +130,23 @@ impl Dispatch for Action {
 
         match config.command {
             ProcessCommand::Init(seed) => {
-                if let Some(ipfs_path) = env::var_os("IPFS_PATH") {
-                    if let Some(ipfs_config) =
-                        std::fs::read_to_string(Path::new(&ipfs_path).join("config"))
+                let node_key = if let Some(ref ipfs_path) = env::var_os("IPFS_PATH") {
+                    if Confirm::new()
+                        .with_prompt("IPFS install detected, use key material?")
+                        .interact()?
                     {
-                        let json_config: serde_json::Value = serde_json::from_str(ipfs_config).ok();
+                        prettyln!("Using IPFS PeerID and PrivKey");
+                        GistitNodeKey::from_file(&Path::new(ipfs_path).join("config"))?
+                    } else {
+                        prettyln!("Generating new key material");
+                        generate_node_key(seed)?
                     }
-                }
+                } else {
+                    prettyln!("Generating new key material");
+                    generate_node_key(seed)?
+                };
+                dbg!(node_key);
+                todo!()
             }
             ProcessCommand::Start => {
                 if bridge.alive() {
@@ -114,7 +154,8 @@ impl Dispatch for Action {
                     return Ok(());
                 }
 
-                let pid = spawn(&runtime_dir)?;
+                // let pid = spawn(&runtime_dir)?;
+                let pid = 1;
                 prettyln!(
                     "Starting gistit network node process, pid: {}",
                     style(pid).blue()
@@ -169,8 +210,23 @@ impl Dispatch for Action {
     }
 }
 
-fn get_node_config() -> Result<String> {
+fn get_node_key() -> Result<String> {
     todo!()
+}
+
+fn store_node_key(node_key: &GistitNodeKey) -> Result<()> {
+    let gistit_config = project_dirs().config_dir().join("config");
+    Ok(fs::write(gistit_config, serde_json::to_string(node_key)?)?)
+}
+
+const KEY_GENERATOR_BIN_NAME: &str = "peer-id-generator";
+fn generate_node_key(seed: &str) -> Result<GistitNodeKey> {
+    let identity = Command::new(KEY_GENERATOR_BIN_NAME)
+        .arg(seed)
+        .stdout(Stdio::piped())
+        .output()?
+        .stdout;
+    Ok(serde_json::from_slice::<GistitNodeKey>(&identity)?)
 }
 
 fn spawn(runtime_dir: &Path, seed: &str) -> Result<u32> {

@@ -76,7 +76,7 @@ impl From<serde_yaml::Error> for Error {
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self {
-            cause: "failed to parse json file.",
+            cause: s_string(err.to_string()),
             kind: ErrorKind::SerializeJson(err),
         }
     }
