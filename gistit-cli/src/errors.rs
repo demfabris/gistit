@@ -93,6 +93,7 @@ pub enum ErrorKind {
     Colorscheme(Option<String>),
     InvalidParam(&'static str, &'static str),
     Server(String),
+    DaemonUninitialized,
     SignalDaemon,
     FetchNotFound,
     FetchUnexpectedResponse,
@@ -146,6 +147,10 @@ impl From<ErrorKind> for Error {
             ErrorKind::Server(_) => Self {
                 kind,
                 cause: "server error",
+            },
+            ErrorKind::DaemonUninitialized => Self {
+                kind,
+                cause: "daemon is not initialized. run `gistit node --init`",
             },
             ErrorKind::FileExtension => Self {
                 kind,

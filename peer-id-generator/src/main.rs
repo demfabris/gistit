@@ -75,8 +75,17 @@ fn main() {
             let peer_id = identity::PublicKey::Ed25519(keypair.public()).to_peer_id();
             let base58 = peer_id.to_base58();
             if base58[8..].starts_with(&prefix) {
-                println!("{}", peer_id.to_string());
-                println!("{:?}", secret.as_ref());
+                println!(
+                    r#"{{ 
+                        "Identity": {{ 
+                            "PeerID": "{}", 
+                            "PrivKey": "{}"
+                        }}
+                    }}"#,
+                    peer_id.to_string(),
+                    bs58::encode(secret.as_ref()).into_string()
+                );
+                std::process::exit(0);
                 // println!("Found {:?}", peer_id);
                 // println!("=> Private key = {:?}", secret.as_ref());
             }

@@ -14,3 +14,4 @@ publish = false
 [dependencies]
 libp2p-core = { default-features = false, version = "0.30.0" }
 num_cpus = "1.13.1"
+bs58 = "0.4.0"

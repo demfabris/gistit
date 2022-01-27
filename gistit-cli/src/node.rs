@@ -16,7 +16,7 @@ use lib_gistit::ipc::{self, Instruction, ServerResponse};
 use crate::dispatch::{get_runtime_dir, Dispatch};
 use crate::params::Check;
 use crate::settings::project_dirs;
-use crate::{prettyln, Result};
+use crate::{prettyln, ErrorKind, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -145,8 +145,9 @@ impl Dispatch for Action {
                     prettyln!("Generating new key material");
                     generate_node_key(seed)?
                 };
-                dbg!(node_key);
-                todo!()
+
+                store_node_key(&node_key)?;
+                prettyln!("Gistit node inititalized.");
             }
             ProcessCommand::Start => {
                 if bridge.alive() {
@@ -210,8 +211,13 @@ impl Dispatch for Action {
     }
 }
 
-fn get_node_key() -> Result<String> {
-    todo!()
+fn get_node_key() -> Result<GistitNodeKey> {
+    let gistit_config = project_dirs().config_dir().join("config");
+    if fs::metadata(&gistit_config).is_ok() {
+        Ok(serde_json::from_str(&fs::read_to_string(gistit_config)?)?)
+    } else {
+        Err(ErrorKind::DaemonUninitialized.into())
+    }
 }
 
 fn store_node_key(node_key: &GistitNodeKey) -> Result<()> {
@@ -229,11 +235,11 @@ fn generate_node_key(seed: &str) -> Result<GistitNodeKey> {
     Ok(serde_json::from_slice::<GistitNodeKey>(&identity)?)
 }
 
-fn spawn(runtime_dir: &Path, seed: &str) -> Result<u32> {
+fn spawn(runtime_dir: &Path, key_path: &Path) -> Result<u32> {
     let stdout = fs::File::create(runtime_dir.join("gistit.log"))?;
     let daemon = "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
     let child = Command::new(daemon)
-        .args(["--seed", seed])
+        .args(["--key-path", key_path.to_string_lossy().as_ref()])
         .args(["--runtime-dir", runtime_dir.to_string_lossy().as_ref()])
         .stderr(stdout)
         .stdout(Stdio::null())
