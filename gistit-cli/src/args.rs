@@ -101,14 +101,20 @@ Run `gistit --colorschemes` to list available ones.",
                 .alias("n")
                 .about("Start a p2p gistit node for file transfer")
                 .arg(
+                    Arg::new("init")
+                        .long("init")
+                        .help("Initialize this gistit node from a prefix seed")
+                        .takes_value(true)
+                        .value_name("seed")
+                        .conflicts_with_all(&["join", "stop", "status", "start"]),
+                )
+                .arg(
                     Arg::new("start")
                         .long("start")
                         .help("Start encrypted private network node.")
                         .long_help(
                             "Spawn the gistit network node background process to enable peer 
 to peer file sharing.")
-                        .takes_value(true)
-                        .value_name("seed")
                         .conflicts_with_all(&["join", "stop", "status"]),
                 )
                 .arg(

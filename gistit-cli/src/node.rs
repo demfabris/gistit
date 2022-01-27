@@ -1,4 +1,5 @@
 //! The host module
+use std::env;
 use std::fs;
 use std::net::Ipv4Addr;
 use std::path::Path;
@@ -16,8 +17,9 @@ use crate::{prettyln, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
-    pub start: Option<&'static str>,
+    pub init: Option<&'static str>,
     pub join: Option<&'static str>,
+    pub start: bool,
     pub stop: bool,
     pub status: bool,
     pub host: &'static str,
@@ -32,12 +34,13 @@ impl Action {
         // merge settings
 
         Ok(Box::new(Self {
-            start: args.value_of("start"),
+            init: args.value_of("init"),
             join: args.value_of("join"),
             clipboard: args.is_present("clipboard"),
             // SAFETY: Has default values
             host: unsafe { args.value_of("host").unwrap_unchecked() },
             port: unsafe { args.value_of("port").unwrap_unchecked() },
+            start: args.is_present("start"),
             stop: args.is_present("stop"),
             status: args.is_present("status"),
         }))
@@ -45,8 +48,9 @@ impl Action {
 }
 
 pub enum ProcessCommand {
-    Start(&'static str),
+    Init(&'static str),
     Join(&'static str),
+    Start,
     Stop,
     Status,
 }
@@ -64,12 +68,13 @@ impl Dispatch for Action {
     async fn prepare(&'static self) -> Result<Self::InnerData> {
         <Self as Check>::check(self)?;
 
-        let command = match (self.start, self.join, self.stop, self.status) {
-            (Some(seed), None, false, false) => ProcessCommand::Start(seed),
-            (None, Some(address), false, false) => ProcessCommand::Join(address),
-            (None, None, true, false) => ProcessCommand::Stop,
-            (None, None, false, true) => ProcessCommand::Status,
-            (_, _, _, _) => unreachable!(),
+        let command = match (self.init, self.join, self.start, self.stop, self.status) {
+            (Some(seed), None, false, false, false) => ProcessCommand::Init(seed),
+            (None, Some(address), false, false, false) => ProcessCommand::Join(address),
+            (None, None, true, false, false) => ProcessCommand::Start,
+            (None, None, false, true, false) => ProcessCommand::Stop,
+            (None, None, false, false, true) => ProcessCommand::Status,
+            (_, _, _, _, _) => unreachable!(),
         };
 
         // SAFETY: Previously checked in [`Check::check`]
@@ -94,13 +99,22 @@ impl Dispatch for Action {
         let mut bridge = ipc::client(&runtime_dir)?;
 
         match config.command {
-            ProcessCommand::Start(seed) => {
+            ProcessCommand::Init(seed) => {
+                if let Some(ipfs_path) = env::var_os("IPFS_PATH") {
+                    if let Some(ipfs_config) =
+                        std::fs::read_to_string(Path::new(&ipfs_path).join("config"))
+                    {
+                        let json_config: serde_json::Value = serde_json::from_str(ipfs_config).ok();
+                    }
+                }
+            }
+            ProcessCommand::Start => {
                 if bridge.alive() {
                     prettyln!("Running..."); // TODO: change this to status msg
                     return Ok(());
                 }
 
-                let pid = spawn(&runtime_dir, seed)?;
+                let pid = spawn(&runtime_dir)?;
                 prettyln!(
                     "Starting gistit network node process, pid: {}",
                     style(pid).blue()
@@ -153,6 +167,10 @@ impl Dispatch for Action {
         };
         Ok(())
     }
+}
+
+fn get_node_config() -> Result<String> {
+    todo!()
 }
 
 fn spawn(runtime_dir: &Path, seed: &str) -> Result<u32> {
