@@ -41,10 +41,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 use crate::args::app;
 use crate::settings::Settings;
 
-/// Stores the current command executed
 pub static CURRENT_ACTION: OnceCell<String> = OnceCell::new();
-/// Local config file
+
 pub static LOCALFS_SETTINGS: OnceCell<Settings> = OnceCell::new();
+
+pub const GISTIT_QUALIFIER: &str = "io";
+pub const GISTIT_ORGANIZATION: &str = "fabricio7p";
+pub const GISTIT_APPLICATION: &str = "Gistit";
 
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(app().get_matches()));

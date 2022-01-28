@@ -5,25 +5,13 @@
 use std::fs;
 use std::path::PathBuf;
 
-use clap::crate_authors;
 use directories::ProjectDirs;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 use lib_gistit::file::File;
 
 use crate::LOCALFS_SETTINGS;
-use crate::{ErrorKind, Result};
-
-#[doc(hidden)]
-const GISTIT_QUALIFIER: &str = "io";
-
-lazy_static! {
-    static ref GISTIT_ORGANIZATION: &'static str = crate_authors!("-");
-}
-
-#[doc(hidden)]
-const GISTIT_APPLICATION: &str = "Gistit";
+use crate::{ErrorKind, Result, GISTIT_APPLICATION, GISTIT_ORGANIZATION, GISTIT_QUALIFIER};
 
 #[doc(hidden)]
 const GISTIT_SETTINGS_FILE_NAME: &str = "settings.yaml";

@@ -4,5 +4,4 @@ members = [
   "gistit-cli",
   "gistit-daemon",
   "lib-gistit",
-  "peer-id-generator",
 ]

@@ -37,17 +37,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug)]
 struct Config {
-    seed: &'static str,
     runtime_dir: &'static OsStr,
+    config_dir: &'static OsStr,
 }
 
 impl Config {
     fn from_args(args: &'static ArgMatches) -> Result<Self> {
-        // SAFETY: They all have default values
+        // SAFETY: Args have default values
         unsafe {
             Ok(Self {
-                seed: args.value_of("seed").unwrap_unchecked(),
                 runtime_dir: args.value_of_os("runtime-dir").unwrap_unchecked(),
+                config_dir: args.value_of_os("config-dir").unwrap_unchecked(),
             })
         }
     }
@@ -55,12 +55,15 @@ impl Config {
 
 async fn run() -> Result<()> {
     let args = Box::leak(Box::new(app().get_matches()));
-    let Config { seed, runtime_dir } = Config::from_args(args)?;
+    let Config {
+        runtime_dir,
+        config_dir,
+    } = Config::from_args(args)?;
 
     let runtime_dir = PathBuf::new().join(runtime_dir);
+    let _config_dir = PathBuf::new().join(config_dir);
 
-    let node = NetworkConfig::new(seed, runtime_dir)?.apply().await?;
-
+    let node = NetworkConfig::new(runtime_dir)?.apply().await?;
     node.run().await?;
 
     Ok(())
@@ -74,6 +77,6 @@ async fn main() {
         .init();
 
     while let Err(err) = run().await {
-        eprintln!("DAEMON ERROR: {:?}", err);
+        log::error!("{:?}", err);
     }
 }
