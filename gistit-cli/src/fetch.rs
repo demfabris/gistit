@@ -9,8 +9,9 @@ use url::Url;
 use lib_gistit::file::File;
 use lib_gistit::ipc::{self, Instruction};
 
-use crate::dispatch::{Dispatch, GistitPayload};
+use crate::dispatch::Dispatch;
 use crate::param::Check;
+use crate::payload::GistitPayload;
 use crate::project::runtime_dir;
 use crate::{prettyln, ErrorKind, Result};
 
@@ -77,13 +78,13 @@ impl Response {
 impl Dispatch for Action {
     type InnerData = Config;
 
-    async fn prepare(&'static self) -> Result<Self::InnerData> {
+    async fn prepare(&self) -> Result<Self::InnerData> {
         <Self as Check>::check(self)?;
         let config = Config { hash: self.hash };
         Ok(config)
     }
 
-    async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
+    async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = runtime_dir()?;
         let mut bridge = ipc::client(&runtime_dir)?;
         let hash = config.hash;

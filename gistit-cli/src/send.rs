@@ -14,9 +14,10 @@ use lib_gistit::clipboard::Clipboard;
 use lib_gistit::file::File;
 use lib_gistit::ipc::{self, Instruction};
 
-use crate::dispatch::{Dispatch, GistitInner, GistitPayload};
+use crate::dispatch::Dispatch;
 use crate::hash::Hasheable;
 use crate::param::Check;
+use crate::payload::{GistitInner, GistitPayload};
 use crate::project::runtime_dir;
 use crate::{prettyln, ErrorKind, Result};
 
@@ -45,13 +46,11 @@ impl Action {
         maybe_stdin: Option<String>,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         prettyln!("Preparing gistit...",);
-
         Ok(Box::new(Self {
             file_path: args.value_of_os("FILE"),
             maybe_stdin,
             description: args.value_of("description"),
-            // SAFETY: Has default value
-            author: unsafe { args.value_of("author").unwrap_unchecked() },
+            author: args.value_of("author").ok_or(ErrorKind::Argument)?,
             clipboard: args.is_present("clipboard"),
         }))
     }
@@ -128,7 +127,7 @@ impl Response {
 impl Dispatch for Action {
     type InnerData = Config;
 
-    async fn prepare(&'static self) -> Result<Self::InnerData> {
+    async fn prepare(&self) -> Result<Self::InnerData> {
         <Self as Check>::check(self)?;
 
         let file = if let Some(file) = self.file_path {
@@ -147,7 +146,7 @@ impl Dispatch for Action {
         Ok(config)
     }
 
-    async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
+    async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = runtime_dir()?;
         let mut bridge = ipc::client(&runtime_dir)?;
         let hash = config.hash();
@@ -170,7 +169,7 @@ impl Dispatch for Action {
                 .await?
                 .json()
                 .await?;
-            let _ = response.into_inner()?;
+            response.into_inner()?;
 
             if self.clipboard {
                 Clipboard::new(hash.clone())

@@ -14,14 +14,13 @@ use crate::node::Action as NodeAction;
 use crate::send::Action as SendAction;
 use crate::{ErrorKind, Result};
 
-/// Allowed file size range in bytes
 const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=50_000;
-/// Allowed description length
+
 const ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE: RangeInclusive<usize> = 10..=100;
-/// Allowed author info length
+
 const ALLOWED_AUTHOR_CHAR_LENGTH_RANGE: RangeInclusive<usize> = 3..=30;
-/// Valid hash length
-const GISTIT_HASH_CHAR_LENGTH: usize = 33;
+
+const GISTIT_HASH_CHAR_LENGTH: usize = 32;
 
 pub const SUPPORTED_COLORSCHEMES: [&str; 24] = [
     "1337",
@@ -148,8 +147,8 @@ impl Check for SendAction {
         }
         if let Some(file_path_osstr) = self.file_path {
             let file_path = Path::new(file_path_osstr);
-            metadata(&file_path)?;
-            extension(&file_path)?;
+            metadata(file_path)?;
+            extension(file_path)?;
         }
         author(self.author)?;
         Ok(())
@@ -160,7 +159,7 @@ impl Check for FetchAction {
     fn check(&self) -> Result<()> {
         hash(self.hash)?;
         if let Some(value) = self.colorscheme {
-            colorscheme(&value)?;
+            colorscheme(value)?;
         }
         Ok(())
     }
@@ -168,8 +167,8 @@ impl Check for FetchAction {
 
 impl Check for NodeAction {
     fn check(&self) -> Result<()> {
-        host(&self.host)?;
-        port(&self.port)?;
+        host(self.host)?;
+        port(self.port)?;
         Ok(())
     }
 }

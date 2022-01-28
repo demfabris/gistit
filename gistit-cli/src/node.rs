@@ -1,4 +1,3 @@
-//! The host module
 use std::fs;
 use std::net::Ipv4Addr;
 use std::path::Path;
@@ -13,9 +12,10 @@ use lib_gistit::ipc::{self, Instruction, ServerResponse};
 use crate::dispatch::Dispatch;
 use crate::param::Check;
 use crate::project::{config_dir, runtime_dir};
-use crate::{prettyln, Result};
+use crate::{prettyln, ErrorKind, Result};
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Action {
     pub start: bool,
     pub stop: bool,
@@ -33,9 +33,8 @@ impl Action {
         Ok(Box::new(Self {
             join: args.value_of("join"),
             clipboard: args.is_present("clipboard"),
-            // SAFETY: Has default values
-            host: unsafe { args.value_of("host").unwrap_unchecked() },
-            port: unsafe { args.value_of("port").unwrap_unchecked() },
+            host: args.value_of("host").ok_or(ErrorKind::Argument)?,
+            port: args.value_of("port").ok_or(ErrorKind::Argument)?,
             start: args.is_present("start"),
             stop: args.is_present("stop"),
             status: args.is_present("status"),
@@ -60,7 +59,7 @@ pub struct Config {
 impl Dispatch for Action {
     type InnerData = Config;
 
-    async fn prepare(&'static self) -> Result<Self::InnerData> {
+    async fn prepare(&self) -> Result<Self::InnerData> {
         <Self as Check>::check(self)?;
 
         let command = match (self.join, self.start, self.stop, self.status) {
@@ -88,7 +87,7 @@ impl Dispatch for Action {
         Ok(config)
     }
 
-    async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
+    async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = runtime_dir()?;
         let config_dir = config_dir()?;
         let mut bridge = ipc::client(&runtime_dir)?;

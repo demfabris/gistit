@@ -12,8 +12,7 @@ pub fn runtime_dir() -> Result<PathBuf> {
     let dirs = BaseDirs::new().ok_or(ErrorKind::Unknown)?;
     Ok(dirs
         .runtime_dir()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| std::env::temp_dir()))
+        .map_or_else(std::env::temp_dir, Path::to_path_buf))
 }
 
 pub fn config_dir() -> Result<PathBuf> {
