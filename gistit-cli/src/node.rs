@@ -7,7 +7,6 @@ use std::process::{Command, Stdio};
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
-use serde::{Deserialize, Serialize};
 
 use lib_gistit::ipc::{self, Instruction, ServerResponse};
 
@@ -30,8 +29,6 @@ impl Action {
     pub fn from_args(
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        // merge settings
-
         Ok(Box::new(Self {
             join: args.value_of("join"),
             clipboard: args.is_present("clipboard"),

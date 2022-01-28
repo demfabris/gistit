@@ -19,15 +19,6 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<crate::Settings> for Error {
-    fn from(_: crate::Settings) -> Self {
-        Self {
-            cause: "failed to parse settings.",
-            kind: ErrorKind::Settings,
-        }
-    }
-}
-
 impl From<lib_gistit::Error> for Error {
     fn from(err: lib_gistit::Error) -> Self {
         Self {
@@ -64,15 +55,6 @@ impl From<bat::error::Error> for Error {
     }
 }
 
-impl From<serde_yaml::Error> for Error {
-    fn from(err: serde_yaml::Error) -> Self {
-        Self {
-            cause: "failed to parse yaml file.",
-            kind: ErrorKind::SerializeYaml(err),
-        }
-    }
-}
-
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self {
@@ -88,7 +70,6 @@ pub enum ErrorKind {
     Internal(lib_gistit::Error),
     Request(reqwest::Error),
     Tui(bat::error::Error),
-    SerializeYaml(serde_yaml::Error),
     SerializeJson(serde_json::Error),
     Colorscheme(Option<String>),
     InvalidParam(&'static str, &'static str),
@@ -102,7 +83,6 @@ pub enum ErrorKind {
     FileSize,
     Parsing,
     Argument,
-    Settings,
     Unknown,
 }
 
@@ -122,7 +102,6 @@ impl From<ErrorKind> for Error {
             ErrorKind::Internal(e) => e.into(),
             ErrorKind::Request(e) => e.into(),
             ErrorKind::Tui(e) => e.into(),
-            ErrorKind::SerializeYaml(e) => e.into(),
             ErrorKind::SerializeJson(e) => e.into(),
             ErrorKind::Colorscheme(ref maybe_close_match) => {
                 let suggest = maybe_close_match
@@ -181,10 +160,6 @@ impl From<ErrorKind> for Error {
                 cause: "failed to parse argument",
             },
             ErrorKind::Argument => Self {
-                kind,
-                cause: "failed to parse argument",
-            },
-            ErrorKind::Settings => Self {
                 kind,
                 cause: "failed to parse argument",
             },

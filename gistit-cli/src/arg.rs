@@ -54,17 +54,6 @@ This is our best efforts at persisting the hash into the system clipboard after 
                 .conflicts_with("FILE")
                 .help("List available colorschemes"),
         )
-        .arg(
-            Arg::new("init-config")
-                .long("init-config")
-                .help("Initialize the default settings.yaml file into the project config directory")
-                .conflicts_with("FILE")
-                .long_help(
-                    "Initialize the default settings.yaml file into the project config directory.
-This flag can be also used to reset settings to default.
-Beware to mistakenly overwriting your settings.",
-                )
-        )
         .subcommand(
             App::new("fetch")
                 .alias("f")

@@ -20,14 +20,14 @@
     )
 )]
 
-mod args;
+mod arg;
 mod dispatch;
-mod errors;
+mod error;
 mod fetch;
 mod node;
 mod params;
+mod project;
 mod send;
-mod settings;
 
 use std::io::{self, BufRead};
 use std::process::exit;
@@ -35,23 +35,15 @@ use std::process::exit;
 use console::style;
 use once_cell::sync::OnceCell;
 
-pub use crate::errors::{Error, ErrorKind};
+pub use crate::error::{Error, ErrorKind};
 pub type Result<T> = std::result::Result<T, Error>;
 
-use crate::args::app;
-use crate::settings::Settings;
+use crate::arg::app;
 
 pub static CURRENT_ACTION: OnceCell<String> = OnceCell::new();
 
-pub static LOCALFS_SETTINGS: OnceCell<Settings> = OnceCell::new();
-
-pub const GISTIT_QUALIFIER: &str = "io";
-pub const GISTIT_ORGANIZATION: &str = "fabricio7p";
-pub const GISTIT_APPLICATION: &str = "Gistit";
-
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(app().get_matches()));
-    LOCALFS_SETTINGS.set(Settings::default().merge_local()?)?;
 
     let cmd_args = if let Some((cmd, args)) = matches.subcommand() {
         CURRENT_ACTION.set(cmd.to_owned())?;
@@ -62,12 +54,6 @@ async fn run() -> Result<()> {
 
     if matches.is_present("list-colorschemes") {
         list_bat_colorschemes();
-        exit(0);
-    }
-
-    if matches.is_present("init-config") {
-        Settings::save_new()?;
-        prettyln!("Settings.yaml created!");
         exit(0);
     }
 

@@ -16,7 +16,6 @@ use lib_gistit::ipc::{self, Instruction};
 
 use crate::dispatch::{get_runtime_dir, Dispatch, GistitInner, GistitPayload, Hasheable};
 use crate::params::Check;
-use crate::settings::{get_runtime_settings, GistitSend, Mergeable};
 use crate::{prettyln, ErrorKind, Result};
 
 lazy_static! {
@@ -45,25 +44,13 @@ impl Action {
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         prettyln!("Preparing gistit...",);
 
-        let rhs_settings = get_runtime_settings()?.gistit_send.clone();
-
-        let lhs_settings = Box::new(GistitSend {
-            author: args.value_of("author").map(ToOwned::to_owned),
-            clipboard: Some(args.is_present("clipboard")),
-        });
-
-        let merged = lhs_settings.merge(rhs_settings);
-        let (author, clipboard) = (
-            merged.author.ok_or(ErrorKind::Argument)?,
-            merged.clipboard.ok_or(ErrorKind::Argument)?,
-        );
-
         Ok(Box::new(Self {
             file_path: args.value_of_os("FILE"),
             maybe_stdin,
             description: args.value_of("description"),
-            author: Box::leak(Box::new(author)),
-            clipboard,
+            // SAFETY: Has default value
+            author: unsafe { args.value_of("author").unwrap_unchecked() },
+            clipboard: args.is_present("clipboard"),
         }))
     }
 }

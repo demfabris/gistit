@@ -11,7 +11,6 @@ use lib_gistit::ipc::{self, Instruction};
 
 use crate::dispatch::{get_runtime_dir, Dispatch, GistitPayload};
 use crate::params::Check;
-use crate::settings::{get_runtime_settings, GistitFetch, Mergeable};
 use crate::{prettyln, ErrorKind, Result};
 
 lazy_static! {
@@ -35,23 +34,10 @@ impl Action {
     pub fn from_args(
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        let rhs_settings = get_runtime_settings()?.gistit_fetch.clone();
-
-        let lhs_settings = Box::new(GistitFetch {
-            colorscheme: args.value_of("colorscheme").map(ToOwned::to_owned),
-            save: Some(args.is_present("save")),
-        });
-
-        let merged = lhs_settings.merge(rhs_settings);
-        let (colorscheme, save) = (
-            merged.colorscheme.ok_or(ErrorKind::Argument)?,
-            merged.save.ok_or(ErrorKind::Argument)?,
-        );
-
         Ok(Box::new(Self {
             hash: args.value_of("HASH").ok_or(ErrorKind::Argument)?,
-            colorscheme: Some(Box::leak(Box::new(colorscheme))),
-            save,
+            colorscheme: args.value_of("colorscheme"),
+            save: args.is_present("save"),
         }))
     }
 }
@@ -84,44 +70,6 @@ impl Response {
             _ => unreachable!("Gistit server is unreachable"),
         }
     }
-}
-
-fn preview_gistit(action: &Action, payload: &GistitPayload, file: &File) -> Result<bool> {
-    let mut header_string = style(&payload.gistit.name).green().to_string();
-    header_string.push_str(&format!(" | {}", style(&payload.author).blue().bold()));
-
-    if let Some(ref description) = payload.description {
-        header_string.push_str(&format!(" | {}", style(description).italic()));
-    }
-    // If user provided colorscheme we overwrite the stored one
-    let colorscheme = action.colorscheme.unwrap_or("ansi");
-
-    let input = bat::Input::from_reader(file.data())
-        .name(&payload.gistit.name)
-        .title(header_string);
-
-    Ok(bat::PrettyPrinter::new()
-        .header(true)
-        .grid(true)
-        .input(input)
-        .line_numbers(true)
-        .theme(colorscheme)
-        .use_italics(true)
-        .paging_mode(bat::PagingMode::QuitIfOneScreen)
-        .print()?)
-}
-
-fn save_gistit(file: &File) -> Result<()> {
-    let save_location = get_runtime_settings()?
-        .clone()
-        .gistit_global
-        .unwrap_or_default()
-        .save_location
-        .ok_or(ErrorKind::Settings)?;
-
-    let file_path = save_location.join(file.name());
-    file.save_as(&file_path)?;
-    Ok(())
 }
 
 #[async_trait]
@@ -184,4 +132,37 @@ You can preview it online at: {}/{}
         );
         Ok(())
     }
+}
+
+fn preview_gistit(action: &Action, payload: &GistitPayload, file: &File) -> Result<bool> {
+    let mut header_string = style(&payload.gistit.name).green().to_string();
+    header_string.push_str(&format!(" | {}", style(&payload.author).blue().bold()));
+
+    if let Some(ref description) = payload.description {
+        header_string.push_str(&format!(" | {}", style(description).italic()));
+    }
+    // If user provided colorscheme we overwrite the stored one
+    let colorscheme = action.colorscheme.unwrap_or("ansi");
+
+    let input = bat::Input::from_reader(file.data())
+        .name(&payload.gistit.name)
+        .title(header_string);
+
+    Ok(bat::PrettyPrinter::new()
+        .header(true)
+        .grid(true)
+        .input(input)
+        .line_numbers(true)
+        .theme(colorscheme)
+        .use_italics(true)
+        .paging_mode(bat::PagingMode::QuitIfOneScreen)
+        .print()?)
+}
+
+fn save_gistit(file: &File) -> Result<()> {
+    let save_location = std::env::temp_dir(); // TODO: improve this
+
+    let file_path = save_location.join(file.name());
+    file.save_as(&file_path)?;
+    Ok(())
 }

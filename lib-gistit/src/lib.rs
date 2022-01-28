@@ -25,8 +25,5 @@ pub mod errors;
 pub mod file;
 pub mod ipc;
 
-#[cfg(feature = "encryption")]
-pub mod encrypt;
-
 pub use errors::{Error, ErrorKind};
 pub type Result<T> = std::result::Result<T, Error>;
