@@ -18,7 +18,7 @@ use libp2p::core::upgrade::{self, read_length_prefixed, write_length_prefixed};
 use libp2p::core::{PeerId, ProtocolName};
 use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
-use libp2p::identity::Keypair;
+use libp2p::identity::{Keypair, ed25519};
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
     self, GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult,
@@ -45,14 +45,8 @@ pub struct NetworkConfig {
 }
 
 impl NetworkConfig {
-    pub fn new(seed: &str, runtime_dir: PathBuf) -> Result<Self> {
-        let mut bytes: Vec<u8> = seed.as_bytes().to_vec();
-        bytes.resize_with(32, || 0);
-        let mut bytes: [u8; 32] = bytes.try_into().unwrap();
-
-        let ed25519_secret = identity::ed25519::SecretKey::from_bytes(&mut bytes).unwrap();
-        let keypair = identity::Keypair::Ed25519(ed25519_secret.into());
-
+    pub fn new(runtime_dir: PathBuf) -> Result<Self> {
+        let keypair = identity::Keypair::Ed25519(ed25519::Keypair::generate());
         let peer_id = PeerId::from(keypair.public());
 
         Ok(Self {

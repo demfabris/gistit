@@ -1,5 +1,5 @@
 /// Gistit command line interface
-use clap::{crate_authors, crate_description, crate_version, App, Arg, ValueHint};
+use clap::{crate_authors, crate_description, crate_version, App, Arg, ArgGroup, ValueHint};
 
 /// The gistit application
 #[allow(clippy::too_many_lines)]
@@ -100,34 +100,29 @@ Run `gistit --colorschemes` to list available ones.",
             App::new("node")
                 .alias("n")
                 .about("Start a p2p gistit node for file transfer")
+                .group(ArgGroup::new("daemon_cmd"))
+                .group(ArgGroup::new("other"))
                 .arg(
                     Arg::new("start")
                         .long("start")
                         .help("Start encrypted private network node.")
+                        .group("daemon_cmd")
                         .long_help(
                             "Spawn the gistit network node background process to enable peer 
 to peer file sharing.")
-                        .takes_value(true)
-                        .value_name("seed")
                         .conflicts_with_all(&["join", "stop", "status"]),
-                )
-                .arg(
-                    Arg::new("join")
-                        .long("join")
-                        .help("Join a private network.")
-                        .takes_value(true)
-                        .value_name("address")
-                        .conflicts_with_all(&["start", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("stop")
                         .long("stop")
+                        .group("daemon_cmd")
                         .help("Stop gistit node background process")
                         .conflicts_with_all(&["start", "status"]),
                 )
                 .arg(
                     Arg::new("status")
                         .long("status")
+                        .group("daemon_cmd")
                         .help("Display the status of your gistit network node process")
                         .conflicts_with_all(&["start", "stop"]),
                 )
@@ -149,6 +144,15 @@ to peer file sharing.")
                         .value_name("port")
                         .default_value("0")
                         .conflicts_with_all(&["stop", "status"]),
+                )
+                .arg(
+                    Arg::new("join")
+                        .long("join")
+                        .help("Join a private network.")
+                        .takes_value(true)
+                        .value_name("address")
+                        .group("other")
+                        .conflicts_with_all(&["start", "stop", "status"]),
                 )
                 .arg(
                     Arg::new("clipboard")

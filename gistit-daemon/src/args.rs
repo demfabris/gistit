@@ -12,7 +12,7 @@ pub fn app() -> App<'static> {
                 .long("runtime-dir")
                 .help("Directory to cache peers")
                 .takes_value(true)
-                .value_name("directory")
+                .value_name("dir")
                 .default_value_os({
                     let path = Box::leak(Box::new(temp_dir()));
                     path.as_os_str()
@@ -21,11 +21,16 @@ pub fn app() -> App<'static> {
                 .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::new("seed")
-                .long("seed")
-                .help("Seed to derive keypair")
+            Arg::new("config-dir")
+                .long("config-dir")
+                .help("Directory to store key material")
                 .takes_value(true)
-                .value_name("seed")
-                .default_value("none"),
+                .value_name("dir")
+                .default_value_os({
+                    let path = Box::leak(Box::new(temp_dir()));
+                    path.as_os_str()
+                })
+                .value_hint(ValueHint::DirPath)
+                .allow_invalid_utf8(true),
         )
 }

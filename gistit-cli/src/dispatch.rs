@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use directories::BaseDirs;
+use directories::{BaseDirs, ProjectDirs};
 use serde::{Deserialize, Serialize};
 
 use lib_gistit::file::{EncodedFileData, File};
 
-use crate::{ErrorKind, Result};
+use crate::{ErrorKind, Result, GISTIT_APPLICATION, GISTIT_ORGANIZATION, GISTIT_QUALIFIER};
 
 #[cfg(test)]
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -30,6 +30,15 @@ pub fn get_runtime_dir() -> Result<PathBuf> {
         .runtime_dir()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| std::env::temp_dir()))
+}
+
+pub fn get_config_dir() -> Result<PathBuf> {
+    Ok(
+        ProjectDirs::from(GISTIT_QUALIFIER, &GISTIT_ORGANIZATION, GISTIT_APPLICATION)
+            .ok_or(ErrorKind::Unknown)?
+            .config_dir()
+            .to_path_buf(),
+    )
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

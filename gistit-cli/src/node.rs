@@ -7,21 +7,22 @@ use std::process::{Command, Stdio};
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
+use serde::{Deserialize, Serialize};
 
 use lib_gistit::ipc::{self, Instruction, ServerResponse};
 
-use crate::dispatch::{get_runtime_dir, Dispatch};
+use crate::dispatch::{get_config_dir, get_runtime_dir, Dispatch};
 use crate::params::Check;
 use crate::{prettyln, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
-    pub start: Option<&'static str>,
-    pub join: Option<&'static str>,
+    pub start: bool,
     pub stop: bool,
     pub status: bool,
     pub host: &'static str,
     pub port: &'static str,
+    pub join: Option<&'static str>,
     pub clipboard: bool,
 }
 
@@ -32,21 +33,21 @@ impl Action {
         // merge settings
 
         Ok(Box::new(Self {
-            start: args.value_of("start"),
             join: args.value_of("join"),
             clipboard: args.is_present("clipboard"),
             // SAFETY: Has default values
             host: unsafe { args.value_of("host").unwrap_unchecked() },
             port: unsafe { args.value_of("port").unwrap_unchecked() },
+            start: args.is_present("start"),
             stop: args.is_present("stop"),
             status: args.is_present("status"),
         }))
     }
 }
 
-pub enum ProcessCommand {
-    Start(&'static str),
+enum ProcessCommand {
     Join(&'static str),
+    Start,
     Stop,
     Status,
 }
@@ -64,11 +65,11 @@ impl Dispatch for Action {
     async fn prepare(&'static self) -> Result<Self::InnerData> {
         <Self as Check>::check(self)?;
 
-        let command = match (self.start, self.join, self.stop, self.status) {
-            (Some(seed), None, false, false) => ProcessCommand::Start(seed),
-            (None, Some(address), false, false) => ProcessCommand::Join(address),
-            (None, None, true, false) => ProcessCommand::Stop,
-            (None, None, false, true) => ProcessCommand::Status,
+        let command = match (self.join, self.start, self.stop, self.status) {
+            (Some(address), false, false, false) => ProcessCommand::Join(address),
+            (None, true, false, false) => ProcessCommand::Start,
+            (None, false, true, false) => ProcessCommand::Stop,
+            (None, false, false, true) => ProcessCommand::Status,
             (_, _, _, _) => unreachable!(),
         };
 
@@ -91,16 +92,17 @@ impl Dispatch for Action {
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = get_runtime_dir()?;
+        let config_dir = get_config_dir()?;
         let mut bridge = ipc::client(&runtime_dir)?;
 
         match config.command {
-            ProcessCommand::Start(seed) => {
+            ProcessCommand::Start => {
                 if bridge.alive() {
                     prettyln!("Running..."); // TODO: change this to status msg
                     return Ok(());
                 }
 
-                let pid = spawn(&runtime_dir, seed)?;
+                let pid = spawn(&runtime_dir, &config_dir)?;
                 prettyln!(
                     "Starting gistit network node process, pid: {}",
                     style(pid).blue()
@@ -155,12 +157,12 @@ impl Dispatch for Action {
     }
 }
 
-fn spawn(runtime_dir: &Path, seed: &str) -> Result<u32> {
+fn spawn(runtime_dir: &Path, config_dir: &Path) -> Result<u32> {
     let stdout = fs::File::create(runtime_dir.join("gistit.log"))?;
     let daemon = "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
     let child = Command::new(daemon)
-        .args(["--seed", seed])
         .args(["--runtime-dir", runtime_dir.to_string_lossy().as_ref()])
+        .args(["--config-dir", config_dir.to_string_lossy().as_ref()])
         .stderr(stdout)
         .stdout(Stdio::null())
         .spawn()?;

@@ -142,7 +142,7 @@ impl Dispatch for Action {
         if bridge.alive() {
             bridge.connect_blocking()?;
             bridge
-                .send(Instruction::GetProviders {
+                .send(Instruction::Get {
                     hash: hash.to_owned(),
                 })
                 .await?;
