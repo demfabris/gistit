@@ -10,8 +10,9 @@ use console::style;
 
 use lib_gistit::ipc::{self, Instruction, ServerResponse};
 
-use crate::dispatch::{get_config_dir, get_runtime_dir, Dispatch};
-use crate::params::Check;
+use crate::dispatch::Dispatch;
+use crate::param::Check;
+use crate::project::{config_dir, runtime_dir};
 use crate::{prettyln, Result};
 
 #[derive(Debug, Clone)]
@@ -88,8 +89,8 @@ impl Dispatch for Action {
     }
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
-        let runtime_dir = get_runtime_dir()?;
-        let config_dir = get_config_dir()?;
+        let runtime_dir = runtime_dir()?;
+        let config_dir = config_dir()?;
         let mut bridge = ipc::client(&runtime_dir)?;
 
         match config.command {
@@ -114,19 +115,19 @@ impl Dispatch for Action {
                     .await?;
 
                 if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv().await? {
-                    print_success(self.clipboard, id);
+                    print_success(self.clipboard, &id);
                 }
             }
             ProcessCommand::Join(address) => {
-                if !bridge.alive() {
-                    prettyln!("Gistit node must be running to join a peer");
-                } else {
+                if bridge.alive() {
                     bridge.connect_blocking()?;
                     bridge
                         .send(Instruction::Dial {
                             peer_id: address.to_owned(),
                         })
                         .await?;
+                } else {
+                    prettyln!("Gistit node must be running to join a peer");
                 }
             }
             ProcessCommand::Stop => {
@@ -167,7 +168,7 @@ fn spawn(runtime_dir: &Path, config_dir: &Path) -> Result<u32> {
     Ok(child.id())
 }
 
-fn print_success(has_clipboard: bool, peer_id: String) {
+fn print_success(has_clipboard: bool, peer_id: &str) {
     let clipboard_msg = if has_clipboard {
         "(copied to clipboard)".to_owned()
     } else {

@@ -14,8 +14,10 @@ use lib_gistit::clipboard::Clipboard;
 use lib_gistit::file::File;
 use lib_gistit::ipc::{self, Instruction};
 
-use crate::dispatch::{get_runtime_dir, Dispatch, GistitInner, GistitPayload, Hasheable};
-use crate::params::Check;
+use crate::dispatch::{Dispatch, GistitInner, GistitPayload};
+use crate::hash::Hasheable;
+use crate::param::Check;
+use crate::project::runtime_dir;
 use crate::{prettyln, ErrorKind, Result};
 
 lazy_static! {
@@ -146,7 +148,7 @@ impl Dispatch for Action {
     }
 
     async fn dispatch(&'static self, config: Self::InnerData) -> Result<()> {
-        let runtime_dir = get_runtime_dir()?;
+        let runtime_dir = runtime_dir()?;
         let mut bridge = ipc::client(&runtime_dir)?;
         let hash = config.hash();
 

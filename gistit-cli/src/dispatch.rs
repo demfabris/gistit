@@ -14,10 +14,6 @@ pub trait Dispatch {
     async fn dispatch(&'static self, payload: Self::InnerData) -> Result<()>;
 }
 
-pub trait Hasheable {
-    fn hash(&self) -> String;
-}
-
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct GistitPayload {
     pub hash: String,

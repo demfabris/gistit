@@ -24,8 +24,9 @@ mod arg;
 mod dispatch;
 mod error;
 mod fetch;
+mod hash;
 mod node;
-mod params;
+mod param;
 mod project;
 mod send;
 
@@ -104,7 +105,7 @@ async fn main() -> Result<()> {
 #[doc(hidden)]
 fn list_bat_colorschemes() {
     println!("{}", style("Supported colorschemes: \n").green().bold());
-    crate::params::SUPPORTED_COLORSCHEMES.iter().for_each(|&c| {
+    param::SUPPORTED_COLORSCHEMES.iter().for_each(|&c| {
         println!("    {}", style(c).yellow());
     });
     println!(
