@@ -28,7 +28,7 @@ mod fmt;
 mod hash;
 mod node;
 mod param;
-mod payload;
+mod server;
 mod project;
 mod send;
 mod stdin;

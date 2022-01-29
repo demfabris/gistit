@@ -7,9 +7,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
-use lazy_static::lazy_static;
-use serde::Deserialize;
-use url::Url;
 
 use lib_gistit::clipboard::Clipboard;
 use lib_gistit::file::File;
@@ -18,19 +15,9 @@ use lib_gistit::ipc::{self, Instruction};
 use crate::dispatch::Dispatch;
 use crate::hash::Hasheable;
 use crate::param::check;
-use crate::payload::{GistitInner, GistitPayload};
 use crate::project::runtime_dir;
+use crate::server::{Gistit, Inner, IntoGistit, Response, SERVER_URL_LOAD};
 use crate::{prettyln, ErrorKind, Result};
-
-lazy_static! {
-    static ref GISTIT_SERVER_LOAD_URL: Url = Url::parse(
-        option_env!("GISTIT_SERVER_URL")
-            .unwrap_or("https://us-central1-gistit-base.cloudfunctions.net")
-    )
-    .expect("GISTIT_SERVER_URL env variable is not valid URL")
-    .join("load")
-    .expect("to join 'load' function URL");
-}
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -82,9 +69,9 @@ impl Hasheable for Config {
     }
 }
 
-impl Config {
-    fn into_json(self) -> Result<serde_json::Value> {
-        let payload = GistitPayload {
+impl IntoGistit for Config {
+    fn into_gistit(self) -> Result<Gistit> {
+        Ok(Gistit {
             hash: self.hash(),
             author: self.author.to_owned(),
             description: self.description.map(ToOwned::to_owned),
@@ -93,36 +80,13 @@ impl Config {
                 .expect("Check your system time")
                 .as_millis()
                 .to_string(),
-            gistit: GistitInner {
+            inner: Inner {
                 name: self.file.name(),
                 lang: self.file.lang().to_owned(),
                 size: self.file.size(),
                 data: self.file.to_encoded_data(),
             },
-        };
-
-        Ok(serde_json::to_value(payload)?)
-    }
-}
-
-#[derive(Deserialize, Debug)]
-struct Response {
-    success: Option<String>,
-    error: Option<String>,
-}
-
-impl Response {
-    fn into_inner(self) -> Result<String> {
-        match self {
-            Self {
-                success: Some(hash),
-                ..
-            } => Ok(hash),
-            Self {
-                error: Some(err), ..
-            } => Err(ErrorKind::Server(err).into()),
-            _ => unreachable!("Gistit server is unreachable"),
-        }
+        })
     }
 }
 
@@ -164,30 +128,31 @@ impl Dispatch for Action {
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = runtime_dir()?;
-        let mut bridge = ipc::client(&runtime_dir)?;
         let hash = config.hash();
+        let clipboard = config.clipboard;
 
+        let mut bridge = ipc::client(&runtime_dir)?;
         if bridge.alive() {
             prettyln!("Hosting gistit...");
             bridge.connect_blocking()?;
             bridge
                 .send(Instruction::Provide {
-                    hash: config.hash(),
+                    hash: hash.clone(),
                     data: config.file.to_encoded_data(),
                 })
                 .await?;
         } else {
             prettyln!("Uploading to server...");
             let response: Response = reqwest::Client::new()
-                .post(GISTIT_SERVER_LOAD_URL.to_string())
-                .json(&config.into_json()?)
+                .post(SERVER_URL_LOAD)
+                .json(&config.into_gistit()?)
                 .send()
                 .await?
                 .json()
                 .await?;
-            response.into_inner()?;
+            let _ = response.into_gistit()?;
 
-            if config.clipboard {
+            if clipboard {
                 Clipboard::new(hash.clone())
                     .try_into_selected()?
                     .into_provider()
