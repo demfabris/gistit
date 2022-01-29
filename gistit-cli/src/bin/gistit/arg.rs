@@ -5,6 +5,8 @@ use clap::{crate_authors, crate_description, crate_version, App, Arg, ArgGroup, 
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn app() -> App<'static> {
+    let random_name = Box::leak(Box::new(names::Generator::default().next().unwrap()));
+
     App::new("gistit-cli")
         .version(crate_version!())
         .about(crate_description!())
@@ -33,6 +35,7 @@ pub fn app() -> App<'static> {
                 .short('a')
                 .help("With author information. Defaults to a random generated name")
                 .takes_value(true)
+                .default_value(random_name)
                 .value_hint(ValueHint::Username),
         )
         .arg(
