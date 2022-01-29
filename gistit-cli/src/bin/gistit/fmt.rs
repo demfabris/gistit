@@ -15,7 +15,7 @@ macro_rules! errorln {
         use console::style;
 
         eprintln!(
-            "{}: Something went wrong during {}{}: \n    {:#?}",
+            "{}: Something went wrong during {}{}: \n    {}",
             style("error").red().bold(),
             style("gistit-").green().bold(),
             style(CURRENT_ACTION.get().unwrap_or(&"any".to_owned()))

@@ -102,7 +102,7 @@ impl Dispatch for Action {
             let attr = fs::metadata(&path)?;
             let maybe_extension = path.extension();
 
-            check::metadata(attr)?;
+            check::metadata(&attr)?;
             check::extension(maybe_extension)?;
 
             File::from_path(path)?
@@ -151,7 +151,7 @@ impl Dispatch for Action {
                 .await?
                 .json()
                 .await?;
-            let _ = response.into_gistit()?;
+            response.into_gistit()?;
 
             if clipboard {
                 Clipboard::new(hash.clone())

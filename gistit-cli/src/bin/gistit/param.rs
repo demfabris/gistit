@@ -79,7 +79,7 @@ pub mod check {
         }
     }
 
-    pub fn metadata(attr: fs::Metadata) -> Result<()> {
+    pub fn metadata(attr: &fs::Metadata) -> Result<()> {
         let size_allowed = ALLOWED_FILE_SIZE_RANGE.contains(&attr.len());
 
         if size_allowed {
@@ -110,12 +110,12 @@ pub mod check {
 
             maybe_match.map_or_else(
                 || Err(Error::Argument("invalid colorscheme", "--colorscheme")),
-                |top_match| Err(Error::Colorscheme(top_match.text)),
+                |top_match| Err(Error::Colorscheme(top_match.text.clone())),
             )
         }
     }
 
-    pub fn hash(hash: &str) -> Result<&str> {
+    pub const fn hash(hash: &str) -> Result<&str> {
         if hash.len() == GISTIT_HASH_CHAR_LENGTH {
             Ok(hash)
         } else {
@@ -124,14 +124,12 @@ pub mod check {
     }
 
     pub fn host(host: &str) -> Result<Ipv4Addr> {
-        Ok(host
-            .parse::<Ipv4Addr>()
-            .map_err(|_| Error::Argument("invalid ipv4 format.", "--host"))?)
+        host.parse::<Ipv4Addr>()
+            .map_err(|_| Error::Argument("invalid ipv4 format.", "--host"))
     }
 
     pub fn port(port: &str) -> Result<u16> {
-        Ok(port
-            .parse::<u16>()
-            .map_err(|_| Error::Argument("invalid port.", "--port"))?)
+        port.parse::<u16>()
+            .map_err(|_| Error::Argument("invalid port.", "--port"))
     }
 }
