@@ -10,7 +10,7 @@ use console::style;
 use lib_gistit::ipc::{self, Instruction, ServerResponse};
 
 use crate::dispatch::Dispatch;
-use crate::param::Check;
+use crate::param::check;
 use crate::project::{config_dir, runtime_dir};
 use crate::{prettyln, ErrorKind, Result};
 
@@ -60,22 +60,16 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
-        <Self as Check>::check(self)?;
+        let host = check::host(self.host)?;
+
+        let port = check::port(self.port)?;
 
         let command = match (self.join, self.start, self.stop, self.status) {
             (Some(address), false, false, false) => ProcessCommand::Join(address),
             (None, true, false, false) => ProcessCommand::Start,
             (None, false, true, false) => ProcessCommand::Stop,
             (None, false, false, true) => ProcessCommand::Status,
-            (_, _, _, _) => unreachable!(),
-        };
-
-        // SAFETY: Previously checked in [`Check::check`]
-        let (host, port) = unsafe {
-            (
-                self.host.parse::<Ipv4Addr>().unwrap_unchecked(),
-                self.port.parse::<u16>().unwrap_unchecked(),
-            )
+            (_, _, _, _) => unreachable!(), // TODO: print app help
         };
 
         let config = Config {
@@ -100,6 +94,7 @@ impl Dispatch for Action {
                 }
 
                 let pid = spawn(&runtime_dir, &config_dir)?;
+
                 prettyln!(
                     "Starting gistit network node process, pid: {}",
                     style(pid).blue()
@@ -132,6 +127,7 @@ impl Dispatch for Action {
             ProcessCommand::Stop => {
                 prettyln!("Stopping gistit network node process...");
                 fs::remove_file(runtime_dir.join("gistit.log"))?;
+
                 bridge.connect_blocking()?;
                 bridge.send(Instruction::Shutdown).await?;
             }

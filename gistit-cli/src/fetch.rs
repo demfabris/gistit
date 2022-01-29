@@ -10,7 +10,7 @@ use lib_gistit::file::File;
 use lib_gistit::ipc::{self, Instruction};
 
 use crate::dispatch::Dispatch;
-use crate::param::Check;
+use crate::param::check;
 use crate::payload::GistitPayload;
 use crate::project::runtime_dir;
 use crate::{prettyln, ErrorKind, Result};
@@ -28,7 +28,7 @@ lazy_static! {
 #[derive(Debug, Clone)]
 pub struct Action {
     pub hash: &'static str,
-    pub colorscheme: Option<&'static str>,
+    pub colorscheme: &'static str,
     pub save: bool,
 }
 
@@ -38,7 +38,7 @@ impl Action {
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         Ok(Box::new(Self {
             hash: args.value_of("HASH").ok_or(ErrorKind::Argument)?,
-            colorscheme: args.value_of("colorscheme"),
+            colorscheme: args.value_of("colorscheme").unwrap_or("ansi"),
             save: args.is_present("save"),
         }))
     }
@@ -47,6 +47,8 @@ impl Action {
 #[derive(Debug, Serialize)]
 pub struct Config {
     hash: &'static str,
+    colorscheme: &'static str,
+    save: bool,
 }
 
 impl Config {
@@ -79,25 +81,31 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
-        <Self as Check>::check(self)?;
-        let config = Config { hash: self.hash };
-        Ok(config)
+        let hash = check::hash(self.hash)?;
+
+        let colorscheme = check::colorscheme(self.colorscheme)?;
+
+        Ok(Config {
+            hash,
+            colorscheme,
+            save: self.save,
+        })
     }
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = runtime_dir()?;
         let mut bridge = ipc::client(&runtime_dir)?;
-        let hash = config.hash;
 
         if bridge.alive() {
             bridge.connect_blocking()?;
             bridge
                 .send(Instruction::Get {
-                    hash: hash.to_owned(),
+                    hash: config.hash.to_owned(),
                 })
                 .await?;
         } else {
             prettyln!("Contacting host...");
+
             let req = reqwest::Client::new()
                 .post(GISTIT_SERVER_GET_URL.to_string())
                 .json(&config.into_json()?)
@@ -128,9 +136,9 @@ SUCCESS:
 
 You can preview it online at: {}/{}
 "#,
-            style(&hash).blue().bold(),
+            style(&config.hash).blue().bold(),
             "https://gistit.vercel.app",
-            style(&hash).blue().bold(),
+            style(&config.hash).blue().bold(),
         );
         Ok(())
     }
@@ -143,8 +151,8 @@ fn preview_gistit(action: &Action, payload: &GistitPayload, file: &File) -> Resu
     if let Some(ref description) = payload.description {
         header_string.push_str(&format!(" | {}", style(description).italic()));
     }
-    // If user provided colorscheme we overwrite the stored one
-    let colorscheme = action.colorscheme.unwrap_or("ansi");
+
+    let colorscheme = action.colorscheme;
 
     let input = bat::Input::from_reader(file.data())
         .name(&payload.gistit.name)

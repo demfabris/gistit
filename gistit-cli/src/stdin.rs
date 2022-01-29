@@ -1,11 +1,11 @@
-use std::io::{self, BufRead};
+use std::io::{stdin, BufRead};
 
 const READ_LIMIT_BYTES: usize = 50_000;
 
 pub fn read_to_end() -> String {
     let mut buf = String::new();
     let mut threshold = READ_LIMIT_BYTES;
-    let stdin = io::stdin();
+    let stdin = stdin();
     let mut handle = stdin.lock();
 
     while let Ok(read) = handle.read_line(&mut buf) {

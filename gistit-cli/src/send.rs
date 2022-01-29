@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::fs;
 use std::path::Path;
 use std::str;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,7 +17,7 @@ use lib_gistit::ipc::{self, Instruction};
 
 use crate::dispatch::Dispatch;
 use crate::hash::Hasheable;
-use crate::param::Check;
+use crate::param::check;
 use crate::payload::{GistitInner, GistitPayload};
 use crate::project::runtime_dir;
 use crate::{prettyln, ErrorKind, Result};
@@ -59,8 +60,9 @@ impl Action {
 #[derive(Debug)]
 pub struct Config {
     file: File,
-    description: Option<&'static str>,
     author: &'static str,
+    description: Option<&'static str>,
+    clipboard: bool,
 }
 
 impl Hasheable for Config {
@@ -98,6 +100,7 @@ impl Config {
                 data: self.file.to_encoded_data(),
             },
         };
+
         Ok(serde_json::to_value(payload)?)
     }
 }
@@ -128,22 +131,35 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
-        <Self as Check>::check(self)?;
+        let file = if let Some(file_ostr) = self.file_path {
+            let path = Path::new(file_ostr);
+            let attr = fs::metadata(&path)?;
+            let maybe_extension = path.extension();
 
-        let file = if let Some(file) = self.file_path {
-            File::from_path(Path::new(file))?
+            check::metadata(attr)?;
+            check::extension(maybe_extension)?;
+
+            File::from_path(path)?
         } else if let Some(ref stdin) = self.maybe_stdin {
             File::from_bytes(stdin.as_bytes().to_vec(), "stdin")?
         } else {
             return Err(ErrorKind::Argument.into());
         };
 
-        let config = Config {
-            file,
-            description: self.description,
-            author: self.author,
+        let author = check::author(self.author)?;
+
+        let description = if let Some(value) = self.description {
+            Some(check::description(value)?)
+        } else {
+            None
         };
-        Ok(config)
+
+        Ok(Config {
+            file,
+            description,
+            author,
+            clipboard: self.clipboard,
+        })
     }
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
@@ -171,7 +187,7 @@ impl Dispatch for Action {
                 .await?;
             response.into_inner()?;
 
-            if self.clipboard {
+            if config.clipboard {
                 Clipboard::new(hash.clone())
                     .try_into_selected()?
                     .into_provider()
