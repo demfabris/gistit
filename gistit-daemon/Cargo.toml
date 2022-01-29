@@ -5,6 +5,7 @@ description = "Gistit daemon used for p2p file sharing"
 edition = "2021"
 keywords = ["code", "snippets", "share", "hash"]
 license = "MIT or Apache-2.0"
+readme = "./README.md"
 name = "gistit-daemon"
 repository = "https://github.com/fabricio7p/gistit"
 version = "0.1.0"
@@ -27,8 +28,7 @@ features = ["macros", "fs", "rt", "rt-multi-thread", "sync", "io-util"]
 version = "1.16.1"
 
 [dependencies.libp2p]
-git = "https://github.com/libp2p/rust-libp2p"
-branch = "master"
+version = "0.42.0"
 default-features = false
-features = ["noise", "kad", "identify", "mplex", "tcp-async-io", "dns-async-std", "yamux", "request-response", "ping", "relay", "autonat", "websocket"]
+features = ["noise", "kad", "identify", "mplex", "tcp-async-io", "dns-async-std", "yamux", "request-response", "relay", "autonat", "websocket"]
 

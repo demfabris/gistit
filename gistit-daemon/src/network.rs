@@ -3,68 +3,38 @@
 
 use std::collections::HashSet;
 use std::iter::once;
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::string::ToString;
 use std::time::Duration;
 
-use async_trait::async_trait;
 use either::Either;
 use gistit_ipc::{self, Bridge, Instruction, Server, ServerResponse};
 use log::{debug, info, trace, warn};
 use void::Void;
 
 use libp2p::core::either::EitherError;
-use libp2p::core::upgrade::{self, read_length_prefixed, write_length_prefixed};
-use libp2p::core::{PeerId, ProtocolName};
-use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
+use libp2p::core::upgrade;
+use libp2p::core::PeerId;
+use libp2p::futures::StreamExt;
+use libp2p::multiaddr::{multiaddr, Protocol};
+use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmEvent};
+use libp2p::{autonat, dns, mplex, noise, tcp, websocket, yamux, Multiaddr, Swarm, Transport};
+
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
-use libp2p::identity::{ed25519, Keypair};
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
     self, GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult,
 };
-use libp2p::multiaddr::{multiaddr, Protocol};
-use libp2p::ping::{Ping, PingEvent, PingFailure};
 use libp2p::relay::v2::relay;
-use libp2p::request_response::{
-    ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
-    RequestResponseEvent,
-};
-use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmEvent};
-use libp2p::{
-    autonat, dns, identity, mplex, noise, ping, tcp, websocket, yamux, Multiaddr, NetworkBehaviour,
-    Swarm, Transport,
-};
+use libp2p::request_response::{ProtocolSupport, RequestResponse, RequestResponseConfig};
 
+use crate::behaviour::{Behaviour, Event, ExchangeCodec, ExchangeProtocol};
+use crate::config::Config;
 use crate::Result;
-
-pub struct Config {
-    peer_id: PeerId,
-    keypair: Keypair,
-    runtime_dir: PathBuf,
-}
-
-impl Config {
-    pub fn new(runtime_dir: PathBuf) -> Self {
-        let keypair = identity::Keypair::Ed25519(ed25519::Keypair::generate());
-        let peer_id = PeerId::from(keypair.public());
-
-        Self {
-            peer_id,
-            keypair,
-            runtime_dir,
-        }
-    }
-
-    pub async fn apply(self) -> Result<Node> {
-        Node::new(self).await
-    }
-}
 
 /// The main event loop
 pub struct Node {
-    swarm: Swarm<GistitNetworkBehaviour>,
+    swarm: Swarm<Behaviour>,
     bridge: Bridge<Server>,
     pending_dial: HashSet<PeerId>,
     pending_start_providing: HashSet<QueryId>,
@@ -83,9 +53,29 @@ const BOOTADDR: &str = "/dnsaddr/bootstrap.libp2p.io";
 
 impl Node {
     pub async fn new(config: Config) -> Result<Self> {
-        let req_res = RequestResponse::new(
-            GistitExchangeCodec,
-            once((GistitExchangeProtocol, ProtocolSupport::Full)),
+        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+            .into_authentic(&config.keypair)
+            .expect("Signing libp2p-noise static DH keypair failed.");
+
+        let transport = {
+            let tcp = tcp::TcpConfig::new().nodelay(true);
+            let dns_tcp = dns::DnsConfig::system(tcp).await?;
+            let ws_dns_tcp = websocket::WsConfig::new(dns_tcp.clone());
+            dns_tcp
+                .or_transport(ws_dns_tcp)
+                .upgrade(upgrade::Version::V1)
+                .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+                .multiplex(upgrade::SelectUpgrade::new(
+                    yamux::YamuxConfig::default(),
+                    mplex::MplexConfig::default(),
+                ))
+                .timeout(Duration::from_secs(20))
+                .boxed()
+        };
+
+        let request_response = RequestResponse::new(
+            ExchangeCodec,
+            once((ExchangeProtocol, ProtocolSupport::Full)),
             RequestResponseConfig::default(),
         );
 
@@ -107,33 +97,11 @@ impl Node {
             behaviour
         };
 
-        let raw_transport = {
-            let tcp = tcp::TcpConfig::new().nodelay(true);
-            let dns_tcp = dns::DnsConfig::system(tcp).await?;
-            let ws_dns_tcp = websocket::WsConfig::new(dns_tcp.clone());
-            dns_tcp.or_transport(ws_dns_tcp)
-        };
-
-        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-            .into_authentic(&config.keypair)
-            .expect("Signing libp2p-noise static DH keypair failed.");
-
-        let transport = raw_transport
-            .upgrade(upgrade::Version::V1)
-            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-            .multiplex(upgrade::SelectUpgrade::new(
-                yamux::YamuxConfig::default(),
-                mplex::MplexConfig::default(),
-            ))
-            .timeout(Duration::from_secs(60 * 30))
-            .boxed();
-
         let identify = Identify::new(IdentifyConfig::new(
             "/ipfs/0.1.0".into(),
             config.keypair.public(),
         ));
 
-        let ping = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
         let relay = relay::Relay::new(
             PeerId::from(config.keypair.public()),
             relay::Config::default(),
@@ -145,11 +113,10 @@ impl Node {
 
         let swarm = Swarm::new(
             transport,
-            GistitNetworkBehaviour {
-                req_res,
+            Behaviour {
+                request_response,
                 kademlia,
                 identify,
-                ping,
                 relay,
                 autonat,
             },
@@ -181,15 +148,12 @@ impl Node {
     async fn handle_swarm_event(
         &mut self,
         event: SwarmEvent<
-            GistitNetworkEvent,
+            Event,
             EitherError<
                 EitherError<
                     EitherError<
-                        EitherError<
-                            EitherError<ProtocolsHandlerUpgrErr<std::io::Error>, std::io::Error>,
-                            std::io::Error,
-                        >,
-                        PingFailure,
+                        EitherError<ProtocolsHandlerUpgrErr<std::io::Error>, std::io::Error>,
+                        std::io::Error,
                     >,
                     Either<
                         ProtocolsHandlerUpgrErr<
@@ -203,7 +167,7 @@ impl Node {
         >,
     ) -> Result<()> {
         match event {
-            SwarmEvent::Behaviour(GistitNetworkEvent::Identify(IdentifyEvent::Received {
+            SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {
                 peer_id,
                 info:
                     IdentifyInfo {
@@ -228,23 +192,19 @@ impl Node {
             //
             // Kademlia events
             //
-            SwarmEvent::Behaviour(GistitNetworkEvent::Kademlia(
-                KademliaEvent::OutboundQueryCompleted {
-                    id,
-                    result: QueryResult::StartProviding(_),
-                    ..
-                },
-            )) => {
+            SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::OutboundQueryCompleted {
+                id,
+                result: QueryResult::StartProviding(_),
+                ..
+            })) => {
                 info!("Start providing in kad");
                 self.pending_start_providing.remove(&id);
             }
-            SwarmEvent::Behaviour(GistitNetworkEvent::Kademlia(
-                KademliaEvent::OutboundQueryCompleted {
-                    id,
-                    result: QueryResult::GetProviders(Ok(GetProvidersOk { providers, .. })),
-                    ..
-                },
-            )) => {
+            SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::OutboundQueryCompleted {
+                id,
+                result: QueryResult::GetProviders(Ok(GetProvidersOk { providers, .. })),
+                ..
+            })) => {
                 info!("Got providers: {:?}", providers);
                 self.pending_get_providers.remove(&id);
             }
@@ -348,145 +308,6 @@ impl Node {
             }
             _ => (),
         }
-        Ok(())
-    }
-}
-
-#[derive(NetworkBehaviour)]
-#[behaviour(out_event = "GistitNetworkEvent")]
-struct GistitNetworkBehaviour {
-    req_res: RequestResponse<GistitExchangeCodec>,
-    kademlia: Kademlia<MemoryStore>,
-    identify: Identify,
-    ping: Ping,
-    relay: relay::Relay,
-    autonat: autonat::Behaviour,
-}
-
-#[derive(Debug)]
-enum GistitNetworkEvent {
-    RequestResponse(RequestResponseEvent<GistitRequest, GistitResponse>),
-    Kademlia(KademliaEvent),
-    Identify(IdentifyEvent),
-    Ping(PingEvent),
-    Relay(relay::Event),
-    Autonat(autonat::Event),
-}
-
-impl From<RequestResponseEvent<GistitRequest, GistitResponse>> for GistitNetworkEvent {
-    fn from(event: RequestResponseEvent<GistitRequest, GistitResponse>) -> Self {
-        Self::RequestResponse(event)
-    }
-}
-
-impl From<KademliaEvent> for GistitNetworkEvent {
-    fn from(event: KademliaEvent) -> Self {
-        Self::Kademlia(event)
-    }
-}
-
-impl From<PingEvent> for GistitNetworkEvent {
-    fn from(event: PingEvent) -> Self {
-        Self::Ping(event)
-    }
-}
-
-impl From<IdentifyEvent> for GistitNetworkEvent {
-    fn from(event: IdentifyEvent) -> Self {
-        Self::Identify(event)
-    }
-}
-
-impl From<relay::Event> for GistitNetworkEvent {
-    fn from(event: relay::Event) -> Self {
-        Self::Relay(event)
-    }
-}
-
-impl From<autonat::Event> for GistitNetworkEvent {
-    fn from(event: autonat::Event) -> Self {
-        Self::Autonat(event)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct GistitExchangeProtocol;
-
-impl ProtocolName for GistitExchangeProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        b"/gistit/1"
-    }
-}
-
-#[derive(Clone)]
-pub struct GistitExchangeCodec;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GistitRequest(Vec<u8>);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GistitResponse(Vec<u8>);
-
-#[async_trait]
-impl RequestResponseCodec for GistitExchangeCodec {
-    type Protocol = GistitExchangeProtocol;
-    type Request = GistitRequest;
-    type Response = GistitResponse;
-
-    async fn read_request<T: Send + Unpin + AsyncRead>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-    ) -> tokio::io::Result<Self::Request> {
-        // FIXME: Export all consts params
-        let bytes = read_length_prefixed(io, 50_000).await?;
-
-        if bytes.is_empty() {
-            Err(tokio::io::ErrorKind::UnexpectedEof.into())
-        } else {
-            Ok(GistitRequest(bytes))
-        }
-    }
-
-    async fn read_response<T: Send + Unpin + AsyncRead>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-    ) -> tokio::io::Result<Self::Response> {
-        // FIXME: Export all consts params
-        let bytes = read_length_prefixed(io, 50_000).await?;
-
-        if bytes.is_empty() {
-            Err(tokio::io::ErrorKind::UnexpectedEof.into())
-        } else {
-            Ok(GistitResponse(bytes))
-        }
-    }
-
-    async fn write_request<T: Send + Unpin + AsyncWrite>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-        GistitRequest(data): Self::Request,
-    ) -> tokio::io::Result<()> {
-        write_length_prefixed(io, data).await?;
-        io.close().await?;
-
-        Ok(())
-    }
-
-    async fn write_response<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-        GistitResponse(data): Self::Response,
-    ) -> tokio::io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        write_length_prefixed(io, data).await?;
-        io.close().await?;
-
         Ok(())
     }
 }

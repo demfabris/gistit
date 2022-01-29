@@ -23,8 +23,8 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-use network::Config;
-
+mod behaviour;
+mod config;
 mod error;
 mod network;
 
@@ -49,7 +49,8 @@ async fn run() -> Result<()> {
         config_dir,
     } = Args::parse();
 
-    let node = Config::new(runtime_dir).apply().await?;
+    let config = config::Config::new(runtime_dir, config_dir);
+    let node = network::Node::new(config).await?;
     node.run().await?;
 
     Ok(())
