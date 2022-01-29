@@ -8,6 +8,11 @@ const APPLICATION: &str = "Gistit";
 const ORGANIZATION: &str = "fabricio7p";
 const QUALIFIER: &str = "io";
 
+/// Returns the runtime path of this program
+///
+/// # Errors
+///
+/// Fails if the machine doesn't have a HOME directory
 pub fn runtime_dir() -> Result<PathBuf> {
     let dirs = BaseDirs::new().ok_or(Error::Unknown)?;
     Ok(dirs
@@ -15,6 +20,11 @@ pub fn runtime_dir() -> Result<PathBuf> {
         .map_or_else(std::env::temp_dir, Path::to_path_buf))
 }
 
+/// Returns the config path of this program
+///
+/// # Errors
+///
+/// Fails if the machine doesn't have a HOME directory
 pub fn config_dir() -> Result<PathBuf> {
     Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
         .ok_or(Error::Unknown)?

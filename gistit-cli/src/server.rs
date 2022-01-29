@@ -34,13 +34,15 @@ pub struct Gistit {
 }
 
 impl Gistit {
+    /// Converts a [`Gistit`] into our [`File`] format
+    ///
+    /// # Errors
+    ///
+    /// Fails if the payload is somehow corrupted
     pub fn to_file(&self) -> Result<File> {
         let name = self.inner.name.clone();
 
-        Ok(File::from_bytes_encoded(
-            self.inner.data.inner.as_bytes(),
-            &name,
-        )?)
+        File::from_bytes_encoded(self.inner.data.inner.as_bytes(), &name)
     }
 }
 
@@ -59,6 +61,11 @@ pub struct Response {
 }
 
 pub trait IntoGistit {
+    /// Converts [`Self`] into a [`Gistit`]
+    ///
+    /// # Errors
+    ///
+    /// Fails if payload is corrupted
     fn into_gistit(self) -> Result<Gistit>;
 }
 

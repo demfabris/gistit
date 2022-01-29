@@ -635,6 +635,11 @@ fn rng_temp_file(suffix: &str) -> PathBuf {
 }
 
 impl File {
+    /// Create file from a given path
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
     pub fn from_path(path: &Path) -> Result<Self> {
         let mut handler = fs::File::open(path)?;
         let mut buf = Vec::with_capacity(50_000);
@@ -650,21 +655,31 @@ impl File {
         })
     }
 
+    /// Create a file from a decoded vector of bytes
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
     pub fn from_bytes(decoded_bytes: Vec<u8>, name: &str) -> Result<Self> {
         let (handler, path) = spawn_from_bytes(&decoded_bytes, name)?;
         let size = decoded_bytes.len();
 
         Ok(Self {
             inner: handler,
-            path: path.to_path_buf(),
+            path,
             bytes: decoded_bytes,
             size,
         })
     }
 
+    /// Create a file from a b64 encoded vector of bytes
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
     pub fn from_bytes_encoded(bytes: &[u8], name: &str) -> Result<Self> {
         let decoded_bytes = base64::decode(bytes)?;
-        File::from_bytes(decoded_bytes, name)
+        Self::from_bytes(decoded_bytes, name)
     }
 
     #[must_use]
@@ -689,6 +704,11 @@ impl File {
         }
     }
 
+    /// Save the file to the given path
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
     pub fn save_as(&self, file_path: &Path) -> Result<()> {
         Ok(write(file_path, &self.bytes)?)
     }
