@@ -7,12 +7,12 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
 
-use lib_gistit::ipc::{self, Instruction, ServerResponse};
+use gistit_ipc::{self, Instruction, ServerResponse};
+use libgistit::project::{config_dir, runtime_dir};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::project::{config_dir, runtime_dir};
-use crate::{prettyln, ErrorKind, Result};
+use crate::{prettyln, Error, Result};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
@@ -33,8 +33,12 @@ impl Action {
         Ok(Box::new(Self {
             join: args.value_of("join"),
             clipboard: args.is_present("clipboard"),
-            host: args.value_of("host").ok_or(ErrorKind::Argument)?,
-            port: args.value_of("port").ok_or(ErrorKind::Argument)?,
+            host: args
+                .value_of("host")
+                .ok_or(Error::Argument("missing argument", "--host"))?,
+            port: args
+                .value_of("port")
+                .ok_or(Error::Argument("missing argument", "--port"))?,
             start: args.is_present("start"),
             stop: args.is_present("stop"),
             status: args.is_present("status"),
@@ -84,7 +88,7 @@ impl Dispatch for Action {
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = runtime_dir()?;
         let config_dir = config_dir()?;
-        let mut bridge = ipc::client(&runtime_dir)?;
+        let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         match config.command {
             ProcessCommand::Start => {
@@ -101,25 +105,21 @@ impl Dispatch for Action {
                 );
 
                 bridge.connect_blocking()?;
-                bridge
-                    .send(Instruction::Listen {
-                        host: config.host,
-                        port: config.port,
-                    })
-                    .await?;
+                bridge.send(Instruction::Listen {
+                    host: config.host,
+                    port: config.port,
+                })?;
 
-                if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv().await? {
+                if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv()? {
                     print_success(self.clipboard, &id);
                 }
             }
             ProcessCommand::Join(address) => {
                 if bridge.alive() {
                     bridge.connect_blocking()?;
-                    bridge
-                        .send(Instruction::Dial {
-                            peer_id: address.to_owned(),
-                        })
-                        .await?;
+                    bridge.send(Instruction::Dial {
+                        peer_id: address.to_owned(),
+                    })?;
                 } else {
                     prettyln!("Gistit node must be running to join a peer");
                 }
@@ -129,15 +129,15 @@ impl Dispatch for Action {
                 fs::remove_file(runtime_dir.join("gistit.log"))?;
 
                 bridge.connect_blocking()?;
-                bridge.send(Instruction::Shutdown).await?;
+                bridge.send(Instruction::Shutdown)?;
             }
             ProcessCommand::Status => {
                 if bridge.alive() {
                     bridge.connect_blocking()?;
-                    bridge.send(Instruction::Status).await?;
+                    bridge.send(Instruction::Status)?;
 
                     if let Instruction::Response(ServerResponse::Status(status_str)) =
-                        bridge.recv().await?
+                        bridge.recv()?
                     {
                         println!("{}", status_str);
                     }

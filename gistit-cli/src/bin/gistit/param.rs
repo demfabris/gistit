@@ -47,7 +47,7 @@ pub mod check {
     use std::ops::RangeInclusive;
 
     use libgistit::file::EXTENSION_TO_LANG_MAPPING;
-    use libgistit::{ErrorKind, Result};
+    use libgistit::{Error, Result};
 
     const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=50_000;
 
@@ -61,10 +61,10 @@ pub mod check {
         if ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE.contains(&description.len()) {
             Ok(description)
         } else {
-            Err(
-                ErrorKind::InvalidParam("invalid description character length.", "--description")
-                    .into(),
-            )
+            Err(Error::Argument(
+                "invalid description character length.",
+                "--description",
+            ))
         }
     }
 
@@ -72,7 +72,10 @@ pub mod check {
         if ALLOWED_AUTHOR_CHAR_LENGTH_RANGE.contains(&author.len()) {
             Ok(author)
         } else {
-            Err(ErrorKind::InvalidParam("invalid author character length.", "--author").into())
+            Err(Error::Argument(
+                "invalid author character length.",
+                "--author",
+            ))
         }
     }
 
@@ -82,19 +85,19 @@ pub mod check {
         if size_allowed {
             Ok(())
         } else {
-            Err(ErrorKind::FileSize.into())
+            Err(Error::Argument("file size not allowed", "[FILE]"))
         }
     }
 
     pub fn extension(ext: Option<&OsStr>) -> Result<()> {
         let ext = ext
             .and_then(OsStr::to_str)
-            .ok_or(ErrorKind::FileExtension)?;
+            .ok_or(Error::Argument("file doesn't have an extension", "[FILE]"))?;
 
         if EXTENSION_TO_LANG_MAPPING.contains_key(ext) {
             Ok(())
         } else {
-            Err(ErrorKind::FileExtension.into())
+            Err(Error::Argument("file extension not supported", "[FILE]"))
         }
     }
 
@@ -106,8 +109,8 @@ pub mod check {
             let maybe_match = fuzzy_matches.first();
 
             maybe_match.map_or_else(
-                || Err(ErrorKind::Colorscheme(None).into()),
-                |top_match| Err(ErrorKind::Colorscheme(Some(top_match.text.clone())).into()),
+                || Err(Error::Argument("invalid colorscheme", "--colorscheme")),
+                |top_match| Err(Error::Colorscheme(top_match.text)),
             )
         }
     }
@@ -116,19 +119,19 @@ pub mod check {
         if hash.len() == GISTIT_HASH_CHAR_LENGTH {
             Ok(hash)
         } else {
-            Err(ErrorKind::InvalidParam("invalid gistit hash format.", "--hash").into())
+            Err(Error::Argument("invalid gistit hash format.", "--hash"))
         }
     }
 
     pub fn host(host: &str) -> Result<Ipv4Addr> {
         Ok(host
             .parse::<Ipv4Addr>()
-            .map_err(|_| ErrorKind::InvalidParam("invalid ipv4 format.", "--host"))?)
+            .map_err(|_| Error::Argument("invalid ipv4 format.", "--host"))?)
     }
 
     pub fn port(port: &str) -> Result<u16> {
         Ok(port
             .parse::<u16>()
-            .map_err(|_| ErrorKind::InvalidParam("invalid port.", "--port"))?)
+            .map_err(|_| Error::Argument("invalid port.", "--port"))?)
     }
 }

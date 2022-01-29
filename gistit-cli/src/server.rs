@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use lib_gistit::file::{EncodedFileData, File};
-
-use crate::{ErrorKind, Result};
+use crate::file::{EncodedFileData, File};
+use crate::{Error, Result};
 
 pub const SERVER_URL_GET: &str = "https://us-central1-gistit-base.cloudfunctions.net/get";
 pub const SERVER_URL_LOAD: &str = "https://us-central1-gistit-base.cloudfunctions.net/load";
@@ -54,7 +53,7 @@ impl IntoGistit for Response {
             } => Ok(payload),
             Self {
                 error: Some(msg), ..
-            } => Err(ErrorKind::Server(msg).into()),
+            } => Err(Error::Server(msg)),
             _ => unreachable!("gistit server is unreachable"),
         }
     }

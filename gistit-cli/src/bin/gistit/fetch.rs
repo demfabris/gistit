@@ -12,7 +12,7 @@ use libgistit::server::{Gistit, IntoGistit, Response, SERVER_URL_GET};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::{prettyln, ErrorKind, Result};
+use crate::{prettyln, Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -26,7 +26,9 @@ impl Action {
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         Ok(Box::new(Self {
-            hash: args.value_of("HASH").ok_or(ErrorKind::Argument)?,
+            hash: args
+                .value_of("HASH")
+                .ok_or(Error::Argument("missing arugment", "--hash"))?,
             colorscheme: args.value_of("colorscheme").unwrap_or("ansi"),
             save: args.is_present("save"),
         }))
@@ -68,15 +70,13 @@ impl Dispatch for Action {
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let runtime_dir = runtime_dir()?;
         let hash = config.hash;
-        let mut bridge = ipc::client(&runtime_dir)?;
+        let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         if bridge.alive() {
             bridge.connect_blocking()?;
-            bridge
-                .send(Instruction::Get {
-                    hash: config.hash.to_owned(),
-                })
-                .await?;
+            bridge.send(Instruction::Get {
+                hash: config.hash.to_owned(),
+            })?;
         } else {
             prettyln!("Contacting host...");
 
@@ -97,8 +97,10 @@ impl Dispatch for Action {
                         preview_gistit(self, &payload, &gistit)?;
                     }
                 }
-                StatusCode::NOT_FOUND => return Err(ErrorKind::FetchNotFound.into()),
-                _ => return Err(ErrorKind::FetchUnexpectedResponse.into()),
+                StatusCode::NOT_FOUND => {
+                    return Err(Error::Server("gistit hash not found".to_owned()))
+                }
+                _ => return Err(Error::Server("unexpected response".to_owned())),
             }
         }
 

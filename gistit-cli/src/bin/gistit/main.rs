@@ -29,7 +29,7 @@ mod param;
 mod send;
 mod stdin;
 
-pub use libgistit::error::{Error, ErrorKind};
+pub use libgistit::error::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[tokio::main]

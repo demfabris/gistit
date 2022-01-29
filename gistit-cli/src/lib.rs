@@ -22,11 +22,10 @@
 
 pub mod clipboard;
 pub mod error;
-pub mod errors;
 pub mod file;
 pub mod hash;
 pub mod project;
 pub mod server;
 
-pub use errors::{Error, ErrorKind};
+pub use error::Error;
 pub type Result<T> = std::result::Result<T, Error>;

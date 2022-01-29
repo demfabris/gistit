@@ -57,7 +57,7 @@ use std::process::{Command, Stdio};
 
 use which::which;
 
-use crate::{ErrorKind, Result};
+use crate::{error, Result};
 
 /// The clipboard structure, holds the content string
 #[derive(Clone, Debug)]
@@ -67,23 +67,23 @@ pub struct Clipboard {
 
 /// The clipboard with the display server figured out
 #[derive(Clone, Debug)]
-pub struct ClipboardSelected {
+pub struct Selected {
     display: DisplayKind,
     content: String,
 }
 
 /// The clipboard that attempts the external binary approach
 #[derive(Clone, Debug)]
-pub struct BinClipboard {
+pub struct Binary {
     bin: OsString,
-    selected: ClipboardSelected,
+    selected: Selected,
     program: ClipboardBinProgram,
 }
 
 /// The clipboard that attempts OSC52 escape sequence approach
 #[derive(Clone, Debug)]
-pub struct EscapeSeqClipboard {
-    selected: ClipboardSelected,
+pub struct EscapeSequence {
+    selected: Selected,
 }
 
 /// The display server type
@@ -194,10 +194,10 @@ impl Clipboard {
     /// # Errors
     ///
     /// Fails with [`ClipboardError`] error
-    pub fn try_into_selected(self) -> Result<ClipboardSelected> {
+    pub fn try_into_selected(self) -> Result<Selected> {
         match select_display() {
-            DisplayKind::Unknown => Err(ErrorKind::UnsupportedPlatform.into()),
-            valid => Ok(ClipboardSelected {
+            DisplayKind::Unknown => Err(error::Clipboard::UnsupportedPlatform.into()),
+            valid => Ok(Selected {
                 display: valid,
                 content: self.content,
             }),
@@ -206,7 +206,7 @@ impl Clipboard {
 }
 
 /// The trait that a ready-to-use clipboard implements
-pub trait ClipboardProvider {
+pub trait Provider {
     /// Attempt to set the contents into the system clipboard
     ///
     /// # Errors
@@ -215,7 +215,7 @@ pub trait ClipboardProvider {
     fn set_contents(&self) -> Result<()>;
 }
 
-impl ClipboardProvider for BinClipboard {
+impl Provider for Binary {
     fn set_contents(&self) -> Result<()> {
         let mut command = Command::new(&self.bin);
         match self.program {
@@ -245,18 +245,18 @@ impl ClipboardProvider for BinClipboard {
     }
 }
 
-impl ClipboardProvider for EscapeSeqClipboard {
+impl Provider for EscapeSequence {
     fn set_contents(&self) -> Result<()> {
         print!("\x1B]52;c;{}\x07", base64::encode(&self.selected.content));
         Ok(())
     }
 }
 
-impl ClipboardSelected {
+impl Selected {
     /// Transforms this clipboard into a ready-to-use kind
     /// First checks for binaries and fallbacks to the ANSI escape sequence approach.
     #[must_use]
-    pub fn into_provider(self) -> Box<dyn ClipboardProvider> {
+    pub fn into_provider(self) -> Box<dyn Provider> {
         match self.try_into_bin() {
             Ok(bin_clipboard) => {
                 return Box::new(bin_clipboard);
@@ -265,7 +265,7 @@ impl ClipboardSelected {
                 println!("{:?}", err);
             }
         }
-        Box::new(EscapeSeqClipboard { selected: self })
+        Box::new(EscapeSequence { selected: self })
     }
 }
 
@@ -285,7 +285,7 @@ enum ClipboardBinProgram {
     target_family = "unix",
     not(all(target_os = "macos", target_os = "ios", target_os = "android"))
 ))]
-impl ClipboardSelected {
+impl Selected {
     /// Checks for supported clipboard binaries and attempts to convert the selected clipboard into
     /// the binary implementation.
     ///
@@ -293,7 +293,7 @@ impl ClipboardSelected {
     ///
     /// Will fail with [`ClipboardError`] when any matched display server misses it's supported
     /// clipboard binaries.
-    fn try_into_bin(&self) -> Result<BinClipboard> {
+    fn try_into_bin(&self) -> Result<Binary> {
         let (bin, program) = match self.display {
             DisplayKind::X11 => {
                 let mut binaries = [
@@ -305,7 +305,7 @@ impl ClipboardSelected {
 
                 let (bin, program) = binaries
                     .find(|(bin, _)| bin.is_ok())
-                    .ok_or(ErrorKind::MissingClipboardBinary)?;
+                    .ok_or(error::Clipboard::MissingBinary)?;
                 // Safe to unwrap since we previously checked `bin.is_ok()`
                 (bin.unwrap(), program)
             }
@@ -319,7 +319,7 @@ impl ClipboardSelected {
                 let _xauth = which("xauth")?;
 
                 // DISPALY variable different than `localhost:...` is a bad sign as well
-                let _display = env::var("DISPLAY").map_err(|_| ErrorKind::DisplayNotSet)?;
+                env::var("DISPLAY").map_err(|_| error::Clipboard::DisplayNotSet)?;
 
                 let mut binaries = [
                     (which("xclip"), ClipboardBinProgram::Xclip),
@@ -330,7 +330,7 @@ impl ClipboardSelected {
 
                 let (bin, program) = binaries
                     .find(|(bin, _)| bin.is_ok())
-                    .ok_or(ErrorKind::MissingClipboardBinary)?;
+                    .ok_or(error::Clipboard::MissingBinary)?;
                 // Safe to unwrap since we previously checked `bin.is_ok()`
                 (bin.unwrap(), program)
             }
@@ -341,7 +341,7 @@ impl ClipboardSelected {
             }
             DisplayKind::Unknown => panic!("clipboard feature not supported"),
         };
-        Ok(BinClipboard {
+        Ok(Binary {
             bin: bin.as_os_str().to_owned(),
             selected: self.clone(),
             program,
@@ -350,7 +350,7 @@ impl ClipboardSelected {
 }
 
 #[cfg(all(target_os = "macos", target_os = "ios"))]
-impl ClipboardSelected {
+impl Selected {
     /// Checks for supported clipboard binaries and attempts to convert the selected clipboard into
     /// the binary implementation.
     ///
@@ -358,7 +358,7 @@ impl ClipboardSelected {
     ///
     /// Will fail with [`ClipboardError`] when any matched display server misses it's supported
     /// clipboard binaries.
-    fn try_into_bin(&self) -> Result<BinClipboard> {
+    fn try_into_bin(&self) -> Result<Binary> {
         let bin = match self.display {
             DisplayKind::MacOs => which("pbcopy")
                 .ok()
@@ -367,7 +367,7 @@ impl ClipboardSelected {
             DisplayKind::Unknown => panic!("clipboard feature not supported"),
         };
         let program = ClipboardBinProgram::PbCopy;
-        Ok(BinClipboard {
+        Ok(Binary {
             bin,
             program,
             selected: self.clone(),
@@ -377,8 +377,8 @@ impl ClipboardSelected {
 
 /// Not supported
 #[cfg(target_os = "windows")]
-impl ClipboardSelected {
-    fn try_into_bin(&self) -> Result<BinClipboard> {
+impl Selected {
+    fn try_into_bin(&self) -> Result<Binary> {
         Err(())
     }
 }

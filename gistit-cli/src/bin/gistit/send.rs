@@ -7,17 +7,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
+use gistit_ipc::{self, Instruction};
 
-use lib_gistit::clipboard::Clipboard;
-use lib_gistit::file::File;
-use lib_gistit::ipc::{self, Instruction};
+use libgistit::clipboard::Clipboard;
+use libgistit::file::File;
+use libgistit::hash::Hasheable;
+use libgistit::project::runtime_dir;
+use libgistit::server::{Gistit, Inner, IntoGistit, Response, SERVER_URL_LOAD};
 
 use crate::dispatch::Dispatch;
-use crate::hash::Hasheable;
 use crate::param::check;
-use crate::project::runtime_dir;
-use crate::server::{Gistit, Inner, IntoGistit, Response, SERVER_URL_LOAD};
-use crate::{prettyln, ErrorKind, Result};
+use crate::{prettyln, Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -38,7 +38,9 @@ impl Action {
             file_path: args.value_of_os("FILE"),
             maybe_stdin,
             description: args.value_of("description"),
-            author: args.value_of("author").ok_or(ErrorKind::Argument)?,
+            author: args
+                .value_of("author")
+                .ok_or(Error::Argument("missing argument", "--author"))?,
             clipboard: args.is_present("clipboard"),
         }))
     }
@@ -107,7 +109,7 @@ impl Dispatch for Action {
         } else if let Some(ref stdin) = self.maybe_stdin {
             File::from_bytes(stdin.as_bytes().to_vec(), "stdin")?
         } else {
-            return Err(ErrorKind::Argument.into());
+            return Err(Error::Argument("missing file input", "[FILE]/[STDIN]"));
         };
 
         let author = check::author(self.author)?;
@@ -131,16 +133,15 @@ impl Dispatch for Action {
         let hash = config.hash();
         let clipboard = config.clipboard;
 
-        let mut bridge = ipc::client(&runtime_dir)?;
+        let mut bridge = gistit_ipc::client(&runtime_dir)?;
         if bridge.alive() {
             prettyln!("Hosting gistit...");
             bridge.connect_blocking()?;
-            bridge
-                .send(Instruction::Provide {
-                    hash: hash.clone(),
-                    data: config.file.to_encoded_data(),
-                })
-                .await?;
+            bridge.send(Instruction::Provide {
+                hash: hash.clone(),
+                // data: config.file.to_encoded_data(),
+                data: Vec::new(),
+            })?;
         } else {
             prettyln!("Uploading to server...");
             let response: Response = reqwest::Client::new()
