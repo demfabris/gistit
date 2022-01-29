@@ -4,13 +4,14 @@ use console::style;
 use reqwest::StatusCode;
 use serde::Serialize;
 
-use lib_gistit::file::File;
-use lib_gistit::ipc::{self, Instruction};
+use gistit_ipc::{self, Instruction};
+
+use libgistit::file::File;
+use libgistit::project::runtime_dir;
+use libgistit::server::{Gistit, IntoGistit, Response, SERVER_URL_GET};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::project::runtime_dir;
-use crate::server::{Gistit, IntoGistit, Response, SERVER_URL_GET};
 use crate::{prettyln, ErrorKind, Result};
 
 #[derive(Debug, Clone)]

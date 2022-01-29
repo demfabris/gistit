@@ -22,18 +22,14 @@
 
 mod arg;
 mod dispatch;
-mod error;
 mod fetch;
 mod fmt;
-mod hash;
 mod node;
 mod param;
-mod server;
-mod project;
 mod send;
 mod stdin;
 
-pub use crate::error::{Error, ErrorKind};
+pub use libgistit::error::{Error, ErrorKind};
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[tokio::main]

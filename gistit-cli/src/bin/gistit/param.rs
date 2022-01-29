@@ -46,9 +46,8 @@ pub mod check {
     use std::net::Ipv4Addr;
     use std::ops::RangeInclusive;
 
-    use crate::{ErrorKind, Result};
-
-    use lib_gistit::file::EXTENSION_TO_LANG_MAPPING;
+    use libgistit::file::EXTENSION_TO_LANG_MAPPING;
+    use libgistit::{ErrorKind, Result};
 
     const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=50_000;
 
@@ -88,7 +87,9 @@ pub mod check {
     }
 
     pub fn extension(ext: Option<&OsStr>) -> Result<()> {
-        let ext = ext.and_then(OsStr::to_str).ok_or(ErrorKind::FileExtension)?;
+        let ext = ext
+            .and_then(OsStr::to_str)
+            .ok_or(ErrorKind::FileExtension)?;
 
         if EXTENSION_TO_LANG_MAPPING.contains_key(ext) {
             Ok(())
@@ -120,12 +121,14 @@ pub mod check {
     }
 
     pub fn host(host: &str) -> Result<Ipv4Addr> {
-        Ok(host.parse::<Ipv4Addr>()
+        Ok(host
+            .parse::<Ipv4Addr>()
             .map_err(|_| ErrorKind::InvalidParam("invalid ipv4 format.", "--host"))?)
     }
 
     pub fn port(port: &str) -> Result<u16> {
-        Ok(port.parse::<u16>()
+        Ok(port
+            .parse::<u16>()
             .map_err(|_| ErrorKind::InvalidParam("invalid port.", "--port"))?)
     }
 }
