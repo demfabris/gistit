@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
@@ -81,7 +83,7 @@ impl Dispatch for Action {
             prettyln!("Contacting host...");
 
             let req = reqwest::Client::new()
-                .post(SERVER_URL_GET)
+                .post(SERVER_URL_GET.to_string())
                 .json(&config.into_gistit()?)
                 .send()
                 .await?;
@@ -92,7 +94,11 @@ impl Dispatch for Action {
                     let gistit = payload.to_file()?;
 
                     if self.save {
-                        save_gistit(&gistit)?;
+                        let saved_file = save_gistit(&gistit)?;
+                        prettyln!(
+                            "Gistit saved at: {}",
+                            style(saved_file.to_string_lossy()).dim()
+                        );
                     } else {
                         preview_gistit(self, &payload, &gistit)?;
                     }
@@ -108,11 +114,7 @@ impl Dispatch for Action {
             r#"
 SUCCESS:
     hash: {}
-
-You can preview it online at: {}/{}
 "#,
-            style(&hash).blue().bold(),
-            "https://gistit.vercel.app",
             style(&hash).blue().bold(),
         );
         Ok(())
@@ -144,10 +146,10 @@ fn preview_gistit(action: &Action, gistit: &Gistit, file: &File) -> Result<bool>
         .print()?)
 }
 
-fn save_gistit(file: &File) -> Result<()> {
+fn save_gistit(file: &File) -> Result<PathBuf> {
     let save_location = std::env::temp_dir(); // TODO: improve this
 
     let file_path = save_location.join(file.name());
     file.save_as(&file_path)?;
-    Ok(())
+    Ok(file_path)
 }

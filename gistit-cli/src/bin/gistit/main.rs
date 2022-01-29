@@ -53,6 +53,7 @@ async fn run() -> Result<()> {
 
     if matches.is_present("list-colorschemes") {
         list_bat_colorschemes();
+        std::process::exit(0);
     }
 
     match (cmd, args) {

@@ -1,10 +1,28 @@
+use std::option_env;
+use url::Url;
+
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 use crate::file::{EncodedFileData, File};
 use crate::{Error, Result};
 
-pub const SERVER_URL_GET: &str = "https://us-central1-gistit-base.cloudfunctions.net/get";
-pub const SERVER_URL_LOAD: &str = "https://us-central1-gistit-base.cloudfunctions.net/load";
+const SERVER_URL_BASE: &str = "https://us-central1-gistit-base.cloudfunctions.net";
+const SERVER_SUBPATH_GET: &str = "/gistit-base/us-central1/get";
+const SERVER_SUBPATH_LOAD: &str = "/gistit-base/us-central1/load";
+
+lazy_static! {
+    pub static ref SERVER_URL_GET: Url =
+        Url::parse(option_env!("GISTIT_SERVER_URL").unwrap_or(SERVER_URL_BASE))
+            .expect("invalid `GISTIT_SERVER_URL` variable")
+            .join(SERVER_SUBPATH_GET)
+            .unwrap();
+    pub static ref SERVER_URL_LOAD: Url =
+        Url::parse(option_env!("GISTIT_SERVER_URL").unwrap_or(SERVER_URL_BASE))
+            .expect("invalid `GISTIT_SERVER_URL` variable")
+            .join(SERVER_SUBPATH_LOAD)
+            .unwrap();
+}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Gistit {
@@ -48,12 +66,12 @@ impl IntoGistit for Response {
     fn into_gistit(self) -> Result<Gistit> {
         match self {
             Self {
+                error: Some(msg), ..
+            } => Err(Error::Server(msg)),
+            Self {
                 success: Some(payload),
                 ..
             } => Ok(payload),
-            Self {
-                error: Some(msg), ..
-            } => Err(Error::Server(msg)),
             _ => unreachable!("gistit server is unreachable"),
         }
     }

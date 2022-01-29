@@ -1,4 +1,3 @@
-import * as __fn from "firebase-functions";
 import defs from "./defs.json";
 
 /**
@@ -7,18 +6,8 @@ import defs from "./defs.json";
  * @param {string} hash
  */
 export function checkHash(hash: string): void {
-  if (hash.length === defs.HASH_LENGTH) {
-    switch (hash[0]) {
-      case defs.HASH_P2P_PREFIX:
-        __fn.logger.log("p2p");
-        break;
-      case defs.HASH_SERVER_PREFIX:
-        __fn.logger.log("server");
-        break;
-      default:
-        break;
-    }
-  } else throw Error("Invalid gistit hash format");
+  if (hash.length !== defs.HASH_LENGTH)
+    throw Error("Invalid gistit hash format");
 }
 
 /**

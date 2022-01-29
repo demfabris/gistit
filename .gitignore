@@ -2,6 +2,7 @@ build/**
 dist/**
 .next/**
 .turbo
+.vscode
 
 /node_modules
 /.pnp

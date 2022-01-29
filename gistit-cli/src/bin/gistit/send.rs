@@ -145,16 +145,16 @@ impl Dispatch for Action {
         } else {
             prettyln!("Uploading to server...");
             let response: Response = reqwest::Client::new()
-                .post(SERVER_URL_LOAD)
+                .post(SERVER_URL_LOAD.to_string())
                 .json(&config.into_gistit()?)
                 .send()
                 .await?
                 .json()
                 .await?;
-            response.into_gistit()?;
+            let server_hash = response.into_gistit()?.hash;
 
             if clipboard {
-                Clipboard::new(hash.clone())
+                Clipboard::new(server_hash)
                     .try_into_selected()?
                     .into_provider()
                     .set_contents()?;
