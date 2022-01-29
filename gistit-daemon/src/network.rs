@@ -5,11 +5,12 @@ use std::collections::HashSet;
 use std::iter::once;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::string::ToString;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use either::Either;
-use lib_gistit::ipc::{self, Bridge, Instruction, Server, ServerResponse};
+use gistit_ipc::{self, Bridge, Instruction, Server, ServerResponse};
 use log::{debug, info, trace, warn};
 use void::Void;
 
@@ -18,7 +19,7 @@ use libp2p::core::upgrade::{self, read_length_prefixed, write_length_prefixed};
 use libp2p::core::{PeerId, ProtocolName};
 use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt, StreamExt};
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
-use libp2p::identity::{Keypair, ed25519};
+use libp2p::identity::{ed25519, Keypair};
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
     self, GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult,
@@ -38,31 +39,31 @@ use libp2p::{
 
 use crate::Result;
 
-pub struct NetworkConfig {
+pub struct Config {
     peer_id: PeerId,
     keypair: Keypair,
     runtime_dir: PathBuf,
 }
 
-impl NetworkConfig {
-    pub fn new(runtime_dir: PathBuf) -> Result<Self> {
+impl Config {
+    pub fn new(runtime_dir: PathBuf) -> Self {
         let keypair = identity::Keypair::Ed25519(ed25519::Keypair::generate());
         let peer_id = PeerId::from(keypair.public());
 
-        Ok(Self {
+        Self {
             peer_id,
             keypair,
             runtime_dir,
-        })
+        }
     }
 
-    pub async fn apply(self) -> Result<NetworkNode> {
-        NetworkNode::new(self).await
+    pub async fn apply(self) -> Result<Node> {
+        Node::new(self).await
     }
 }
 
 /// The main event loop
-pub struct NetworkNode {
+pub struct Node {
     swarm: Swarm<GistitNetworkBehaviour>,
     bridge: Bridge<Server>,
     pending_dial: HashSet<PeerId>,
@@ -71,7 +72,7 @@ pub struct NetworkNode {
     // pending_request_file: HashMap<RequestId, oneshot::Sender<Result<String>>>,
 }
 
-const BOOTNODES: [&'static str; 4] = [
+const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
     "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
     "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
@@ -80,8 +81,8 @@ const BOOTNODES: [&'static str; 4] = [
 
 const BOOTADDR: &str = "/dnsaddr/bootstrap.libp2p.io";
 
-impl NetworkNode {
-    pub async fn new(config: NetworkConfig) -> Result<Self> {
+impl Node {
+    pub async fn new(config: Config) -> Result<Self> {
         let req_res = RequestResponse::new(
             GistitExchangeCodec,
             once((GistitExchangeProtocol, ProtocolSupport::Full)),
@@ -133,9 +134,14 @@ impl NetworkNode {
         ));
 
         let ping = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
-        let relay = relay::Relay::new(PeerId::from(config.keypair.public()), Default::default());
-        let autonat =
-            autonat::Behaviour::new(PeerId::from(config.keypair.public()), Default::default());
+        let relay = relay::Relay::new(
+            PeerId::from(config.keypair.public()),
+            relay::Config::default(),
+        );
+        let autonat = autonat::Behaviour::new(
+            PeerId::from(config.keypair.public()),
+            autonat::Config::default(),
+        );
 
         let swarm = Swarm::new(
             transport,
@@ -150,14 +156,14 @@ impl NetworkNode {
             config.peer_id,
         );
 
-        let bridge = ipc::server(&config.runtime_dir)?;
+        let bridge = gistit_ipc::server(&config.runtime_dir)?;
 
         Ok(Self {
             swarm,
             bridge,
-            pending_dial: Default::default(),
-            pending_start_providing: Default::default(),
-            pending_get_providers: Default::default(),
+            pending_dial: HashSet::default(),
+            pending_start_providing: HashSet::default(),
+            pending_get_providers: HashSet::default(),
         })
     }
 
@@ -167,7 +173,7 @@ impl NetworkNode {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
                     swarm_event.expect("to recv swarm event")).await?,
 
-                bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await?
+                bridge_event = async { self.bridge.recv() } => self.handle_bridge_event(bridge_event?).await?
             }
         }
     }
@@ -249,8 +255,7 @@ impl NetworkNode {
 
                 self.bridge.connect_blocking()?;
                 self.bridge
-                    .send(Instruction::Response(ServerResponse::PeerId(peer_id)))
-                    .await?;
+                    .send(Instruction::Response(ServerResponse::PeerId(peer_id)))?;
             }
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
@@ -327,7 +332,7 @@ impl NetworkNode {
                 info!("Instruction: Status");
 
                 let listeners: Vec<String> =
-                    self.swarm.listeners().map(|f| f.to_string()).collect();
+                    self.swarm.listeners().map(ToString::to_string).collect();
                 let network_info = self.swarm.network_info();
 
                 self.bridge.connect_blocking()?;
@@ -335,8 +340,7 @@ impl NetworkNode {
                     .send(Instruction::Response(ServerResponse::Status(format!(
                         "listeners: {:?}, network: {:?}",
                         listeners, network_info
-                    ))))
-                    .await?;
+                    ))))?;
             }
             Instruction::Shutdown => {
                 warn!("Exiting...");
@@ -371,37 +375,37 @@ enum GistitNetworkEvent {
 
 impl From<RequestResponseEvent<GistitRequest, GistitResponse>> for GistitNetworkEvent {
     fn from(event: RequestResponseEvent<GistitRequest, GistitResponse>) -> Self {
-        GistitNetworkEvent::RequestResponse(event)
+        Self::RequestResponse(event)
     }
 }
 
 impl From<KademliaEvent> for GistitNetworkEvent {
     fn from(event: KademliaEvent) -> Self {
-        GistitNetworkEvent::Kademlia(event)
+        Self::Kademlia(event)
     }
 }
 
 impl From<PingEvent> for GistitNetworkEvent {
     fn from(event: PingEvent) -> Self {
-        GistitNetworkEvent::Ping(event)
+        Self::Ping(event)
     }
 }
 
 impl From<IdentifyEvent> for GistitNetworkEvent {
     fn from(event: IdentifyEvent) -> Self {
-        GistitNetworkEvent::Identify(event)
+        Self::Identify(event)
     }
 }
 
 impl From<relay::Event> for GistitNetworkEvent {
     fn from(event: relay::Event) -> Self {
-        GistitNetworkEvent::Relay(event)
+        Self::Relay(event)
     }
 }
 
 impl From<autonat::Event> for GistitNetworkEvent {
     fn from(event: autonat::Event) -> Self {
-        GistitNetworkEvent::Autonat(event)
+        Self::Autonat(event)
     }
 }
 

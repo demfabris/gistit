@@ -15,10 +15,12 @@ log = "0.4.14"
 either = "1.6.1"
 void = "1.0.2"
 env_logger = { version = "0.9.0", default-features = false, features = ["termcolor", "atty", "humantime"] }
+thiserror = "1.0.30"
+gistit-ipc = { path = "../gistit-ipc" }
 
 [dependencies.clap]
 version = "3.0.13"
-features = ["cargo"]
+features = ["derive"]
 
 [dependencies.tokio]
 features = ["macros", "fs", "rt", "rt-multi-thread", "sync", "io-util"]
