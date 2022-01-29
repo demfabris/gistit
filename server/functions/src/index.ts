@@ -11,7 +11,7 @@ type GistitPayload = {
   author: string;
   description: string;
   timestamp: string;
-  gistit: {
+  inner: {
     name: string;
     lang: string;
     data: string;
@@ -26,7 +26,7 @@ export const load = __fn.https.onRequest(async (req, res) => {
       author,
       description,
       timestamp,
-      gistit: { name, lang, data, size },
+      inner: { name, lang, data, size },
     } = req.body as GistitPayload;
 
     checkHash(hash);
@@ -37,10 +37,19 @@ export const load = __fn.https.onRequest(async (req, res) => {
       author,
       description,
       timestamp: timestamp.toString(),
-      gistit: { name, lang, data, size },
+      inner: { name, lang, data, size },
     });
+
     __fn.logger.info("added gistit: ", hash);
-    res.send({ success: hash });
+    res.send({
+      success: {
+        hash,
+        author,
+        description,
+        timestamp,
+        inner: { name, lang, data: { inner: "" }, size },
+      },
+    });
   } catch (err) {
     res.status(400).send({ error: (err as Error).message });
   }

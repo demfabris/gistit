@@ -5,6 +5,8 @@ use clap::{crate_authors, crate_description, crate_version, App, Arg, ArgGroup, 
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn app() -> App<'static> {
+    let random_name = Box::leak(Box::new(names::Generator::default().next().unwrap()));
+
     App::new("gistit-cli")
         .version(crate_version!())
         .about(crate_description!())
@@ -33,6 +35,7 @@ pub fn app() -> App<'static> {
                 .short('a')
                 .help("With author information. Defaults to a random generated name")
                 .takes_value(true)
+                .default_value(random_name)
                 .value_hint(ValueHint::Username),
         )
         .arg(
@@ -53,17 +56,6 @@ This is our best efforts at persisting the hash into the system clipboard after 
                 .long("list-colorschemes")
                 .conflicts_with("FILE")
                 .help("List available colorschemes"),
-        )
-        .arg(
-            Arg::new("init-config")
-                .long("init-config")
-                .help("Initialize the default settings.yaml file into the project config directory")
-                .conflicts_with("FILE")
-                .long_help(
-                    "Initialize the default settings.yaml file into the project config directory.
-This flag can be also used to reset settings to default.
-Beware to mistakenly overwriting your settings.",
-                )
         )
         .subcommand(
             App::new("fetch")

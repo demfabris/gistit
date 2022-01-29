@@ -4,15 +4,12 @@
 use std::fs::{metadata, remove_file};
 use std::marker::PhantomData;
 use std::net::Ipv4Addr;
+use std::os::unix::net::UnixDatagram;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use bincode::{deserialize, serialize};
 use serde::{Deserialize, Serialize};
-use tokio::net::UnixDatagram;
-
-use crate::file::EncodedFileData;
-use crate::{ErrorKind, Result};
 
 const NAMED_SOCKET_0: &str = "gistit-0";
 const NAMED_SOCKET_1: &str = "gistit-1";
@@ -70,18 +67,14 @@ pub fn client(base: &Path) -> Result<Bridge<Client>> {
 }
 
 fn __alive(base: &Path, dgram: &UnixDatagram, sock_name: &str) -> bool {
-    if let Err(_) = dgram.connect(base.join(sock_name)) {
-        false
-    } else {
-        true
-    }
+    !matches!(dgram.connect(base.join(sock_name)), Err(_))
 }
 
 fn __connect_blocking(base: &Path, dgram: &UnixDatagram, sock_name: &str) -> Result<()> {
     let earlier = Instant::now();
     while let Err(err) = dgram.connect(base.join(sock_name)) {
         if Instant::now().duration_since(earlier).as_secs() > CONNECT_TIMEOUT_SECS {
-            return Err(ErrorKind::IO(err).into());
+            return Err(err.into());
         }
     }
     Ok(())
@@ -96,15 +89,15 @@ impl Bridge<Server> {
         __connect_blocking(&self.base, &self.sock_1, NAMED_SOCKET_1)
     }
 
-    pub async fn send(&self, instruction: Instruction) -> Result<()> {
+    pub fn send(&self, instruction: Instruction) -> Result<()> {
         let encoded = serialize(&instruction).unwrap();
-        self.sock_1.send(&encoded).await?;
+        self.sock_1.send(&encoded)?;
         Ok(())
     }
 
-    pub async fn recv(&self) -> Result<Instruction> {
+    pub fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
-        self.sock_0.recv(&mut buf).await?;
+        self.sock_0.recv(&mut buf)?;
         let target = deserialize(&buf).unwrap();
         Ok(target)
     }
@@ -119,15 +112,15 @@ impl Bridge<Client> {
         __connect_blocking(&self.base, &self.sock_0, NAMED_SOCKET_0)
     }
 
-    pub async fn send(&self, instruction: Instruction) -> Result<()> {
+    pub fn send(&self, instruction: Instruction) -> Result<()> {
         let encoded = serialize(&instruction).unwrap();
-        self.sock_0.send(&encoded).await?;
+        self.sock_0.send(&encoded)?;
         Ok(())
     }
 
-    pub async fn recv(&self) -> Result<Instruction> {
+    pub fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
-        self.sock_1.recv(&mut buf).await?;
+        self.sock_1.recv(&mut buf)?;
         let target = deserialize(&buf).unwrap();
         Ok(target)
     }
@@ -137,7 +130,7 @@ impl Bridge<Client> {
 pub enum Instruction {
     Listen { host: Ipv4Addr, port: u16 },
     Dial { peer_id: String },
-    Provide { hash: String, data: EncodedFileData },
+    Provide { hash: String, data: Vec<u8> },
     Get { hash: String },
     Status,
     Shutdown,
@@ -149,4 +142,36 @@ pub enum Instruction {
 pub enum ServerResponse {
     PeerId(String),
     Status(String),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub struct Error {
+    pub kind: ErrorKind,
+}
+
+#[derive(Debug)]
+pub enum ErrorKind {
+    IO(std::io::Error),
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self {
+            kind: ErrorKind::IO(err),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn description(&self) -> &str {
+        "gistit ipc error"
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "gistit ipc error")
+    }
 }

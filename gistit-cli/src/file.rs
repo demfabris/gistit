@@ -5,7 +5,7 @@
 
 use std::env::temp_dir;
 use std::ffi::OsStr;
-use std::fs;
+use std::fs::{self, write};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str;
@@ -605,9 +605,10 @@ pub struct File {
     size: usize,
 }
 
+#[must_use]
 pub fn name_from_path(path: &Path) -> String {
     path.file_name()
-        .unwrap_or(OsStr::new("unknown"))
+        .unwrap_or_else(|| OsStr::new("unknown"))
         .to_string_lossy()
         .to_string()
 }
@@ -634,6 +635,11 @@ fn rng_temp_file(suffix: &str) -> PathBuf {
 }
 
 impl File {
+    /// Create file from a given path
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
     pub fn from_path(path: &Path) -> Result<Self> {
         let mut handler = fs::File::open(path)?;
         let mut buf = Vec::with_capacity(50_000);
@@ -649,59 +655,79 @@ impl File {
         })
     }
 
+    /// Create a file from a decoded vector of bytes
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
     pub fn from_bytes(decoded_bytes: Vec<u8>, name: &str) -> Result<Self> {
         let (handler, path) = spawn_from_bytes(&decoded_bytes, name)?;
         let size = decoded_bytes.len();
 
         Ok(Self {
             inner: handler,
-            path: path.to_path_buf(),
+            path,
             bytes: decoded_bytes,
             size,
         })
     }
 
+    /// Create a file from a b64 encoded vector of bytes
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
     pub fn from_bytes_encoded(bytes: &[u8], name: &str) -> Result<Self> {
         let decoded_bytes = base64::decode(bytes)?;
-        File::from_bytes(decoded_bytes, name)
+        Self::from_bytes(decoded_bytes, name)
     }
 
-    pub fn inner(&self) -> &fs::File {
+    #[must_use]
+    pub const fn inner(&self) -> &fs::File {
         &self.inner
     }
 
+    #[must_use]
     pub fn data(&self) -> &[u8] {
         &self.bytes
     }
 
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
+    #[must_use]
     pub fn to_encoded_data(&self) -> EncodedFileData {
         EncodedFileData {
             inner: base64::encode(&self.bytes),
         }
     }
 
+    /// Save the file to the given path
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
     pub fn save_as(&self, file_path: &Path) -> Result<()> {
-        Ok(fs::write(file_path, &self.bytes)?)
+        Ok(write(file_path, &self.bytes)?)
     }
 
+    #[must_use]
     pub fn name(&self) -> String {
         name_from_path(&self.path)
     }
 
+    #[must_use]
     pub fn lang(&self) -> &str {
-        if let Some(ext) = self.path.extension() {
+        self.path.extension().map_or("text", |ext| {
             let ext_str = OsStr::to_str(ext).expect("file to contain valid utf8 extension");
             EXTENSION_TO_LANG_MAPPING.get(ext_str).unwrap_or(&"text")
-        } else {
-            "text"
-        }
+        })
     }
 
-    pub fn size(&self) -> usize {
+    #[must_use]
+    pub const fn size(&self) -> usize {
         self.size
     }
 }
@@ -709,7 +735,7 @@ impl File {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ErrorKind;
+    use crate::Error;
     use assert_fs::prelude::*;
     use predicates::prelude::*;
     use tokio::task::spawn_blocking;
@@ -764,14 +790,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn file_structure_new_from_path_fails_if_is_dir() {
-        let tmp = assert_fs::TempDir::new().unwrap();
-        let read_err = File::from_path(&tmp).unwrap_err();
-
-        assert!(matches!(read_err.kind, ErrorKind::NotAFile));
-    }
-
-    #[tokio::test]
     async fn file_structure_new_from_bytes_encoded() {
         let data: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
@@ -789,7 +807,7 @@ mod tests {
         let decode_err =
             File::from_bytes_encoded(corrupted_data.as_bytes(), "nameless").unwrap_err();
 
-        assert!(matches!(decode_err.kind, ErrorKind::Encoding(_)));
+        assert!(matches!(decode_err, Error::Encoding(_)));
     }
 
     #[tokio::test]

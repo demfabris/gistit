@@ -21,12 +21,11 @@
 )]
 
 pub mod clipboard;
-pub mod errors;
+pub mod error;
 pub mod file;
-pub mod ipc;
+pub mod hash;
+pub mod project;
+pub mod server;
 
-#[cfg(feature = "encryption")]
-pub mod encrypt;
-
-pub use errors::{Error, ErrorKind};
+pub use error::Error;
 pub type Result<T> = std::result::Result<T, Error>;
