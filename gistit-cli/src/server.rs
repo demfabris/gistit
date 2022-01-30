@@ -8,8 +8,8 @@ use crate::file::{EncodedFileData, File};
 use crate::{Error, Result};
 
 const SERVER_URL_BASE: &str = "https://us-central1-gistit-base.cloudfunctions.net";
-const SERVER_SUBPATH_GET: &str = "/gistit-base/us-central1/get";
-const SERVER_SUBPATH_LOAD: &str = "/gistit-base/us-central1/load";
+const SERVER_SUBPATH_GET: &str = "/get";
+const SERVER_SUBPATH_LOAD: &str = "/load";
 
 lazy_static! {
     pub static ref SERVER_URL_GET: Url =
