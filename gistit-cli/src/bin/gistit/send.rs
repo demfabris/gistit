@@ -35,7 +35,7 @@ impl Action {
         args: &'static ArgMatches,
         maybe_stdin: Option<String>,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        prettyln!("Preparing gistit...");
+        prettyln!("Preparing");
 
         Ok(Box::new(Self {
             file_path: args.value_of_os("FILE"),
@@ -125,12 +125,11 @@ impl Dispatch for Action {
         };
 
         if self.github {
+            prettyln!("Authenticating");
             if let Err(url) = request_oauth() {
                 warnln!(
-                    r#"
-> failed to open your web browser.
-> please access: {}"#,
-                    url
+                    "failed to open your web browser. \n\nAuthorize manually: '{}'",
+                    style(url).cyan()
                 );
                 loop {}
             }
@@ -151,7 +150,7 @@ impl Dispatch for Action {
 
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
         if bridge.alive() {
-            prettyln!("Hosting gistit...");
+            prettyln!("Hosting");
             bridge.connect_blocking()?;
             bridge.send(Instruction::Provide {
                 hash: hash.clone(),
@@ -159,7 +158,7 @@ impl Dispatch for Action {
                 data: Vec::new(),
             })?;
         } else {
-            prettyln!("Uploading to server...");
+            prettyln!("Uploading");
             let response: Response = reqwest::Client::new()
                 .post(SERVER_URL_LOAD.to_string())
                 .json(&config.into_gistit()?)
@@ -178,19 +177,15 @@ impl Dispatch for Action {
         };
 
         println!(
-            r#"
-SUCCESS:
-    hash: {} {}
-    url: {}{}
-            "#,
-            style(&hash).bold().blue(),
+            "hash: '{}' {}\nurl: '{}{}'",
+            style(&hash).cyan().bold(),
             if self.clipboard {
-                style("(copied to clipboard)").italic().to_string()
+                style("(copied to clipboard)").italic().dim().to_string()
             } else {
                 "".to_string()
             },
-            "https://gistit.vercel.app/",
-            style(&hash).bold().blue()
+            style("https://gistit.vercel.app/h/").cyan(),
+            style(&hash).cyan().bold(),
         );
         Ok(())
     }

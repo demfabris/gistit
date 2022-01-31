@@ -45,7 +45,6 @@ async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(arg::app().get_matches()));
 
     let (cmd, args) = if let Some((cmd, args)) = matches.subcommand() {
-        fmt::set_action(cmd)?;
         (cmd, Some(args))
     } else {
         ("", None)
