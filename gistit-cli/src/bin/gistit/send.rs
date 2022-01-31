@@ -11,13 +11,14 @@ use gistit_ipc::{self, Instruction};
 
 use libgistit::clipboard::Clipboard;
 use libgistit::file::File;
+use libgistit::github::request_oauth;
 use libgistit::hash::Hasheable;
 use libgistit::project::runtime_dir;
 use libgistit::server::{Gistit, Inner, IntoGistit, Response, SERVER_URL_LOAD};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::{prettyln, Error, Result};
+use crate::{prettyln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -26,6 +27,7 @@ pub struct Action {
     pub description: Option<&'static str>,
     pub author: &'static str,
     pub clipboard: bool,
+    pub github: bool,
 }
 
 impl Action {
@@ -33,7 +35,8 @@ impl Action {
         args: &'static ArgMatches,
         maybe_stdin: Option<String>,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        prettyln!("Preparing gistit...",);
+        prettyln!("Preparing gistit...");
+
         Ok(Box::new(Self {
             file_path: args.value_of_os("FILE"),
             maybe_stdin,
@@ -42,6 +45,7 @@ impl Action {
                 .value_of("author")
                 .ok_or(Error::Argument("missing argument", "--author"))?,
             clipboard: args.is_present("clipboard"),
+            github: args.is_present("github"),
         }))
     }
 }
@@ -119,6 +123,18 @@ impl Dispatch for Action {
         } else {
             None
         };
+
+        if self.github {
+            if let Err(url) = request_oauth() {
+                warnln!(
+                    r#"
+> failed to open your web browser.
+> please access: {}"#,
+                    url
+                );
+                loop {}
+            }
+        }
 
         Ok(Config {
             file,

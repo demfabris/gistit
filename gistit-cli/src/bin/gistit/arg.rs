@@ -23,6 +23,11 @@ pub fn app() -> App<'static> {
                 .value_hint(ValueHint::FilePath)
         )
         .arg(
+            Arg::new("github")
+                .long("github")
+                .help("Post this gistit to GitHub Gists. Will be prompted to authorize with GitHub OAuth")
+        )
+        .arg(
             Arg::new("description")
                 .long("description")
                 .short('d')

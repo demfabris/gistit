@@ -15,6 +15,9 @@ pub enum Error {
     Encoding(#[from] base64::DecodeError),
 
     #[error("{}", fmt(.0))]
+    UrlParse(#[from] url::ParseError),
+
+    #[error("{}", fmt(.0))]
     Ipc(#[from] gistit_ipc::Error),
 
     #[error("{}", fmt(.0))]
@@ -33,11 +36,14 @@ pub enum Error {
     #[error("{}", fmt_suggest("invalid colorscheme parameter", .0.clone()))]
     Colorscheme(String),
 
+    #[error("{0}")]
+    OAuth(String),
+
     #[error("{}", fmt(Self::from("unknown cause".to_owned())))]
     Unknown,
 }
 
-fn fmt(err: impl std::error::Error) -> String {
+fn fmt(err: impl std::fmt::Display) -> String {
     format!(
         r#"
 CAUSE:

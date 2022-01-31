@@ -64,7 +64,7 @@ macro_rules! warnln {
         println!("{}: in {}{}: \n    {}",
             style("warning").yellow().bold(),
             style("gistit-").green().bold(),
-            style(CURRENT_ACTION.get().unwrap_or("any"))
+            style(CURRENT_ACTION.get().unwrap_or(&"any".to_owned()))
                 .green()
                 .bold(),
             msg
