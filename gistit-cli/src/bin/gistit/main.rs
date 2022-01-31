@@ -43,6 +43,7 @@ async fn main() -> Result<()> {
 
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(arg::app().get_matches()));
+    libgistit::project::init_dirs()?;
 
     let (cmd, args) = if let Some((cmd, args)) = matches.subcommand() {
         (cmd, Some(args))

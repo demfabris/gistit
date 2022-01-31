@@ -82,15 +82,15 @@ impl Dispatch for Action {
         } else {
             prettyln!("Contacting host...");
 
-            let req = reqwest::Client::new()
+            let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())
                 .json(&config.into_gistit()?)
                 .send()
                 .await?;
 
-            match req.status() {
+            match response.status() {
                 StatusCode::OK => {
-                    let payload = req.json::<Response>().await?.into_gistit()?;
+                    let payload = response.json::<Response>().await?.into_gistit()?;
                     let gistit = payload.to_file()?;
 
                     if self.save {

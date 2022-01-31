@@ -23,7 +23,7 @@ export const token = __fn.https.onRequest(async (req, res) => {
     res.status(200).send(token);
   } catch (error) {
     __fn.logger.error(error);
-    res.status(400).send({ error: "not found" });
+    res.status(404).send({ error: "not found" });
   }
 });
 

@@ -11,7 +11,7 @@ use gistit_ipc::{self, Instruction};
 
 use libgistit::clipboard::Clipboard;
 use libgistit::file::File;
-use libgistit::github::request_oauth;
+use libgistit::github;
 use libgistit::hash::Hasheable;
 use libgistit::project::runtime_dir;
 use libgistit::server::{Gistit, Inner, IntoGistit, Response, SERVER_URL_LOAD};
@@ -56,6 +56,7 @@ pub struct Config {
     author: &'static str,
     description: Option<&'static str>,
     clipboard: bool,
+    github_token: Option<github::Token>,
 }
 
 impl Hasheable for Config {
@@ -117,29 +118,37 @@ impl Dispatch for Action {
         };
 
         let author = check::author(self.author)?;
-
         let description = if let Some(value) = self.description {
             Some(check::description(value)?)
         } else {
             None
         };
 
-        if self.github {
+        let github_token = if self.github {
             prettyln!("Authenticating");
-            if let Err(url) = request_oauth() {
-                warnln!(
-                    "failed to open your web browser. \n\nAuthorize manually: '{}'",
-                    style(url).cyan()
-                );
-                loop {}
+            let mut oauth = github::Oauth::new()?;
+
+            if oauth.token().is_none() {
+                if let Err(url) = oauth.authorize() {
+                    warnln!(
+                        "failed to open your web browser. \n\nAuthorize manually: '{}'",
+                        style(url).cyan()
+                    );
+                }
+                oauth.poll_token().await?;
             }
-        }
+
+            oauth.token
+        } else {
+            None
+        };
 
         Ok(Config {
             file,
             description,
             author,
             clipboard: self.clipboard,
+            github_token,
         })
     }
 
@@ -147,6 +156,7 @@ impl Dispatch for Action {
         let runtime_dir = runtime_dir()?;
         let hash = config.hash();
         let clipboard = config.clipboard;
+        dbg!(&config.github_token);
 
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
         if bridge.alive() {

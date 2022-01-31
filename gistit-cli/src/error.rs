@@ -18,6 +18,9 @@ pub enum Error {
     UrlParse(#[from] url::ParseError),
 
     #[error("{0}")]
+    JsonParse(#[from] serde_json::Error),
+
+    #[error("{0}")]
     Ipc(#[from] gistit_ipc::Error),
 
     #[error("{0}")]
