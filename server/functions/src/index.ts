@@ -38,27 +38,31 @@ export type GistitPayload = {
 
 export const load = functions.https.onRequest(async (req, res) => {
   try {
+    const gistit = req.body;
     const {
       hash,
       author,
       description,
       timestamp,
       inner: { name, lang, data, size },
-    } = req.body as GistitPayload;
+    } = gistit as GistitPayload;
+    functions.logger.log(gistit);
 
-    if (hash.length !== GISTIT_HASH_LENGTH)
+    if (hash?.length !== GISTIT_HASH_LENGTH)
       throw Error("Invalid gistit hash format");
 
     if (
-      author.length > GISTIT_AUTHOR_MAX_CHAR_LENGTH ||
-      author.length < GISTIT_AUTHOR_MIN_CHAR_LENGTH
+      author &&
+      (author.length > GISTIT_AUTHOR_MAX_CHAR_LENGTH ||
+        author.length < GISTIT_AUTHOR_MIN_CHAR_LENGTH)
     ) {
       throw Error("Invalid author length");
     }
 
     if (
-      description.length > GISTIT_DESCRIPTION_MAX_CHAR_LENGTH ||
-      description.length < GISTIT_DESCRIPTION_MIN_CHAR_LENGTH
+      description &&
+      (description.length > GISTIT_DESCRIPTION_MAX_CHAR_LENGTH ||
+        description.length < GISTIT_DESCRIPTION_MIN_CHAR_LENGTH)
     ) {
       throw Error("Invalid description length");
     }
@@ -84,10 +88,11 @@ export const load = functions.https.onRequest(async (req, res) => {
         author,
         description,
         timestamp,
-        inner: { name, lang, data: { inner: "" }, size },
+        inner: { name, lang, data: "", size }, // We don't send 'data' back to save bandwidth
       },
     });
   } catch (err) {
+    functions.logger.error(err);
     res.status(400).send({ error: (err as Error).message });
   }
 });
@@ -104,6 +109,7 @@ export const get = functions.https.onRequest(async (req, res) => {
       res.status(404).send({ error: "Gistit does not exist" });
       return;
     }
+
     const gistit = gistitRef.data();
     res.send({ success: { ...gistit, hash } });
   } catch (err) {
