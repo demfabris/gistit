@@ -1,4 +1,4 @@
-import * as __fn from "firebase-functions";
+import * as functions from "firebase-functions";
 import fetch from "cross-fetch";
 import { db } from "./index";
 
@@ -7,7 +7,7 @@ interface AuthPayload {
   state: string;
 }
 
-export const token = __fn.https.onRequest(async (req, res) => {
+export const token = functions.https.onRequest(async (req, res) => {
   try {
     const { state } = req.body as AuthPayload;
 
@@ -22,12 +22,11 @@ export const token = __fn.https.onRequest(async (req, res) => {
 
     res.status(200).send(token);
   } catch (error) {
-    __fn.logger.error(error);
     res.status(404).send({ error: "not found" });
   }
 });
 
-export const auth = __fn.https.onRequest(async (req, res) => {
+export const auth = functions.https.onRequest(async (req, res) => {
   res
     .setHeader("Access-Control-Allow-Origin", "*")
     .setHeader("Access-Control-Allow-Credentials", "true")
@@ -45,8 +44,8 @@ export const auth = __fn.https.onRequest(async (req, res) => {
       return;
     }
 
-    const clientSecret = __fn.config().github.secret;
-    const clientId = __fn.config().github.id;
+    const clientSecret = functions.config().github.secret;
+    const clientId = functions.config().github.id;
     const payload = {
       client_id: clientId,
       client_secret: clientSecret,
@@ -72,15 +71,37 @@ export const auth = __fn.https.onRequest(async (req, res) => {
     }
 
     if (data?.["access_token"]) {
-      await db.collection("githubToken").doc(state).set(data);
-      __fn.logger.info(state, data);
+      await db
+        .collection("githubToken")
+        .doc(state)
+        .set({
+          ...data,
+          expireAt: Date.now() + 60 * 10 * 1000,
+        });
+
       res.status(200).send({ success: "authenticated" });
       return;
     }
 
     res.status(400).send({ error: "executon failed" });
   } catch (err) {
-    __fn.logger.error("failed to execute auth", err);
     res.end();
   }
 });
+
+export const tokenScheduledCleanup = functions.pubsub
+  .schedule("every 60 mins")
+  .onRun(async () => {
+    const expiredTokens = await db
+      .collection("githubToken")
+      .where("expireAt", "<", Date.now())
+      .get();
+
+    expiredTokens.forEach(async (doc) => {
+      const tokenId = doc.id;
+      functions.logger.info(`token cleanup: ${tokenId}`);
+      await db.doc(`githubToken/${tokenId}`).delete();
+    });
+
+    return null;
+  });

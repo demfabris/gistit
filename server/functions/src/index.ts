@@ -1,26 +1,42 @@
-type TokenMap = {
-  [key: string]: { [entry: string]: string };
-};
+import * as functions from "firebase-functions";
+import * as admin from "firebase-admin";
 
-export const tokenMap: TokenMap = {};
-
-import * as __fn from "firebase-functions";
-import * as __adm from "firebase-admin";
-
-import { GistitPayload } from "./gistit";
-import { checkHash, checkParamsCharLength, checkFileSize } from "./checks";
-
-export { auth, token } from "./auth";
+export { auth, token, tokenScheduledCleanup } from "./auth";
 export {
   createReservedData,
   updateReservedData,
-  scheduledCleanup,
+  gistitScheduledCleanup,
 } from "./reserved";
 
-__adm.initializeApp();
-export const db = __adm.firestore();
+admin.initializeApp();
 
-export const load = __fn.https.onRequest(async (req, res) => {
+export const db = admin.firestore();
+
+const GISTIT_HASH_LENGTH = 32; // md5 hash
+
+const GISTIT_AUTHOR_MAX_CHAR_LENGTH = 50;
+const GISTIT_AUTHOR_MIN_CHAR_LENGTH = 3;
+
+const GISTIT_DESCRIPTION_MAX_CHAR_LENGTH = 100;
+const GISTIT_DESCRIPTION_MIN_CHAR_LENGTH = 10;
+
+const GISTIT_FILE_MAX_SIZE = 50_000_000; // 50kb
+const GISTIT_FILE_MIN_SIZE = 20; // 20 bytes
+
+export type GistitPayload = {
+  hash: string;
+  author: string;
+  description: string;
+  timestamp: string;
+  inner: {
+    name: string;
+    lang: string;
+    data: string;
+    size: number;
+  };
+};
+
+export const load = functions.https.onRequest(async (req, res) => {
   try {
     const {
       hash,
@@ -30,9 +46,29 @@ export const load = __fn.https.onRequest(async (req, res) => {
       inner: { name, lang, data, size },
     } = req.body as GistitPayload;
 
-    checkHash(hash);
-    checkParamsCharLength(author, description);
-    checkFileSize(size);
+    if (hash.length !== GISTIT_HASH_LENGTH)
+      throw Error("Invalid gistit hash format");
+
+    if (
+      author.length > GISTIT_AUTHOR_MAX_CHAR_LENGTH ||
+      author.length < GISTIT_AUTHOR_MIN_CHAR_LENGTH
+    ) {
+      throw Error("Invalid author length");
+    }
+
+    if (
+      description.length > GISTIT_DESCRIPTION_MAX_CHAR_LENGTH ||
+      description.length < GISTIT_DESCRIPTION_MIN_CHAR_LENGTH
+    ) {
+      throw Error("Invalid description length");
+    }
+
+    if (
+      data.length > GISTIT_FILE_MAX_SIZE ||
+      data.length < GISTIT_FILE_MIN_SIZE
+    ) {
+      throw Error("File size is not allowed");
+    }
 
     await db.collection("gistits").doc(hash).set({
       author,
@@ -41,7 +77,7 @@ export const load = __fn.https.onRequest(async (req, res) => {
       inner: { name, lang, data, size },
     });
 
-    __fn.logger.info("added gistit: ", hash);
+    functions.logger.info("added gistit: ", hash);
     res.send({
       success: {
         hash,
@@ -60,7 +96,7 @@ type FetchPayload = {
   hash: string;
 };
 
-export const get = __fn.https.onRequest(async (req, res) => {
+export const get = functions.https.onRequest(async (req, res) => {
   try {
     const { hash } = req.body as FetchPayload;
     const gistitRef = await db.collection("gistits").doc(hash).get();
