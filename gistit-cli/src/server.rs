@@ -4,7 +4,7 @@ use url::Url;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
-use crate::file::{EncodedFileData, File};
+use crate::file::{B64EncodedFileData, File};
 use crate::{Error, Result};
 
 #[cfg(debug_assertions)]
@@ -18,8 +18,10 @@ lazy_static! {
 }
 
 #[cfg(not(debug_assertions))]
-static SERVER_URL_BASE: Url =
-    Url::parse("https://us-central1-gistit-base.cloudfunctions.net").unwrap();
+lazy_static! {
+    static ref SERVER_URL_BASE: Url =
+        Url::parse("https://us-central1-gistit-base.cloudfunctions.net/").unwrap();
+}
 
 const SERVER_SUBPATH_GET: &str = "get";
 const SERVER_SUBPATH_LOAD: &str = "load";
@@ -61,7 +63,7 @@ impl Gistit {
     pub fn to_file(&self) -> Result<File> {
         let name = self.inner.name.clone();
 
-        File::from_bytes_encoded(self.inner.data.inner.as_bytes(), &name)
+        File::from_bytes_encoded(self.inner.data.0.as_bytes(), &name)
     }
 }
 
@@ -70,7 +72,7 @@ pub struct Inner {
     pub name: String,
     pub lang: String,
     pub size: usize,
-    pub data: EncodedFileData,
+    pub data: B64EncodedFileData,
 }
 
 #[derive(Deserialize, Debug, Default)]

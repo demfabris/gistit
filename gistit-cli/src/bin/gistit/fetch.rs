@@ -14,7 +14,7 @@ use libgistit::server::{Gistit, IntoGistit, Response, SERVER_URL_GET};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::{prettyln, Error, Result};
+use crate::{prettyln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -27,6 +27,7 @@ impl Action {
     pub fn from_args(
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
+        prettyln!("Preparing");
         Ok(Box::new(Self {
             hash: args
                 .value_of("HASH")
@@ -80,7 +81,7 @@ impl Dispatch for Action {
                 hash: config.hash.to_owned(),
             })?;
         } else {
-            prettyln!("Contacting host...");
+            prettyln!("Contacting host");
 
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())
@@ -95,10 +96,7 @@ impl Dispatch for Action {
 
                     if self.save {
                         let saved_file = save_gistit(&gistit)?;
-                        prettyln!(
-                            "Gistit saved at: {}",
-                            style(saved_file.to_string_lossy()).dim()
-                        );
+                        warnln!("gistit saved at: `{}`", saved_file.to_string_lossy());
                     } else {
                         preview_gistit(self, &payload, &gistit)?;
                     }
@@ -110,13 +108,8 @@ impl Dispatch for Action {
             }
         }
 
-        println!(
-            r#"
-SUCCESS:
-    hash: {}
-"#,
-            style(&hash).blue().bold(),
-        );
+        println!("hash: '{}'", style(&hash).cyan().bold());
+
         Ok(())
     }
 }

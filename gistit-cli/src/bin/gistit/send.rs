@@ -156,7 +156,6 @@ impl Dispatch for Action {
         let runtime_dir = runtime_dir()?;
         let hash = config.hash();
         let clipboard = config.clipboard;
-        dbg!(&config.github_token);
 
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
         if bridge.alive() {
@@ -188,15 +187,16 @@ impl Dispatch for Action {
 
         println!(
             "hash: '{}' {}\nurl: '{}{}'",
-            style(&hash).cyan().bold(),
+            style(&hash).bold(),
             if self.clipboard {
                 style("(copied to clipboard)").italic().dim().to_string()
             } else {
                 "".to_string()
             },
-            style("https://gistit.vercel.app/h/").cyan(),
-            style(&hash).cyan().bold(),
+            style("https://gistit.vercel.app/h/"),
+            style(&hash).bold(),
         );
+
         Ok(())
     }
 }
