@@ -35,6 +35,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[tokio::main]
 async fn main() -> Result<()> {
     if let Err(err) = run().await {
+        interruptln!();
         errorln!(err);
     };
 

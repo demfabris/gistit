@@ -9,12 +9,12 @@ use serde::Serialize;
 use gistit_ipc::{self, Instruction};
 
 use libgistit::file::File;
-use libgistit::project::runtime_dir;
+use libgistit::project::{data_dir, runtime_dir};
 use libgistit::server::{Gistit, IntoGistit, Response, SERVER_URL_GET};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::{prettyln, warnln, Error, Result};
+use crate::{finish, progress, updateln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -27,7 +27,6 @@ impl Action {
     pub fn from_args(
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        prettyln!("Preparing");
         Ok(Box::new(Self {
             hash: args
                 .value_of("HASH")
@@ -59,9 +58,10 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
+        progress!("Preparing");
         let hash = check::hash(self.hash)?;
-
         let colorscheme = check::colorscheme(self.colorscheme)?;
+        updateln!("Prepared");
 
         Ok(Config {
             hash,
@@ -71,8 +71,8 @@ impl Dispatch for Action {
     }
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
+        progress!("Fetching");
         let runtime_dir = runtime_dir()?;
-        let hash = config.hash;
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         if bridge.alive() {
@@ -81,13 +81,12 @@ impl Dispatch for Action {
                 hash: config.hash.to_owned(),
             })?;
         } else {
-            prettyln!("Contacting host");
-
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())
                 .json(&config.into_gistit()?)
                 .send()
                 .await?;
+            updateln!("Fetched");
 
             match response.status() {
                 StatusCode::OK => {
@@ -97,18 +96,18 @@ impl Dispatch for Action {
                     if self.save {
                         let saved_file = save_gistit(&gistit)?;
                         warnln!("gistit saved at: `{}`", saved_file.to_string_lossy());
+                        finish!("💾  Saved");
                     } else {
+                        finish!("👀  Preview");
                         preview_gistit(self, &payload, &gistit)?;
                     }
                 }
                 StatusCode::NOT_FOUND => {
-                    return Err(Error::Server("gistit hash not found".to_owned()))
+                    return Err(Error::Server("gistit hash not found".to_owned()));
                 }
                 _ => return Err(Error::Server("unexpected response".to_owned())),
             }
         }
-
-        println!("hash: '{}'", style(&hash).cyan().bold());
 
         Ok(())
     }
@@ -140,7 +139,7 @@ fn preview_gistit(action: &Action, gistit: &Gistit, file: &File) -> Result<bool>
 }
 
 fn save_gistit(file: &File) -> Result<PathBuf> {
-    let save_location = std::env::temp_dir(); // TODO: improve this
+    let save_location = data_dir()?;
 
     let file_path = save_location.join(file.name());
     file.save_as(&file_path)?;

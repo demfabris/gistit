@@ -9,7 +9,7 @@ const APPLICATION: &str = "Gistit";
 const ORGANIZATION: &str = "fabricio7p";
 const QUALIFIER: &str = "io";
 
-/// Initialize non existent project directories
+/// Initialize needed project directories if not present
 ///
 /// # Errors
 ///
@@ -18,6 +18,11 @@ pub fn init_dirs() -> Result<()> {
     let config = config_dir()?;
     if fs::metadata(&config).is_err() {
         fs::create_dir(&config)?;
+    }
+
+    let data = data_dir()?;
+    if fs::metadata(&data).is_err() {
+        fs::create_dir(&data)?;
     }
 
     Ok(())
@@ -45,5 +50,17 @@ pub fn config_dir() -> Result<PathBuf> {
     Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
         .ok_or(Error::Unknown)?
         .config_dir()
+        .to_path_buf())
+}
+
+/// Returns the data path of this program
+///
+/// # Errors
+///
+/// Fails if the machine doesn't have a HOME directory
+pub fn data_dir() -> Result<PathBuf> {
+    Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
+        .ok_or(Error::Unknown)?
+        .data_dir()
         .to_path_buf())
 }

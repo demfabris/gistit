@@ -8,6 +8,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use url::Url;
+use webbrowser::{self, BrowserOptions};
 
 use crate::project::config_dir;
 use crate::server::SERVER_URL_TOKEN;
@@ -15,18 +16,36 @@ use crate::{Error, Result};
 
 pub const GITHUB_OAUTH_CLIENT_ID: &str = "265cd618948a2e58042e";
 pub const GITHUB_OAUTH_BASE_URL: &str = "https://github.com/login/oauth/authorize";
+pub const GITHUB_GISTS_API_URL: &str = "https://api.github.com/gists";
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Oauth {
     pub state: String,
     pub token: Option<Token>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Token {
     pub access_token: String,
     pub token_type: String,
     pub scope: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct CreateResponse {
+    pub url: String,
+    pub forks_url: String,
+    pub commits_url: String,
+    pub id: String,
+    pub node_id: String,
+    pub git_pull_url: String,
+    pub git_push_url: String,
+    pub html_url: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub description: String,
+    pub comments: i32,
+    pub comments_url: String,
 }
 
 impl Oauth {
@@ -61,6 +80,7 @@ impl Oauth {
             &[
                 ("client_id", GITHUB_OAUTH_CLIENT_ID),
                 ("state", &self.state),
+                ("scope", "gist"),
             ],
         )?;
 
@@ -69,7 +89,12 @@ impl Oauth {
             return Err(Error::OAuth(url.to_string()));
         }
 
-        webbrowser::open(url.as_str()).map_err(|_| Error::OAuth(url.to_string()))?;
+        webbrowser::open_browser_with_options(BrowserOptions {
+            url: String::from(url.as_str()),
+            suppress_output: Some(true),
+            browser: Some(webbrowser::Browser::Default),
+        })
+        .map_err(|_| Error::OAuth(url.to_string()))?;
 
         Ok(())
     }
@@ -90,7 +115,7 @@ impl Oauth {
 
             match response.status() {
                 StatusCode::NOT_FOUND => {
-                    if retry < 5 {
+                    if retry < 7 {
                         thread::sleep(Duration::from_secs(3));
                         retry += 1;
                     } else {

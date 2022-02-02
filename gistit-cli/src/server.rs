@@ -7,17 +7,16 @@ use serde::{Deserialize, Serialize};
 use crate::file::{B64EncodedFileData, File};
 use crate::{Error, Result};
 
-#[cfg(debug_assertions)]
-lazy_static! {
-    static ref SERVER_URL_BASE: Url = Url::parse("http://localhost:4001/")
-        .unwrap()
-        .join("gistit-base/")
-        .unwrap()
-        .join("us-central1/")
-        .unwrap();
-}
+// #[cfg(debug_assertions)]
+// lazy_static! {
+//     static ref SERVER_URL_BASE: Url = Url::parse("http://localhost:4001/")
+//         .unwrap()
+//         .join("gistit-base/")
+//         .unwrap()
+//         .join("us-central1/")
+//         .unwrap();
+// }
 
-#[cfg(not(debug_assertions))]
 lazy_static! {
     static ref SERVER_URL_BASE: Url =
         Url::parse("https://us-central1-gistit-base.cloudfunctions.net/").unwrap();

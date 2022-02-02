@@ -12,7 +12,7 @@ use libgistit::project::{config_dir, runtime_dir};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::{prettyln, Error, Result};
+use crate::{progress, updateln, Error, Result};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
@@ -64,6 +64,7 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
+        progress!("Preparing");
         let host = check::host(self.host)?;
 
         let port = check::port(self.port)?;
@@ -81,6 +82,7 @@ impl Dispatch for Action {
             host,
             port,
         };
+        updateln!("Prepared");
 
         Ok(config)
     }
@@ -93,13 +95,13 @@ impl Dispatch for Action {
         match config.command {
             ProcessCommand::Start => {
                 if bridge.alive() {
-                    prettyln!("Running..."); // TODO: change this to status msg
+                    progress!("Running..."); // TODO: change this to status msg
                     return Ok(());
                 }
 
                 let pid = spawn(&runtime_dir, &config_dir)?;
 
-                prettyln!(
+                progress!(
                     "Starting gistit network node process, pid: {}",
                     style(pid).blue()
                 );
@@ -121,11 +123,11 @@ impl Dispatch for Action {
                         peer_id: address.to_owned(),
                     })?;
                 } else {
-                    prettyln!("Gistit node must be running to join a peer");
+                    progress!("Gistit node must be running to join a peer");
                 }
             }
             ProcessCommand::Stop => {
-                prettyln!("Stopping gistit network node process...");
+                progress!("Stopping gistit network node process...");
                 fs::remove_file(runtime_dir.join("gistit.log"))?;
 
                 bridge.connect_blocking()?;
@@ -142,7 +144,7 @@ impl Dispatch for Action {
                         println!("{}", status_str);
                     }
                 } else {
-                    prettyln!("Not running");
+                    progress!("Not running");
                 }
             }
         };
