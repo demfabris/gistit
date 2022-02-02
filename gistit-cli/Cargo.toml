@@ -18,6 +18,10 @@ name = "gistit"
 path = "src/lib.rs"
 name = "libgistit"
 
+[features]
+default = []
+host = []
+
 [dependencies]
 async-trait = "0.1.52"
 lazy_static = "1.4.0"

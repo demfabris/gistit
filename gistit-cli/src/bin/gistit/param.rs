@@ -43,8 +43,10 @@ pub mod check {
 
     use std::ffi::OsStr;
     use std::fs;
-    use std::net::Ipv4Addr;
     use std::ops::RangeInclusive;
+
+    #[cfg(feature = "host")]
+    use std::net::Ipv4Addr;
 
     use libgistit::file::EXTENSION_TO_LANG_MAPPING;
     use libgistit::{Error, Result};
@@ -123,11 +125,13 @@ pub mod check {
         }
     }
 
+    #[cfg(feature = "host")]
     pub fn host(host: &str) -> Result<Ipv4Addr> {
         host.parse::<Ipv4Addr>()
             .map_err(|_| Error::Argument("invalid ipv4 format.", "--host"))
     }
 
+    #[cfg(feature = "host")]
     pub fn port(port: &str) -> Result<u16> {
         port.parse::<u16>()
             .map_err(|_| Error::Argument("invalid port.", "--port"))

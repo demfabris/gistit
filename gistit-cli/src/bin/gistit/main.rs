@@ -24,10 +24,12 @@ mod arg;
 mod dispatch;
 mod fetch;
 mod fmt;
-mod node;
 mod param;
 mod send;
 mod stdin;
+
+#[cfg(feature = "host")]
+mod node;
 
 pub use libgistit::error::Error;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -42,6 +44,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::single_match_else)]
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(arg::app().get_matches()));
     libgistit::project::init_dirs()?;
@@ -63,6 +66,7 @@ async fn run() -> Result<()> {
             let payload = action.prepare().await?;
             action.dispatch(payload).await?;
         }
+        #[cfg(feature = "host")]
         ("node", Some(args)) => {
             let action = node::Action::from_args(args)?;
             let payload = action.prepare().await?;
