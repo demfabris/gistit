@@ -26,6 +26,7 @@ pub mod file;
 pub mod hash;
 pub mod project;
 pub mod server;
+pub mod github;
 
 pub use error::Error;
 pub type Result<T> = std::result::Result<T, Error>;

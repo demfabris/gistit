@@ -12,3 +12,5 @@ keys/*
 
 # Logs
 *.log
+
+.runtimeconfig.json

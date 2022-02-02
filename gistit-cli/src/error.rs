@@ -2,75 +2,74 @@ use console::style;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("{}", fmt(.0))]
+    #[error("{0}")]
     IO(#[from] std::io::Error),
 
-    #[error("{}", fmt(.0))]
+    #[error("{0}")]
     Request(#[from] reqwest::Error),
 
-    #[error("{}", fmt(.0))]
+    #[error("{0}")]
     Clipboard(#[from] Clipboard),
 
-    #[error("{}", fmt(.0))]
+    #[error("{0}")]
     Encoding(#[from] base64::DecodeError),
 
-    #[error("{}", fmt(.0))]
+    #[error("{0}")]
+    Utf8(#[from] std::str::Utf8Error),
+
+    #[error("{0}")]
+    UrlParse(#[from] url::ParseError),
+
+    #[error("{0}")]
+    JsonParse(#[from] serde_json::Error),
+
+    #[error("{0}")]
     Ipc(#[from] gistit_ipc::Error),
 
-    #[error("{}", fmt(.0))]
+    #[error("{0}")]
     Tui(#[from] bat::error::Error),
 
-    #[error("{}", fmt(.0))]
+    #[error("{0}")]
     Other(#[from] which::Error),
 
-    #[error("{}", fmt(Self::from(.0.clone())))]
+    #[error("{0}")]
     Server(String),
 
     /// (Reason, Param)
-    #[error("{}", fmt_arg(.0, .1))]
+    #[error("{}", fmt_subcat("PARAM", .0, .1))]
     Argument(&'static str, &'static str),
 
     #[error("{}", fmt_suggest("invalid colorscheme parameter", .0.clone()))]
     Colorscheme(String),
 
-    #[error("{}", fmt(Self::from("unknown cause".to_owned())))]
-    Unknown,
-}
+    #[error("{0}")]
+    OAuth(String),
 
-fn fmt(err: impl std::error::Error) -> String {
-    format!(
-        r#"
-CAUSE:
-    {}
-        "#,
-        err
-    )
+    #[error("unknown error")]
+    Unknown,
 }
 
 fn fmt_suggest(cause: &'static str, suggest: String) -> String {
     format!(
-        r#"
-CAUSE:
-    {}
+        r#"{}
 
-Did you mean: {}?
+Did you mean: '{}'?
         "#,
         cause,
         style(suggest).blue().bold()
     )
 }
 
-fn fmt_arg(cause: &'static str, param: &'static str) -> String {
+fn fmt_subcat(subcat: &'static str, cause: &'static str, param: &'static str) -> String {
     format!(
-        r#"
-CAUSE:
-    {}
+        r#"{}
 
-PARAM:
+{}: 
     {}
 "#,
         cause,
-        style(param).red().bold()
+        subcat,
+        style(param).dim()
     )
 }
 

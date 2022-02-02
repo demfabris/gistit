@@ -35,6 +35,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[tokio::main]
 async fn main() -> Result<()> {
     if let Err(err) = run().await {
+        interruptln!();
         errorln!(err);
     };
 
@@ -43,9 +44,9 @@ async fn main() -> Result<()> {
 
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(arg::app().get_matches()));
+    libgistit::project::init_dirs()?;
 
     let (cmd, args) = if let Some((cmd, args)) = matches.subcommand() {
-        fmt::set_action(cmd)?;
         (cmd, Some(args))
     } else {
         ("", None)

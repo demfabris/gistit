@@ -1,12 +1,29 @@
-import * as __fn from "firebase-functions";
-import * as __adm from "firebase-admin";
-import { checkHash, checkParamsCharLength, checkFileSize } from "./checks";
-import { LIFESPAN } from "./defs.json";
+import * as functions from "firebase-functions";
+import * as admin from "firebase-admin";
 
-__adm.initializeApp();
-const db = __adm.firestore();
+export { auth, token, tokenScheduledCleanup } from "./auth";
+export {
+  createReservedData,
+  updateReservedData,
+  gistitScheduledCleanup,
+} from "./reserved";
 
-type GistitPayload = {
+admin.initializeApp();
+
+export const db = admin.firestore();
+
+const GISTIT_HASH_LENGTH = 32; // md5 hash
+
+const GISTIT_AUTHOR_MAX_CHAR_LENGTH = 50;
+const GISTIT_AUTHOR_MIN_CHAR_LENGTH = 3;
+
+const GISTIT_DESCRIPTION_MAX_CHAR_LENGTH = 100;
+const GISTIT_DESCRIPTION_MIN_CHAR_LENGTH = 10;
+
+const GISTIT_FILE_MAX_SIZE = 50_000_000; // 50kb
+const GISTIT_FILE_MIN_SIZE = 20; // 20 bytes
+
+export type GistitPayload = {
   hash: string;
   author: string;
   description: string;
@@ -19,19 +36,43 @@ type GistitPayload = {
   };
 };
 
-export const load = __fn.https.onRequest(async (req, res) => {
+export const load = functions.https.onRequest(async (req, res) => {
   try {
+    const gistit = req.body;
     const {
       hash,
       author,
       description,
       timestamp,
       inner: { name, lang, data, size },
-    } = req.body as GistitPayload;
+    } = gistit as GistitPayload;
+    functions.logger.log(gistit);
 
-    checkHash(hash);
-    checkParamsCharLength(author, description);
-    checkFileSize(size);
+    if (hash?.length !== GISTIT_HASH_LENGTH)
+      throw Error("Invalid gistit hash format");
+
+    if (
+      author &&
+      (author.length > GISTIT_AUTHOR_MAX_CHAR_LENGTH ||
+        author.length < GISTIT_AUTHOR_MIN_CHAR_LENGTH)
+    ) {
+      throw Error("Invalid author length");
+    }
+
+    if (
+      description &&
+      (description.length > GISTIT_DESCRIPTION_MAX_CHAR_LENGTH ||
+        description.length < GISTIT_DESCRIPTION_MIN_CHAR_LENGTH)
+    ) {
+      throw Error("Invalid description length");
+    }
+
+    if (
+      data.length > GISTIT_FILE_MAX_SIZE ||
+      data.length < GISTIT_FILE_MIN_SIZE
+    ) {
+      throw Error("File size is not allowed");
+    }
 
     await db.collection("gistits").doc(hash).set({
       author,
@@ -40,17 +81,18 @@ export const load = __fn.https.onRequest(async (req, res) => {
       inner: { name, lang, data, size },
     });
 
-    __fn.logger.info("added gistit: ", hash);
+    functions.logger.info("added gistit: ", hash);
     res.send({
       success: {
         hash,
         author,
         description,
         timestamp,
-        inner: { name, lang, data: { inner: "" }, size },
+        inner: { name, lang, data: "", size }, // We don't send 'data' back to save bandwidth
       },
     });
   } catch (err) {
+    functions.logger.error(err);
     res.status(400).send({ error: (err as Error).message });
   }
 });
@@ -59,7 +101,7 @@ type FetchPayload = {
   hash: string;
 };
 
-export const get = __fn.https.onRequest(async (req, res) => {
+export const get = functions.https.onRequest(async (req, res) => {
   try {
     const { hash } = req.body as FetchPayload;
     const gistitRef = await db.collection("gistits").doc(hash).get();
@@ -67,61 +109,10 @@ export const get = __fn.https.onRequest(async (req, res) => {
       res.status(404).send({ error: "Gistit does not exist" });
       return;
     }
+
     const gistit = gistitRef.data();
     res.send({ success: { ...gistit, hash } });
   } catch (err) {
     res.status(400).send({ error: (err as Error).message });
   }
 });
-
-interface onChangeContext extends __fn.EventContext {
-  params: {
-    hash: string;
-  };
-}
-
-export const createReservedData = __fn.firestore
-  .document("gistits/{hash}")
-  .onCreate(async (snap, context) => {
-    const hash = (context as onChangeContext).params.hash;
-    const { timestamp } = snap.data() as GistitPayload;
-
-    return db
-      .collection("reserved")
-      .doc(hash)
-      .set({
-        removeAt: timestamp + LIFESPAN,
-        reuploaded: 0,
-      });
-  });
-
-export const updateReservedData = __fn.firestore
-  .document("gistits/{hash}")
-  .onUpdate(async (change, context) => {
-    const hash = (context as onChangeContext).params.hash;
-    const { timestamp } = change.after.data() as GistitPayload;
-
-    return db
-      .collection("reserved")
-      .doc(hash)
-      .update({
-        removeAt: timestamp + LIFESPAN,
-        reuploaded: __adm.firestore.FieldValue.increment(1),
-      });
-  });
-
-export const scheduledCleanup = __fn.pubsub
-  .schedule("every 30 mins")
-  .onRun(async () => {
-    const expiredDocuments = await db
-      .collection("reserved")
-      .where("removeAt", "<", Date.now())
-      .get();
-
-    expiredDocuments.forEach(async (doc) => {
-      const hash = doc.id;
-      await db.doc(`reserved/${hash}`).delete();
-      await db.doc(`gistits/${hash}`).delete();
-    });
-    return null;
-  });

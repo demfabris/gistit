@@ -4,23 +4,43 @@ use url::Url;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
-use crate::file::{EncodedFileData, File};
+use crate::file::{B64EncodedFileData, File};
 use crate::{Error, Result};
 
-const SERVER_URL_BASE: &str = "https://us-central1-gistit-base.cloudfunctions.net";
-const SERVER_SUBPATH_GET: &str = "/gistit-base/us-central1/get";
-const SERVER_SUBPATH_LOAD: &str = "/gistit-base/us-central1/load";
+// #[cfg(debug_assertions)]
+// lazy_static! {
+//     static ref SERVER_URL_BASE: Url = Url::parse("http://localhost:4001/")
+//         .unwrap()
+//         .join("gistit-base/")
+//         .unwrap()
+//         .join("us-central1/")
+//         .unwrap();
+// }
+
+lazy_static! {
+    static ref SERVER_URL_BASE: Url =
+        Url::parse("https://us-central1-gistit-base.cloudfunctions.net/").unwrap();
+}
+
+const SERVER_SUBPATH_GET: &str = "get";
+const SERVER_SUBPATH_LOAD: &str = "load";
+const SERVER_SUBPATH_TOKEN: &str = "token";
 
 lazy_static! {
     pub static ref SERVER_URL_GET: Url =
-        Url::parse(option_env!("GISTIT_SERVER_URL").unwrap_or(SERVER_URL_BASE))
+        Url::parse(option_env!("GISTIT_SERVER_URL").unwrap_or_else(|| SERVER_URL_BASE.as_str()))
             .expect("invalid `GISTIT_SERVER_URL` variable")
             .join(SERVER_SUBPATH_GET)
             .unwrap();
     pub static ref SERVER_URL_LOAD: Url =
-        Url::parse(option_env!("GISTIT_SERVER_URL").unwrap_or(SERVER_URL_BASE))
+        Url::parse(option_env!("GISTIT_SERVER_URL").unwrap_or_else(|| SERVER_URL_BASE.as_str()))
             .expect("invalid `GISTIT_SERVER_URL` variable")
             .join(SERVER_SUBPATH_LOAD)
+            .unwrap();
+    pub static ref SERVER_URL_TOKEN: Url =
+        Url::parse(option_env!("GISTIT_SERVER_URL").unwrap_or_else(|| SERVER_URL_BASE.as_str()))
+            .expect("invalid `GISTIT_SERVER_URL` variable")
+            .join(SERVER_SUBPATH_TOKEN)
             .unwrap();
 }
 
@@ -42,7 +62,7 @@ impl Gistit {
     pub fn to_file(&self) -> Result<File> {
         let name = self.inner.name.clone();
 
-        File::from_bytes_encoded(self.inner.data.inner.as_bytes(), &name)
+        File::from_bytes_encoded(self.inner.data.0.as_bytes(), &name)
     }
 }
 
@@ -51,7 +71,7 @@ pub struct Inner {
     pub name: String,
     pub lang: String,
     pub size: usize,
-    pub data: EncodedFileData,
+    pub data: B64EncodedFileData,
 }
 
 #[derive(Deserialize, Debug, Default)]

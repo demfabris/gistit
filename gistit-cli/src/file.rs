@@ -16,14 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::Result;
 
-/// Type alias for a base64 encoded and AES256 encrypted file with embedded header
-pub type HeadfulEncryptedB64String = String;
-
-/// Type alias for the fully processed file data
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
-pub struct EncodedFileData {
-    pub inner: HeadfulEncryptedB64String,
-}
+pub struct B64EncodedFileData(pub String);
 
 /// Supported file extensions
 /// This is a compile time built hashmap to check incomming file extensions against.
@@ -698,10 +692,8 @@ impl File {
     }
 
     #[must_use]
-    pub fn to_encoded_data(&self) -> EncodedFileData {
-        EncodedFileData {
-            inner: base64::encode(&self.bytes),
-        }
+    pub fn to_encoded_data(&self) -> B64EncodedFileData {
+        B64EncodedFileData(base64::encode(&self.bytes))
     }
 
     /// Save the file to the given path

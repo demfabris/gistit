@@ -8,16 +8,18 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
 use gistit_ipc::{self, Instruction};
+use reqwest::StatusCode;
 
 use libgistit::clipboard::Clipboard;
 use libgistit::file::File;
+use libgistit::github::{self, CreateResponse, GITHUB_GISTS_API_URL};
 use libgistit::hash::Hasheable;
-use libgistit::project::runtime_dir;
+use libgistit::project::{config_dir, runtime_dir};
 use libgistit::server::{Gistit, Inner, IntoGistit, Response, SERVER_URL_LOAD};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::{prettyln, Error, Result};
+use crate::{finish, progress, updateln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -26,6 +28,7 @@ pub struct Action {
     pub description: Option<&'static str>,
     pub author: &'static str,
     pub clipboard: bool,
+    pub github: bool,
 }
 
 impl Action {
@@ -33,7 +36,6 @@ impl Action {
         args: &'static ArgMatches,
         maybe_stdin: Option<String>,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        prettyln!("Preparing gistit...",);
         Ok(Box::new(Self {
             file_path: args.value_of_os("FILE"),
             maybe_stdin,
@@ -42,6 +44,7 @@ impl Action {
                 .value_of("author")
                 .ok_or(Error::Argument("missing argument", "--author"))?,
             clipboard: args.is_present("clipboard"),
+            github: args.is_present("github"),
         }))
     }
 }
@@ -52,6 +55,7 @@ pub struct Config {
     author: &'static str,
     description: Option<&'static str>,
     clipboard: bool,
+    github_token: Option<github::Token>,
 }
 
 impl Hasheable for Config {
@@ -97,6 +101,7 @@ impl Dispatch for Action {
     type InnerData = Config;
 
     async fn prepare(&self) -> Result<Self::InnerData> {
+        progress!("Preparing");
         let file = if let Some(file_ostr) = self.file_path {
             let path = Path::new(file_ostr);
             let attr = fs::metadata(&path)?;
@@ -113,9 +118,32 @@ impl Dispatch for Action {
         };
 
         let author = check::author(self.author)?;
-
         let description = if let Some(value) = self.description {
             Some(check::description(value)?)
+        } else {
+            None
+        };
+        updateln!("Prepared");
+
+        let github_token = if self.github {
+            progress!("Authorizing");
+            let mut oauth = github::Oauth::new()?;
+
+            if oauth.token().is_none() {
+                if let Err(url) = oauth.authorize() {
+                    warnln!(
+                        "failed to open your web browser. \n\nAuthorize manually: '{}'",
+                        style(url).cyan()
+                    );
+                }
+                oauth.poll_token().await?;
+                warnln!(
+                    "storing github token at: '{}'",
+                    config_dir()?.to_string_lossy()
+                );
+            }
+            updateln!("Authorized");
+            oauth.token
         } else {
             None
         };
@@ -125,28 +153,79 @@ impl Dispatch for Action {
             description,
             author,
             clipboard: self.clipboard,
+            github_token,
         })
     }
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
-        let runtime_dir = runtime_dir()?;
         let hash = config.hash();
+
+        let runtime_dir = runtime_dir()?;
         let clipboard = config.clipboard;
 
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
         if bridge.alive() {
-            prettyln!("Hosting gistit...");
+            progress!("Hosting");
+
             bridge.connect_blocking()?;
             bridge.send(Instruction::Provide {
                 hash: hash.clone(),
                 // data: config.file.to_encoded_data(),
                 data: Vec::new(),
             })?;
+            // TODO: wait for ok response from node
+            updateln!("Hosted");
         } else {
-            prettyln!("Uploading to server...");
+            progress!("Sending");
+            let maybe_github_token = config.github_token.as_ref().map(Clone::clone);
+
+            let maybe_gist = if let Some(token) = maybe_github_token {
+                let name = config.file.name();
+                let description = config.description.unwrap_or("");
+                let data = str::from_utf8(config.file.data())?;
+
+                let response = reqwest::Client::new()
+                    .post(GITHUB_GISTS_API_URL)
+                    .header("User-Agent", "gistit")
+                    .header("Authorization", format!("token {}", token.access_token))
+                    .header("Accept", "application/vnd.github.v3+json")
+                    .json(&serde_json::json!({
+                        "description": description,
+                        "public": true,
+                        "files": {
+                            name: {
+                                "content": data
+                            }
+                        }
+                    }))
+                    .send()
+                    .await?;
+
+                match response.status() {
+                    StatusCode::CREATED => {
+                        let data: CreateResponse = response.json().await?;
+                        Some(data.url)
+                    }
+                    StatusCode::FORBIDDEN | StatusCode::UNPROCESSABLE_ENTITY => {
+                        warnln!(
+                            "your github token is expired, nothing was posted. status {}",
+                            response.status()
+                        );
+                        None
+                    }
+                    _ => {
+                        warnln!("got a invalid response from github, nothing was posted");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            let gistit = config.into_gistit()?;
             let response: Response = reqwest::Client::new()
                 .post(SERVER_URL_LOAD.to_string())
-                .json(&config.into_gistit()?)
+                .json(&gistit)
                 .send()
                 .await?
                 .json()
@@ -159,23 +238,31 @@ impl Dispatch for Action {
                     .into_provider()
                     .set_contents()?;
             }
-        };
+            updateln!("Sent");
 
-        println!(
-            r#"
-SUCCESS:
-    hash: {} {}
-    url: {}{}
-            "#,
-            style(&hash).bold().blue(),
-            if self.clipboard {
-                style("(copied to clipboard)").italic().to_string()
+            let clipboard_msg = if self.clipboard {
+                style("(copied to clipboard)").italic().dim().to_string()
             } else {
                 "".to_string()
-            },
-            "https://gistit.vercel.app/",
-            style(&hash).bold().blue()
-        );
+            };
+
+            let gist = maybe_gist.map_or_else(
+                || "".to_string(),
+                |gist_url| format!("github gist: '{}'\n", gist_url),
+            );
+
+            finish!(format!(
+                r#"
+    hash: '{}' {}
+    url: 'https://gistit.vercel.app/h/{}'
+    {}      "#,
+                style(&hash).bold(),
+                clipboard_msg,
+                style(&hash).bold(),
+                gist
+            ));
+        };
+
         Ok(())
     }
 }

@@ -1,40 +1,25 @@
-use once_cell::sync::OnceCell;
+use std::sync::{Arc, Mutex};
 
-use crate::Result;
-
-pub static CURRENT_ACTION: OnceCell<String> = OnceCell::new();
-
-pub fn set_action(action_name: &str) -> Result<()> {
-    Ok(CURRENT_ACTION.set(action_name.to_owned())?)
-}
+use indicatif::{ProgressBar, ProgressStyle};
 
 #[macro_export]
 macro_rules! errorln {
     ($err:expr) => {{
-        use crate::fmt::CURRENT_ACTION;
         use console::style;
 
         eprintln!(
-            "{}: Something went wrong during {}{}: \n    {}",
+            "{}: {}",
             style("error").red().bold(),
-            style("gistit-").green().bold(),
-            style(CURRENT_ACTION.get().unwrap_or(&"any".to_owned()))
-                .green()
-                .bold(),
             $err
         );
     }};
+
     ($msg:literal, $($rest:expr),* $(,)*) => {{
-        use crate::fmt::CURRENT_ACTION;
         use console::style;
 
         let msg = format!($msg, $($rest,)*);
-        println!("{}: Something went wrong during {}{}: \n    {}",
+        println!("{}: {}",
             style("error").red().bold(),
-            style("gistit-").green().bold(),
-            style(CURRENT_ACTION.get().unwrap_or("any"))
-                .green()
-                .bold(),
             msg
         );
     }};
@@ -43,46 +28,101 @@ macro_rules! errorln {
 #[macro_export]
 macro_rules! warnln {
     ($warn:expr) => {{
-        use crate::fmt::CURRENT_ACTION;
         use console::style;
+        use crate::fmt::PROGRESS;
 
-        eprintln!(
-            "{}: in {}{}: \n    {}",
+        PROGRESS.println(format!( "{}: {}",
             style("warning").yellow().bold(),
-            style("gistit-").green().bold(),
-            style(CURRENT_ACTION.get().unwrap_or(&"any".to_owned()))
-                .green()
-                .bold(),
             $warn
-        );
+        ));
     }};
+
     ($msg:literal, $($rest:expr),* $(,)*) => {{
-        use crate::fmt::CURRENT_ACTION;
         use console::style;
+        use crate::fmt::PROGRESS;
 
         let msg = format!($msg, $($rest,)*);
-        println!("{}: in {}{}: \n    {}",
+        PROGRESS.println(format!("{}: {}",
             style("warning").yellow().bold(),
-            style("gistit-").green().bold(),
-            style(CURRENT_ACTION.get().unwrap_or("any"))
-                .green()
-                .bold(),
             msg
-        );
+        ));
     }};
 }
 
 #[macro_export]
-macro_rules! prettyln {
+macro_rules! progress {
     ($msg:expr) => {{
-        println!(
-            "{}{}",
-            console::Emoji("\u{2734}  ", "> "),
-            console::style($msg).bold(),
-        );
+        use crate::fmt::{PROGRESS, STATUS};
+        let mut status = STATUS.lock().unwrap();
+        PROGRESS.set_message($msg);
+        *status = Box::leak(Box::new($msg));
     }};
+
     ($msg:literal, $($rest:expr),* $(,)*) => {{
+        use crate::fmt::{PROGRESS, STATUS};
+        let mut status = STATUS.lock().unwrap();
         let msg = format!($msg, $($rest,)*);
-        println!("{}{}", console::Emoji("\u{2734}  ", "> "), console::style(msg).bold());
+        PROGRESS.set_message(msg.clone());
+        *status = Box::leak(Box::new(msg));
     }};
+}
+
+#[macro_export]
+macro_rules! updateln {
+    ($msg:expr) => {{
+        use console::{style, Emoji};
+        use crate::fmt::PROGRESS;
+        PROGRESS.println(format!("{} {}", style(Emoji("✔️ ", "> ")).green(), $msg));
+    }};
+
+    ($msg:literal, $($rest:expr),* $(,)*) => {{
+        use crate::fmt::PROGRESS;
+        let msg = format!($msg, $($rest,)*);
+        PROGRESS.println(format!("{} {}", style(Emoji("✔️ ", "> ")).green(), msg));
+    }};
+}
+
+#[macro_export]
+macro_rules! finish {
+    ($msg:expr) => {{
+        use crate::fmt::PROGRESS;
+
+        PROGRESS.println(format!("{}", $msg));
+        PROGRESS.finish_and_clear();
+    }};
+}
+
+#[macro_export]
+macro_rules! interruptln {
+    () => {{
+        use crate::fmt::{PROGRESS, STATUS};
+        use console::{style, Emoji};
+        let status = STATUS.lock().unwrap();
+
+        PROGRESS.println(format!("{} {}", style(Emoji("❌", "x ")).red(), status));
+        PROGRESS.finish_and_clear();
+    }};
+}
+
+lazy_static::lazy_static! {
+    pub static ref PROGRESS: ProgressBar = {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+        ProgressStyle::default_spinner()
+            .tick_strings(&[
+                "◜",
+                "◠",
+                "◝",
+                "◞",
+                "◡",
+                "◟",
+                "✔️",
+            ])
+            .template("{spinner:.blue}  {msg}"),
+        );
+        pb.enable_steady_tick(100);
+        pb
+    };
+
+    pub static ref STATUS: Arc<Mutex<&'static str>> = Arc::new(Mutex::new(""));
 }
