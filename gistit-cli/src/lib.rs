@@ -23,10 +23,11 @@
 pub mod clipboard;
 pub mod error;
 pub mod file;
+pub mod github;
 pub mod hash;
+pub mod patch;
 pub mod project;
 pub mod server;
-pub mod github;
 
 pub use error::Error;
 pub type Result<T> = std::result::Result<T, Error>;

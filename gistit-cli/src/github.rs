@@ -8,8 +8,8 @@ use rand::{distributions::Alphanumeric, Rng};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use url::Url;
-use webbrowser::{self, BrowserOptions};
 
+use crate::patch::webbrowser::{self, BrowserOptions};
 use crate::project::config_dir;
 use crate::server::SERVER_URL_TOKEN;
 use crate::{Error, Result};
