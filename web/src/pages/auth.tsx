@@ -15,8 +15,6 @@ const Auth: NextPage = () => {
   const { code, state } = router.query as RequiredParams
   const url = process.env.GITHUB_OAUTH_URL as string
 
-  const authorize = async (code: string, url: string) => {}
-
   useEffect(() => {
     if (code && state)
       (async () => {

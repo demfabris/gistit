@@ -10,3 +10,10 @@ export function useColorMode() {
 
   return () => setTheme(theme === 'dark' ? 'light' : 'dark')
 }
+
+import create from 'zustand'
+
+export const useColorStore = create((set: any) => ({
+  dark: true,
+  toggleColorMode: () => set((state: any) => ({ dark: !state.dark }))
+}))
