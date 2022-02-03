@@ -1,4 +1,3 @@
 # gistit-ipc
 
-Inter process communication module used for comms in (https://github.com/fabricio7p/gistit/tree/master/gistit-cli)[gistit-cli] and
-(https://github.com/fabricio7p/gistit/tree/master/gistit-daemon)[gistit-daemon]
+Inter process communication module used for comms in [gistit-cli](https://github.com/fabricio7p/gistit/tree/master/gistit-cli) and [gistit-daemon](https://github.com/fabricio7p/gistit/tree/master/gistit-daemon)
