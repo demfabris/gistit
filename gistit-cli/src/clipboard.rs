@@ -124,7 +124,7 @@ fn select_display() -> DisplayKind {
 }
 
 /// Checks whether we're under windows subsystem for linux
-#[cfg(target_os = "linux")]
+#[cfg(target_family = "unix")]
 fn is_wsl() -> bool {
     env::var("WSL_DISTRO_NAME").is_ok()
         || env::var("WT_SESSION").is_ok()
