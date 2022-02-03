@@ -102,16 +102,40 @@ type FetchPayload = {
 };
 
 export const get = functions.https.onRequest(async (req, res) => {
+  res
+    // .setHeader("Access-Control-Allow-Origin", "https://gistit.vercel.app")
+    .setHeader("Access-Control-Allow-Origin", "*")
+    .setHeader("Access-Control-Allow-Credentials", "true")
+    .setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
+    .setHeader(
+      "Access-Control-Allow-Headers",
+      "Access-Control-Allow-Headers, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers"
+    );
+
   try {
-    const { hash } = req.body as FetchPayload;
+    let payload: FetchPayload = { hash: "" };
+
+    if (req.body instanceof Object) {
+      payload = req.body as FetchPayload;
+    } else {
+      payload = JSON.parse(req.body) as FetchPayload;
+    }
+
+    const { hash } = payload;
+    functions.logger.debug(hash);
+
+    if (hash?.length !== GISTIT_HASH_LENGTH)
+      throw Error("Invalid gistit hash format");
+
     const gistitRef = await db.collection("gistits").doc(hash).get();
+
     if (!gistitRef.exists) {
       res.status(404).send({ error: "Gistit does not exist" });
       return;
     }
 
     const gistit = gistitRef.data();
-    res.send({ success: { ...gistit, hash } });
+    res.status(200).send({ success: { ...gistit, hash } });
   } catch (err) {
     res.status(400).send({ error: (err as Error).message });
   }

@@ -1,5 +1,6 @@
-import { useColorMode } from 'hooks'
+import { useColorMode, useColorStore } from 'hooks'
 import { Dispatch, Fragment, SetStateAction, useRef, useState } from 'react'
+import Link from 'next/link'
 import {
   VscMenu,
   VscGithub,
@@ -16,9 +17,13 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
   const [, setSidebar] = sidebarHandler
 
   return withHeaderBar ? (
-    <header className="flex justify-center w-full px-6 mb-24 border-b-2 border-gray-200 dark:border-gray-700 md:mb-48">
+    <header className="flex justify-center w-full px-6 mb-24 border-b-2 border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between w-full h-20">
-        <Logo />
+        <Link href="/" passHref>
+          <a>
+            <Logo />
+          </a>
+        </Link>
         <Navigation />
         <Hamburguer onClick={() => setSidebar((state) => !state)} />
       </div>
@@ -30,7 +35,7 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
 
 const Logo = () => {
   return (
-    <h1 className="flex items-center justify-center h-full mr-2 text-xl font-bold text-fg">
+    <h1 className="flex items-center justify-center h-full mr-2 text-xl font-bold text-fg cursor-pointer">
       Gistit<b className="text-blue-500">.</b>
     </h1>
   )
@@ -46,13 +51,16 @@ const Hamburguer = ({ ...rest }) => {
 
 const Navigation = () => {
   const toggle = useColorMode()
+  const store = useColorStore((state) => state.toggleColorMode)
+
   return (
     <nav className="items-center justify-end hidden md:flex">
       <Search />
       <NavigationButton
         text="Github"
         icon={<VscGithub size={18} className="mr-2" />}
-        href="www.github.com/fabricio7p/gistit.git"
+        href="https://github.com/fabricio7p/gistit.git"
+        target="_blank"
       />
       <NavigationButton
         text="Docs"
@@ -62,7 +70,10 @@ const Navigation = () => {
       <NavigationButton
         text="Color Mode"
         icon={<VscColorMode size={18} className="mr-2" />}
-        callback={toggle!!}
+        callback={() => {
+          store()
+          return toggle?.call(globalThis)
+        }}
       />
     </nav>
   )
@@ -72,13 +83,15 @@ interface NavigationButtonProps {
   text: string
   icon: React.ReactChild
   href?: string
-  callback?: () => void | null
+  callback?: () => any
+  target?: string
 }
 const NavigationButton = ({
   text,
   icon,
   href,
-  callback
+  callback,
+  target
 }: NavigationButtonProps) => {
   return (
     <div
@@ -88,6 +101,7 @@ const NavigationButton = ({
       <a
         href={href}
         className="flex items-center h-full border-b-2 border-transparent cursor-pointer hover:border-blue-500"
+        target={target}
       >
         {icon}
         {text}

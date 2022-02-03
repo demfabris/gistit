@@ -14,12 +14,14 @@ const Home: NextPage = () => {
           Quick and easy <b className="font-bold">anonymous</b> code snippet
           sharing.
         </span>
-        <button className="flex flex-row items-center px-8 text-lg font-medium text-white bg-blue-500 rounded-full h-14 shadow-sm">
-          Get started
-          <i>
-            <VscRocket size="20" className="ml-3" />
-          </i>
-        </button>
+        <a href="#prerequisites">
+          <button className="flex flex-row items-center px-8 text-lg font-medium text-white bg-blue-500 rounded-full h-14 shadow-sm">
+            Get started
+            <i>
+              <VscRocket size="20" className="ml-3" />
+            </i>
+          </button>
+        </a>
         <div className="flex w-full mt-20 border-b-2 border-gray-200 dark:border-gray-700"></div>
         <ul className="flex flex-col justify-between w-full px-6 mt-16 md:flex-row md:px-0 gap-x-14 gap-y-10">
           <li className="flex flex-col w-full">
@@ -45,12 +47,13 @@ const Home: NextPage = () => {
           </li>
         </ul>
         <video
-          src="#"
+          src="/clipboard.webm"
+          autoPlay={true}
+          loop={true}
           width="768px"
-          height="481px"
-          className="my-20 bg-gray-200 dark:bg-gray-700"
+          className="my-20 bg-gray-200 border-gray-700 rounded-lg dark:bg-gray-700 border-[1px]"
         />
-        <article className="flex flex-col w-full text-left">
+        <article className="flex flex-col w-full mb-10 text-left">
           <Heading
             text="Prerequisites"
             id="prerequisites"
@@ -69,16 +72,16 @@ const Home: NextPage = () => {
           Gistit is avaiable in most distribution channels.
           <SubHeading text="Quick Install" />
           <div className="pl-6">
-            <DocText text="With shell : " />
-            <Code
-              codeString="sh -c '$(curl -fsSL https://gistit.io/install.sh)'"
-              lang="sh"
-            />
+            <DocText text="With cargo: " />
+            <Code codeString="cargo install gistit" lang="sh" />
           </div>
           <SubHeading text="Cli binary" />
           <div className="pl-6">
-            <DocText text="Get the latest build for your system here : " />
-            <DocLink text="Github" href="#" />
+            <DocText text="Get the latest build for your system here: " />
+            <DocLink
+              text="Github"
+              href="https://github.com/fabricio7p/gistit/releases"
+            />
           </div>
         </article>
       </>

@@ -1,1 +1,1 @@
-export { useColorMode } from './ColorMode'
+export { useColorMode, useColorStore } from './ColorMode'
