@@ -41,6 +41,7 @@ A feature packed, hash based `code` snippet sharing tool focused on ease of use 
 ### Feature requests
 
 [I want a feature](https://github.com/fabricio7p/gistit/issues/new)
+_Windows support comming soon_
 
 ## CLI
 

@@ -15,16 +15,6 @@
 //!
 //! * This library requires availability of browsers and a graphical environment during runtime
 //! * `cargo test` will actually open the browser locally.
-//!
-//! # Examples
-//!
-//! ```no_run
-//! use webbrowser;
-//!
-//! if webbrowser::open("http://github.com").is_ok() {
-//!     // ...
-//! }
-//! ```
 
 #[cfg(windows)]
 extern crate widestring;
@@ -130,40 +120,10 @@ pub struct BrowserOptions {
     pub url: String,
 }
 
-/// Opens the URL on the default browser of this platform
-///
-/// Returns Ok(..) so long as the browser invocation was successful. An Err(..) is returned only if
-/// there was an error in running the command, or if the browser was not found.
-///
-/// Equivalent to:
-/// ```no_run
-/// # use webbrowser::{Browser, open_browser};
-/// # let url = "http://example.com";
-/// open_browser(Browser::Default, url);
-/// ```
-///
-/// # Examples
-/// ```no_run
-/// use webbrowser;
-///
-/// if webbrowser::open("http://github.com").is_ok() {
-///     // ...
-/// }
-/// ```
 pub fn open(url: &str) -> Result<Output> {
     open_browser(Browser::Default, url)
 }
 
-/// Opens the specified URL on the specific browser (if available) requested. Return semantics are
-/// the same as for [open](fn.open.html).
-///
-/// # Examples
-/// ```no_run
-/// use webbrowser::{open_browser, Browser};
-///
-/// if open_browser(Browser::Firefox, "http://github.com").is_ok() {
-///     // ...
-/// }
 /// ```
 pub fn open_browser(browser: Browser, url: &str) -> Result<Output> {
     open_browser_with_options(BrowserOptions {
@@ -191,17 +151,6 @@ impl BrowserOptions {
     }
 }
 
-/// Opens the specified URL on the specific browser (if available) requested. Return semantics are
-/// the same as for [open](fn.open.html).
-///
-/// # Examples
-/// ```no_run
-/// use webbrowser::{open_browser_with_options, BrowserOptions};
-///
-/// if open_browser_with_options(BrowserOptions::create("http://github.com")).is_ok() {
-///     // ...
-/// }
-/// ```
 pub fn open_browser_with_options(options: BrowserOptions) -> Result<Output> {
     open_browser_internal(
         options.browser.unwrap_or(Browser::default()),
