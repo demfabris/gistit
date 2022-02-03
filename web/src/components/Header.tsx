@@ -1,5 +1,6 @@
 import { useColorMode, useColorStore } from 'hooks'
 import { Dispatch, Fragment, SetStateAction, useRef, useState } from 'react'
+import Link from 'next/link'
 import {
   VscMenu,
   VscGithub,
@@ -18,9 +19,11 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
   return withHeaderBar ? (
     <header className="flex justify-center w-full px-6 mb-24 border-b-2 border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between w-full h-20">
-        <a href="/">
-          <Logo />
-        </a>
+        <Link href="/" passHref>
+          <a>
+            <Logo />
+          </a>
+        </Link>
         <Navigation />
         <Hamburguer onClick={() => setSidebar((state) => !state)} />
       </div>
@@ -32,7 +35,7 @@ export const Header = ({ withHeaderBar, sidebarHandler }: HeaderProps) => {
 
 const Logo = () => {
   return (
-    <h1 className="flex items-center justify-center h-full mr-2 text-xl font-bold text-fg">
+    <h1 className="flex items-center justify-center h-full mr-2 text-xl font-bold text-fg cursor-pointer">
       Gistit<b className="text-blue-500">.</b>
     </h1>
   )
