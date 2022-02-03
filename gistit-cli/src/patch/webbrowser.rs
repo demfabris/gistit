@@ -438,12 +438,14 @@ fn open_on_unix_using_browser_env(url: &str, suppress_output: bool) -> Result<Ex
 compile_error!("Only Windows, Mac OS, Linux and *BSD are currently supported");
 
 #[test]
+#[ignore]
 fn test_open_default() {
     assert!(open("http://github.com").is_ok());
     assert!(open("http://github.com?dummy_query1=0&dummy_query2=ｎｏｎａｓｃｉｉ").is_ok());
 }
 
 #[test]
+#[ignore]
 fn test_open_with_options() {
     assert!(open_browser_with_options(BrowserOptions::create("http://github.com")).is_ok());
 }
