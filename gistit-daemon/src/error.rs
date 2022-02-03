@@ -2,7 +2,7 @@
 pub enum Error {
     #[error("fail to parse multiaddr: {0}")]
     Multiaddr(#[from] libp2p::multiaddr::Error),
-    
+
     #[error("i/o error, {0}")]
     IO(#[from] std::io::Error),
 
@@ -13,5 +13,5 @@ pub enum Error {
     Transport(#[from] libp2p::TransportError<std::io::Error>),
 
     #[error("dial error, {0}")]
-    Dial(#[from] libp2p::swarm::DialError)
+    Dial(#[from] libp2p::swarm::DialError),
 }
