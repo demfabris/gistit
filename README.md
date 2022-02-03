@@ -8,12 +8,12 @@
 <h3 align="center">⚡️ Quick and easy <code>code</code> snippet sharing tool</h3>
 <h1></h1>
 <p align="center">
-  <a href="#"
+  <a href="https://crates.io/crates/gistit/"
     ><img
       src="https://img.shields.io/crates/d/gistit?style=flat-square"
       alt="Crates.io"
   /></a>
-    <a href="#"
+    <a href="https://crates.io/crates/gistit/"
     ><img
       src="https://img.shields.io/crates/v/gistit?style=flat-square"
       alt="Crates.io"
