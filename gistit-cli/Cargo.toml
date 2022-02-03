@@ -40,7 +40,7 @@ which = "4.2.2"
 rand = "0.8.4"
 phf = { version = "0.10.1", features = ["macros"] }
 thiserror = "1.0.30"
-gistit-ipc = { path = "../gistit-ipc" }
+gistit-ipc = { version = "0.1.0", path = "../gistit-ipc" }
 webbrowser = { git = "https://github.com/codota/webbrowser-rs", branch = "feature/add-suppress-output-flag-with-docs" }
 
 [build-dependencies]

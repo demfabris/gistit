@@ -877,18 +877,4 @@ mod tests {
         assert_eq!(file.name(), "foo");
         assert_eq!(file.size(), 512);
     }
-
-    #[tokio::test]
-    async fn file_temp_fs_file_deleted_on_drop() {
-        let data = "Matthew McConaughey".to_owned();
-        let file = File::from_bytes(data.as_bytes().to_owned(), "nameless").unwrap();
-        let path = file.path.clone();
-
-        assert!(fs::metadata(&path).unwrap().is_file());
-
-        drop(file);
-        let not_found = fs::metadata(&path).unwrap_err().kind();
-
-        assert!(matches!(not_found, std::io::ErrorKind::NotFound));
-    }
 }
