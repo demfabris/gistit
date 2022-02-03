@@ -1,3 +1,5 @@
+cargo-features = ["strip"]
+
 [package]
 authors = ["Fabricio <fabricio7p@protonmail.com>"]
 categories = ["command-line-utilities", "text-processing"]
@@ -71,7 +73,7 @@ predicates = "2.1.1"
 
 [profile.release]
 lto = true
-# codegen-units = 1
-# opt-level = "z"
+codegen-units = 1
+opt-level = "z"
 # panic = "abort"
-# strip = true
+strip = true
