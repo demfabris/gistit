@@ -1,13 +1,11 @@
 [package]
+name = "gistit-daemon"
 authors = ["Fabricio <fabricio7p@protonmail.com>"]
-categories = ["command-line-utilities", "text-processing"]
 description = "Gistit daemon used for p2p file sharing"
 edition = "2021"
-keywords = ["code", "snippets", "share", "hash"]
 license = "MIT or Apache-2.0"
-readme = "./README.md"
-name = "gistit-daemon"
 repository = "https://github.com/fabricio7p/gistit"
+readme = "./README.md"
 version = "0.1.0"
 
 [dependencies]
@@ -20,7 +18,7 @@ thiserror = "1.0.30"
 gistit-ipc = { path = "../gistit-ipc" }
 
 [dependencies.clap]
-version = "3.0.13"
+version = "3.0.14"
 features = ["derive"]
 
 [dependencies.tokio]
@@ -28,7 +26,7 @@ features = ["macros", "fs", "rt", "rt-multi-thread", "sync", "io-util"]
 version = "1.16.1"
 
 [dependencies.libp2p]
-version = "0.42.0"
+version = "0.42.1"
 default-features = false
 features = ["noise", "kad", "identify", "mplex", "tcp-async-io", "dns-async-std", "yamux", "request-response", "relay", "autonat", "websocket"]
 

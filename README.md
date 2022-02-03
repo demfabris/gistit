@@ -8,21 +8,6 @@
 <h3 align="center">⚡️ Quick and easy <code>code</code> snippet sharing tool</h3>
 <h1></h1>
 <p align="center">
-  <a href="https://github.com/fabricio7p/gistit/blob/master/LICENSE"
-    ><img
-      src="https://img.shields.io/github/license/fabricio7p/gistit?color=blue&style=flat-square"
-      alt="Github license"
-  /></a>
-  <a href="https://github.com/fabricio7p/gistit/commits/master"
-    ><img
-      src="https://img.shields.io/github/commit-activity/m/fabricio7p/gistit?style=flat-square"
-      alt="Commit activity"
-  /></a>
-  <a href="#"
-    ><img
-      src="https://img.shields.io/tokei/lines/github/fabricio7p/gistit?style=flat-square"
-      alt="SLOCs"
-  /></a>
   <a href="#"
     ><img
       src="https://img.shields.io/crates/d/gistit?style=flat-square"
@@ -35,50 +20,99 @@
   /></a>
 </p>
 
-A hash based `code` snippet sharing tool focused on ease of use and simplicity.
+A feature packed, hash based `code` snippet sharing tool focused on ease of use and simplicity.
 
-**Gistit** aspires to be the end of copy/pasting code in inadequate places
+## :star: Features
 
-## ⭐ Project components
+<img
+  src="https://user-images.githubusercontent.com/46208058/152258956-fa9f685f-637e-462c-8708-35b54a925f7a.gif"
+  alt="send and fetch gif"
+  align="right"
+  width="60%"
+/>
 
- <h4><a href="https://github.com/fabricio7p/gistit/tree/master/cli">gistit-cli</a></h4>
+- **TUI support** - send and preview gistits without leaving the terminal. _(uses [bat](https://github.com/sharkdp/bat))_ :bat:
+- **Easy to use** - command line API made for humans, shell completion and fancy spinners. :man_artist:
+- **Open source** - Independent web application and server, open source top to bottom.
+- **Integrated** - Integration with GitHub Gists.
+- **Handy** - system clipboard integration that actually works.
+- **Trendy** - peer to peer file sharing through [IPFS](https://ipfs.io/) _(uses [libp2p](https://github.com/libp2p/rust-libp2p))_. :globe_with_meridians: **Soon**
 
-#### Simple command line tool. Written in Rust 🦀
+### Feature requests
 
-<ul>
-  <li>&nbsp;&nbsp;Send/upload code snippets file temporarily</li>
-  <li>&nbsp;&nbsp;Fetch <code>code</code> snippets via it's hash</li>
-  <li>&nbsp;&nbsp;Preview files with syntax highlighting (uses <a href="https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&cad=rja&uact=8&ved=2ahUKEwjH85K20NL0AhU-   pZUCHeDZBt0QFnoECBQQAQ&url=https%3A%2F%2Fgithub.com%2Fsharkdp%2Fbat&usg=AOvVaw3bT_Seb24g1Vx-7cOb086M">bat</a>)</li>
-  <li>&nbsp;&nbsp;Configure to make it your everyday tool</li>
-  <li>&nbsp;&nbsp;Auto clipboard, encryption, and more handy features...</li>
-</ul>
+[I want a feature](https://github.com/fabricio7p/gistit/issues/new)
 
-<h4><a href="https://github.com/fabricio7p/gistit/tree/master/app">gistit-app</a></h4>
+## CLI
 
-#### Web application to find and preview gistits 🌐
+### Basic Usage
 
-<ul>
-  <li>&nbsp;&nbsp;Preview snippets with syntax highlighting</li>
-  <li>&nbsp;&nbsp;Search for gistits online</li>
-</ul>
+You can send a local file or stdin.
 
-## 🚀 Using gistit
-Head to [gistit-cli](https://github.com/fabricio7p/gistit/tree/master/cli) to start sharing!
+```shell
+# Local file
+$ gistit myfile.txt
 
-Also, visit the live website: [gistit.io](https://gistit.vercel.app)
+# Stdin
+$ ls | gistit
 
-## 👩‍💻 Contributing
-Contributors please head to [Project](https://github.com/fabricio7p/gistit/projects) section
+# Additional info
+$ ls | gistit -a "Matthew McConaughey" -d "My ls, lol"
+```
 
-## 📃 License
+Post to GitHub Gists.
 
-[MIT](https://choosealicense.com/licenses/mit)
+```shell
+$ gistit myfile.txt --github
+# A browser window will open to authorize Github OAuth.
+# Hit **authorize** and wait for the CLI to resume automatically.
+```
 
-## 👀 Wish list
+Copy hash to system clipboard.
 
-What can you expect from **gistit** in the future:
+```shell
+$ gistit myfile.txt -c
+# Hash is now on your <Ctrl-V>
+```
 
-- Finish web app
-- IDE extensions
-- `host` feature for CLI. (p2p sharing)
-- QoL improvements to UX
+Fetching gistits
+
+```shell
+# Fetch and preview
+$ gistit f 8765d324ddd800f1112e77fece3d3ff2
+
+# Fetch and save to local data directory
+$ gistit f 8765d324ddd800f1112e77fece3d3ff2 --save
+```
+
+## Installation
+
+**Compiled binaries**
+_soon_
+
+**With** _\<Insert package manager here\>_
+_soon_
+
+**From [crates.io](https://crates.io/crates/gistit/)**
+
+```shell
+cargo install gistit
+```
+
+**From source** _(msrv 1.58)_
+
+```shell
+# Clone
+$ git clone https://github.com/fabricio7p/gistit.git
+
+# Move
+$ cd gistit
+
+# Build
+$ cargo build --release
+```
+
+Your binary will be inside `target/release` folder.
+
+## License
+
+Licensed under either of [MIT](https://choosealicense.com/licenses/mit) or [Apache-2.0](https://github.com/dtolnay/cargo-expand/blob/master/LICENSE-APACHE) at your option.
