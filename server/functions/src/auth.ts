@@ -28,12 +28,12 @@ export const token = functions.https.onRequest(async (req, res) => {
 
 export const auth = functions.https.onRequest(async (req, res) => {
   res
-    .setHeader("Access-Control-Allow-Origin", "*")
+    .setHeader("Access-Control-Allow-Origin", "https://gistit.vercel.app")
     .setHeader("Access-Control-Allow-Credentials", "true")
     .setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
     .setHeader(
       "Access-Control-Allow-Headers",
-      "Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers"
+      "Access-Control-Allow-Headers, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers"
     );
 
   try {
