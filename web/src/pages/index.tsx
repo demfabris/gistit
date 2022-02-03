@@ -53,7 +53,7 @@ const Home: NextPage = () => {
           width="768px"
           className="my-20 bg-gray-200 border-gray-700 rounded-lg dark:bg-gray-700 border-[1px]"
         />
-        <article className="flex flex-col w-full mb-10 text-left">
+        <article className="flex flex-col w-full mb-24 text-left">
           <Heading
             text="Prerequisites"
             id="prerequisites"

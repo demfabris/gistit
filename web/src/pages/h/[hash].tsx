@@ -53,7 +53,7 @@ const SnippetPage = () => {
 
   return (
     <Layout withHeaderBar>
-      <main className="flex flex-col w-full h-full">
+      <main className="flex flex-col w-full h-full mb-24">
         {error ? (
           <span className="flex items-center justify-center w-full mb-12 font-light">
             Gistit not found
