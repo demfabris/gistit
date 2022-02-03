@@ -39,12 +39,12 @@ jobs:
           # tar -czf gistit-alpine-x86_64.tar.gz gistit
           # rm gistit
           # arm64 builds
-          rustup target add aarch64-unknown-linux-gnu
-          cargo build --release --target aarch64-unknown-linux-gnu
-          mv target/aarch64-unknown-linux-gnu/release/gistit ./gistit
-          chmod +x gistit
-          tar -czf gistit-linux-aarch64.tar.gz gistit
-          rm gistit
+          # rustup target add aarch64-unknown-linux-gnu
+          # cargo build --release --target aarch64-unknown-linux-gnu
+          # mv target/aarch64-unknown-linux-gnu/release/gistit ./gistit
+          # chmod +x gistit
+          # tar -czf gistit-linux-aarch64.tar.gz gistit
+          # rm gistit
       - name: Publish release
         uses: softprops/action-gh-release@v1
         with:
