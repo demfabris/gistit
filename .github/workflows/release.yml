@@ -22,6 +22,7 @@ jobs:
       - name: Build
         run: |
           # build x86_64
+          sudo apt-get -y install libssl-dev
           cargo build --release --target x86_64-unknown-linux-gnu
           mv target/x86_64-unknown-linux-gnu/release/gistit ./gistit
           chmod +x gistit
@@ -83,25 +84,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  release-win:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v1
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_MIN_SRV }}
-          override: true
-          profile: minimal
-      - name: Build
-        shell: powershell
-        run: |
-          cargo build --release --target x86_64-pc-windows-msvc
-          Compress-Archive -Path ".\target\x86_64-pc-windows-msvc\release\gistit.exe" -DestinationPath ".\gistit-win-x64.zip"
-      - name: Publish release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: gistit-*
-          draft: true
-          body_path: CHANGELOG.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # Not supported yet
+  # release-win:
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v1
+  #     - uses: actions-rs/toolchain@v1
+  #       with:
+  #         toolchain: ${{ env.RUST_MIN_SRV }}
+  #         override: true
+  #         profile: minimal
+  #     - name: Build
+  #       shell: powershell
+  #       run: |
+  #         cargo build --release --target x86_64-pc-windows-msvc
+  #         Compress-Archive -Path ".\target\x86_64-pc-windows-msvc\release\gistit.exe" -DestinationPath ".\gistit-win-x64.zip"
+  #     - name: Publish release
+  #       uses: softprops/action-gh-release@v1
+  #       with:
+  #         files: gistit-*
+  #         draft: true
+  #         body_path: CHANGELOG.md
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
