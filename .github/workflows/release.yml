@@ -22,7 +22,7 @@ jobs:
       - name: Build
         run: |
           # build x86_64
-          sudo apt-get -y install libssl-dev
+          sudo apt-get -y install pkg-config libssl-dev
           cargo build --release --target x86_64-unknown-linux-gnu
           mv target/x86_64-unknown-linux-gnu/release/gistit ./gistit
           chmod +x gistit
