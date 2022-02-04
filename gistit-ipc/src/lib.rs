@@ -38,12 +38,16 @@ pub struct Bridge<T: SockEnd> {
 /// The owner of sock_0
 pub fn server(base: &Path) -> Result<Bridge<Server>> {
     let sockpath_0 = &base.join(NAMED_SOCKET_0);
+
     if metadata(sockpath_0).is_ok() {
         remove_file(sockpath_0)?;
     }
 
+    log::trace!("Bind sock_0 (server) at {:?}", sockpath_0);
+    let sock_0 = UnixDatagram::bind(sockpath_0)?;
+
     Ok(Bridge {
-        sock_0: UnixDatagram::bind(sockpath_0)?,
+        sock_0,
         sock_1: UnixDatagram::unbound()?,
         base: base.to_path_buf(),
         __marker_t: PhantomData,
@@ -54,13 +58,17 @@ pub fn server(base: &Path) -> Result<Bridge<Server>> {
 /// The owner of sock_1
 pub fn client(base: &Path) -> Result<Bridge<Client>> {
     let sockpath_1 = &base.join(NAMED_SOCKET_1);
+
     if metadata(sockpath_1).is_ok() {
         remove_file(sockpath_1)?;
     }
 
+    log::trace!("Bind sock_1 (client) at {:?}", sockpath_1);
+    let sock_1 = UnixDatagram::bind(sockpath_1)?;
+
     Ok(Bridge {
         sock_0: UnixDatagram::unbound()?,
-        sock_1: UnixDatagram::bind(sockpath_1)?,
+        sock_1,
         base: base.to_path_buf(),
         __marker_t: PhantomData,
     })
@@ -77,6 +85,8 @@ fn __connect_blocking(base: &Path, dgram: &UnixDatagram, sock_name: &str) -> Res
             return Err(err.into());
         }
     }
+
+    log::trace!("Connecting to {:?}", sock_name);
     Ok(())
 }
 
@@ -91,6 +101,7 @@ impl Bridge<Server> {
 
     pub fn send(&self, instruction: Instruction) -> Result<()> {
         let encoded = serialize(&instruction).unwrap();
+        log::trace!("Sending to client {} bytes", encoded.len());
         self.sock_1.send(&encoded)?;
         Ok(())
     }
@@ -114,6 +125,7 @@ impl Bridge<Client> {
 
     pub fn send(&self, instruction: Instruction) -> Result<()> {
         let encoded = serialize(&instruction).unwrap();
+        log::trace!("Sending to server {} bytes", encoded.len());
         self.sock_0.send(&encoded)?;
         Ok(())
     }
