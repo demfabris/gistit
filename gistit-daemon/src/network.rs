@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::iter::once;
 use std::str::FromStr;
 use std::string::ToString;
+use std::thread;
 use std::time::Duration;
 
 use either::Either;
@@ -39,6 +40,7 @@ pub struct Node {
     pending_dial: HashSet<PeerId>,
     pending_start_providing: HashSet<QueryId>,
     pending_get_providers: HashSet<QueryId>,
+    pending_start_listening: HashSet<Multiaddr>,
     // pending_request_file: HashMap<RequestId, oneshot::Sender<Result<String>>>,
 }
 
@@ -131,6 +133,7 @@ impl Node {
             pending_dial: HashSet::default(),
             pending_start_providing: HashSet::default(),
             pending_get_providers: HashSet::default(),
+            pending_start_listening: HashSet::default(),
         })
     }
 
@@ -145,6 +148,7 @@ impl Node {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     async fn handle_swarm_event(
         &mut self,
         event: SwarmEvent<
@@ -157,7 +161,10 @@ impl Node {
                     >,
                     Either<
                         ProtocolsHandlerUpgrErr<
-                            EitherError<impl std::error::Error, impl std::error::Error>,
+                            EitherError<
+                                impl std::error::Error + Send,
+                                impl std::error::Error + Send,
+                            >,
                         >,
                         Void,
                     >,
@@ -189,9 +196,8 @@ impl Node {
                     }
                 }
             }
-            //
+
             // Kademlia events
-            //
             SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::OutboundQueryCompleted {
                 id,
                 result: QueryResult::StartProviding(_),
@@ -210,6 +216,7 @@ impl Node {
             }
             SwarmEvent::NewListenAddr { address, .. } => {
                 info!("Daemon: Listening on {:?}", address);
+                self.pending_start_listening.remove(&address);
 
                 let peer_id = self.swarm.local_peer_id().to_string();
 
@@ -220,7 +227,7 @@ impl Node {
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
             } => {
-                debug!("Connection established {:?}", peer_id);
+                info!("Connection established {:?}", peer_id);
                 if endpoint.is_dialer() {
                     self.pending_dial.remove(&peer_id);
                 }
@@ -230,13 +237,13 @@ impl Node {
                 error,
                 ..
             } => {
-                debug!("Outgoing connection error: {:?}", error);
+                info!("Outgoing connection error: {:?}", error);
                 if let Some(peer_id) = maybe_peer_id {
                     self.pending_dial.remove(&peer_id);
                 }
             }
             ev => {
-                trace!("other event: {:?}", ev);
+                info!("other event: {:?}", ev);
             }
         }
         Ok(())
@@ -246,14 +253,20 @@ impl Node {
         match instruction {
             Instruction::Listen { host, port } => {
                 info!("Instruction: Listen");
-                let addr = multiaddr!(Ip4(host), Tcp(port));
-                self.swarm.listen_on(addr)?;
+                let address = multiaddr!(Ip4(host), Tcp(port));
+                self.pending_start_listening.insert(address.clone());
+
+                while self.pending_start_listening.contains(&address) {
+                    info!("Attempting to listen at {:?}", address);
+                    self.swarm.listen_on(address.clone())?;
+                    thread::sleep(Duration::from_millis(100));
+                }
             }
             Instruction::Dial { peer_id } => {
                 info!("Instruction: Dial");
 
-                // let addr: Multiaddr = BOOTADDR.parse().unwrap();
-                let addr: Multiaddr = "/ip4/192.168.1.77/tcp/4001".parse().unwrap();
+                let addr: Multiaddr = BOOTADDR.parse().unwrap();
+                // let addr: Multiaddr = "/ip4/192.168.1.77/tcp/4001".parse().unwrap();
                 let peer: PeerId = peer_id.parse().unwrap();
 
                 if self.pending_dial.contains(&peer) {
