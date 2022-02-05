@@ -2,34 +2,25 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::collections::HashSet;
-use std::iter::once;
 use std::str::FromStr;
 use std::string::ToString;
-use std::thread;
-use std::time::Duration;
 
 use either::Either;
 use gistit_ipc::{self, Bridge, Instruction, Server, ServerResponse};
-use log::{debug, info, trace, warn};
-use void::Void;
+use log::{debug, error, info, warn};
 
 use libp2p::core::either::EitherError;
-use libp2p::core::upgrade;
 use libp2p::core::PeerId;
 use libp2p::futures::StreamExt;
 use libp2p::multiaddr::{multiaddr, Protocol};
-use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmEvent};
-use libp2p::{autonat, dns, mplex, noise, tcp, websocket, yamux, Multiaddr, Swarm, Transport};
+use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
+use libp2p::{tokio_development_transport, Multiaddr, Swarm};
 
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
-use libp2p::kad::record::store::MemoryStore;
-use libp2p::kad::{
-    self, GetProvidersOk, Kademlia, KademliaConfig, KademliaEvent, QueryId, QueryResult,
-};
-use libp2p::relay::v2::relay;
-use libp2p::request_response::{ProtocolSupport, RequestResponse, RequestResponseConfig};
+use libp2p::identify::{IdentifyEvent, IdentifyInfo};
+use libp2p::kad::{self, GetProvidersOk, KademliaEvent, QueryId, QueryResult};
+use libp2p::ping::Failure;
 
-use crate::behaviour::{Behaviour, Event, ExchangeCodec, ExchangeProtocol};
+use crate::behaviour::{Behaviour, Event};
 use crate::config::Config;
 use crate::Result;
 
@@ -40,92 +31,34 @@ pub struct Node {
     pending_dial: HashSet<PeerId>,
     pending_start_providing: HashSet<QueryId>,
     pending_get_providers: HashSet<QueryId>,
-    pending_start_listening: HashSet<Multiaddr>,
     // pending_request_file: HashMap<RequestId, oneshot::Sender<Result<String>>>,
 }
 
-const BOOTNODES: [&str; 4] = [
-    "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-    "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-    "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-    "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-];
-
 const BOOTADDR: &str = "/dnsaddr/bootstrap.libp2p.io";
+pub const GISTIT_RELAY_NODE: &str = "12D3KooWJtJX9qwBdECWoLk2hktSLFBcHSUWpP4FiN3u4Hns7347";
+pub const GISTIT_BOOTADDR: &str = "/ip4/34.125.73.67/tcp/4001";
 
 impl Node {
     pub async fn new(config: Config) -> Result<Self> {
-        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-            .into_authentic(&config.keypair)
-            .expect("Signing libp2p-noise static DH keypair failed.");
+        let behaviour = Behaviour::new(&config)?;
+        let transport = tokio_development_transport(config.keypair)?;
 
-        let transport = {
-            let tcp = tcp::TcpConfig::new().nodelay(true);
-            let dns_tcp = dns::DnsConfig::system(tcp).await?;
-            let ws_dns_tcp = websocket::WsConfig::new(dns_tcp.clone());
-            dns_tcp
-                .or_transport(ws_dns_tcp)
-                .upgrade(upgrade::Version::V1)
-                .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-                .multiplex(upgrade::SelectUpgrade::new(
-                    yamux::YamuxConfig::default(),
-                    mplex::MplexConfig::default(),
-                ))
-                .timeout(Duration::from_secs(20))
-                .boxed()
-        };
-
-        let request_response = RequestResponse::new(
-            ExchangeCodec,
-            once((ExchangeProtocol, ProtocolSupport::Full)),
-            RequestResponseConfig::default(),
-        );
-
-        let kademlia = {
-            let mut cfg = KademliaConfig::default();
-            cfg.set_query_timeout(Duration::from_secs(5 * 60));
-            let store = MemoryStore::new(config.peer_id);
-            let mut behaviour = Kademlia::with_config(config.peer_id, store, cfg);
-
-            let bootaddr = Multiaddr::from_str(BOOTADDR)?;
-            for peer in &BOOTNODES {
-                behaviour.add_address(
-                    &PeerId::from_str(peer).expect("peer id to be valid"),
-                    bootaddr.clone(),
-                );
-            }
-
-            behaviour.bootstrap().expect("to bootstrap");
-            behaviour
-        };
-
-        let identify = Identify::new(IdentifyConfig::new(
-            "/ipfs/0.1.0".into(),
-            config.keypair.public(),
-        ));
-
-        let relay = relay::Relay::new(
-            PeerId::from(config.keypair.public()),
-            relay::Config::default(),
-        );
-        let autonat = autonat::Behaviour::new(
-            PeerId::from(config.keypair.public()),
-            autonat::Config::default(),
-        );
-
-        let swarm = Swarm::new(
-            transport,
-            Behaviour {
-                request_response,
-                kademlia,
-                identify,
-                relay,
-                autonat,
-            },
-            config.peer_id,
-        );
-
+        let mut swarm = SwarmBuilder::new(transport, behaviour, config.peer_id)
+            .executor(Box::new(|fut| {
+                tokio::task::spawn(fut);
+            }))
+            .build();
         let bridge = gistit_ipc::server(&config.runtime_dir)?;
+
+        let relay = GISTIT_BOOTADDR
+            .parse::<Multiaddr>()
+            .expect("valid multiaddr")
+            .with(Protocol::P2p(
+                PeerId::from_str(GISTIT_RELAY_NODE)
+                    .expect("valid peerid string")
+                    .into(),
+            ));
+        swarm.dial(relay)?;
 
         Ok(Self {
             swarm,
@@ -133,7 +66,6 @@ impl Node {
             pending_dial: HashSet::default(),
             pending_start_providing: HashSet::default(),
             pending_get_providers: HashSet::default(),
-            pending_start_listening: HashSet::default(),
         })
     }
 
@@ -141,9 +73,9 @@ impl Node {
         loop {
             tokio::select! {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
-                    swarm_event.expect("to recv swarm event")).await?,
+                    swarm_event.expect("swarm stream not to end")).await?,
 
-                bridge_event = async { self.bridge.recv() } => self.handle_bridge_event(bridge_event?).await?
+                bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await?
             }
         }
     }
@@ -156,20 +88,23 @@ impl Node {
             EitherError<
                 EitherError<
                     EitherError<
-                        EitherError<ProtocolsHandlerUpgrErr<std::io::Error>, std::io::Error>,
-                        std::io::Error,
-                    >,
-                    Either<
-                        ProtocolsHandlerUpgrErr<
-                            EitherError<
-                                impl std::error::Error + Send,
-                                impl std::error::Error + Send,
-                            >,
+                        EitherError<
+                            EitherError<ProtocolsHandlerUpgrErr<std::io::Error>, std::io::Error>,
+                            std::io::Error,
                         >,
-                        Void,
+                        Either<
+                            ProtocolsHandlerUpgrErr<
+                                EitherError<
+                                    impl std::error::Error + Send,
+                                    impl std::error::Error + Send,
+                                >,
+                            >,
+                            void::Void,
+                        >,
                     >,
+                    ProtocolsHandlerUpgrErr<std::io::Error>,
                 >,
-                ProtocolsHandlerUpgrErr<std::io::Error>,
+                Failure,
             >,
         >,
     ) -> Result<()> {
@@ -216,13 +151,13 @@ impl Node {
             }
             SwarmEvent::NewListenAddr { address, .. } => {
                 info!("Daemon: Listening on {:?}", address);
-                self.pending_start_listening.remove(&address);
 
                 let peer_id = self.swarm.local_peer_id().to_string();
 
                 self.bridge.connect_blocking()?;
                 self.bridge
-                    .send(Instruction::Response(ServerResponse::PeerId(peer_id)))?;
+                    .send(Instruction::Response(ServerResponse::PeerId(peer_id)))
+                    .await?;
             }
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
@@ -237,7 +172,7 @@ impl Node {
                 error,
                 ..
             } => {
-                info!("Outgoing connection error: {:?}", error);
+                error!("Outgoing connection error: {:?}", error);
                 if let Some(peer_id) = maybe_peer_id {
                     self.pending_dial.remove(&peer_id);
                 }
@@ -254,34 +189,31 @@ impl Node {
             Instruction::Listen { host, port } => {
                 info!("Instruction: Listen");
                 let address = multiaddr!(Ip4(host), Tcp(port));
-                self.pending_start_listening.insert(address.clone());
-
-                while self.pending_start_listening.contains(&address) {
-                    info!("Attempting to listen at {:?}", address);
-                    self.swarm.listen_on(address.clone())?;
-                    thread::sleep(Duration::from_millis(100));
-                }
+                self.swarm.listen_on(address)?;
             }
+
             Instruction::Dial { peer_id } => {
                 info!("Instruction: Dial");
 
-                let addr: Multiaddr = BOOTADDR.parse().unwrap();
-                // let addr: Multiaddr = "/ip4/192.168.1.77/tcp/4001".parse().unwrap();
+                let base_addr: Multiaddr = BOOTADDR.parse().unwrap();
+                let relay_addr: Multiaddr = "/ip4/34.125.73.67/tcp/4001/p2p/12D3KooWJtJX9qwBdECWoLk2hktSLFBcHSUWpP4FiN3u4Hns7347/p2p-circuit".parse().unwrap();
                 let peer: PeerId = peer_id.parse().unwrap();
 
                 if self.pending_dial.contains(&peer) {
-                    debug!("Already dialing peer: {}", peer_id);
+                    error!("Already dialing peer: {}", peer_id);
                     return Ok(());
                 }
 
                 self.swarm
                     .behaviour_mut()
                     .kademlia
-                    .add_address(&peer, addr.clone());
+                    .add_address(&peer, base_addr);
 
-                self.swarm.dial(addr.with(Protocol::P2p(peer.into())))?;
+                self.swarm
+                    .dial(relay_addr.with(Protocol::P2p(peer.into())))?;
                 self.pending_dial.insert(peer);
             }
+
             Instruction::Provide { hash, .. } => {
                 info!("Instruction: Provide file {}", hash);
 
@@ -291,6 +223,7 @@ impl Node {
                     .start_providing(hash.into_bytes().into())
                     .expect("to start providing");
             }
+
             Instruction::Get { hash } => {
                 info!("Instruction: Get providers for {}", hash);
 
@@ -301,6 +234,7 @@ impl Node {
                     .get_providers(hash.into_bytes().into());
                 self.pending_get_providers.insert(query_id);
             }
+
             Instruction::Status => {
                 info!("Instruction: Status");
 
@@ -313,8 +247,10 @@ impl Node {
                     .send(Instruction::Response(ServerResponse::Status(format!(
                         "listeners: {:?}, network: {:?}",
                         listeners, network_info
-                    ))))?;
+                    ))))
+                    .await?;
             }
+
             Instruction::Shutdown => {
                 warn!("Exiting...");
                 std::process::exit(0);

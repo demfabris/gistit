@@ -28,5 +28,5 @@ version = "1.16.1"
 [dependencies.libp2p]
 version = "0.42.1"
 default-features = false
-features = ["noise", "kad", "identify", "mplex", "tcp-async-io", "dns-async-std", "yamux", "request-response", "relay", "autonat", "websocket"]
+features = ["noise", "kad", "identify", "mplex", "dns-tokio", "tcp-tokio", "yamux", "request-response", "relay", "autonat", "websocket", "ping"]
 
