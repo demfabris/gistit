@@ -4,9 +4,9 @@
 use std::fs::{metadata, remove_file};
 use std::marker::PhantomData;
 use std::net::Ipv4Addr;
-use std::os::unix::net::UnixDatagram;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use tokio::net::UnixDatagram;
 
 use bincode::{deserialize, serialize};
 use serde::{Deserialize, Serialize};
@@ -99,16 +99,16 @@ impl Bridge<Server> {
         __connect_blocking(&self.base, &self.sock_1, NAMED_SOCKET_1)
     }
 
-    pub fn send(&self, instruction: Instruction) -> Result<()> {
+    pub async fn send(&self, instruction: Instruction) -> Result<()> {
         let encoded = serialize(&instruction).unwrap();
         log::trace!("Sending to client {} bytes", encoded.len());
-        self.sock_1.send(&encoded)?;
+        self.sock_1.send(&encoded).await?;
         Ok(())
     }
 
-    pub fn recv(&self) -> Result<Instruction> {
+    pub async fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
-        self.sock_0.recv(&mut buf)?;
+        self.sock_0.recv(&mut buf).await?;
         let target = deserialize(&buf).unwrap();
         Ok(target)
     }
@@ -123,16 +123,16 @@ impl Bridge<Client> {
         __connect_blocking(&self.base, &self.sock_0, NAMED_SOCKET_0)
     }
 
-    pub fn send(&self, instruction: Instruction) -> Result<()> {
+    pub async fn send(&self, instruction: Instruction) -> Result<()> {
         let encoded = serialize(&instruction).unwrap();
         log::trace!("Sending to server {} bytes", encoded.len());
-        self.sock_0.send(&encoded)?;
+        self.sock_0.send(&encoded).await?;
         Ok(())
     }
 
-    pub fn recv(&self) -> Result<Instruction> {
+    pub async fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
-        self.sock_1.recv(&mut buf)?;
+        self.sock_1.recv(&mut buf).await?;
         let target = deserialize(&buf).unwrap();
         Ok(target)
     }
@@ -208,10 +208,9 @@ mod tests {
     use super::*;
     use assert_fs::prelude::*;
     use std::sync::Arc;
-    use std::thread;
 
-    #[test]
-    fn ipc_named_socket_spawn() {
+    #[tokio::test]
+    async fn ipc_named_socket_spawn() {
         let tmp = assert_fs::TempDir::new().unwrap();
         let _ = server(&tmp).unwrap();
         let _ = client(&tmp).unwrap();
@@ -220,8 +219,8 @@ mod tests {
         assert!(tmp.child("gistit-1").exists());
     }
 
-    #[test]
-    fn ipc_socket_spawn_is_alive() {
+    #[tokio::test]
+    async fn ipc_socket_spawn_is_alive() {
         let tmp = assert_fs::TempDir::new().unwrap();
         let server = server(&tmp).unwrap();
         let client = client(&tmp).unwrap();
@@ -230,38 +229,50 @@ mod tests {
         assert!(client.alive());
     }
 
-    #[test]
-    fn ipc_socket_server_recv_traffic() {
+    #[tokio::test]
+    async fn ipc_socket_server_recv_traffic() {
         let tmp = assert_fs::TempDir::new().unwrap();
         let server = server(&tmp).unwrap();
         let mut client = client(&tmp).unwrap();
 
         client.connect_blocking().unwrap();
 
-        client.send(Instruction::TestInstructionOne).unwrap();
-        client.send(Instruction::TestInstructionTwo).unwrap();
+        client.send(Instruction::TestInstructionOne).await.unwrap();
+        client.send(Instruction::TestInstructionTwo).await.unwrap();
 
-        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
-        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+        assert_eq!(
+            server.recv().await.unwrap(),
+            Instruction::TestInstructionOne
+        );
+        assert_eq!(
+            server.recv().await.unwrap(),
+            Instruction::TestInstructionTwo
+        );
     }
 
-    #[test]
-    fn ipc_socket_client_recv_traffic() {
+    #[tokio::test]
+    async fn ipc_socket_client_recv_traffic() {
         let tmp = assert_fs::TempDir::new().unwrap();
         let mut server = server(&tmp).unwrap();
         let client = client(&tmp).unwrap();
 
         server.connect_blocking().unwrap();
 
-        server.send(Instruction::TestInstructionOne).unwrap();
-        server.send(Instruction::TestInstructionTwo).unwrap();
+        server.send(Instruction::TestInstructionOne).await.unwrap();
+        server.send(Instruction::TestInstructionTwo).await.unwrap();
 
-        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
-        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
+        assert_eq!(
+            client.recv().await.unwrap(),
+            Instruction::TestInstructionOne
+        );
+        assert_eq!(
+            client.recv().await.unwrap(),
+            Instruction::TestInstructionTwo
+        );
     }
 
-    #[test]
-    fn ipc_socket_alternate_traffic() {
+    #[tokio::test]
+    async fn ipc_socket_alternate_traffic() {
         let tmp = assert_fs::TempDir::new().unwrap();
         let mut server = server(&tmp).unwrap();
         let mut client = client(&tmp).unwrap();
@@ -269,20 +280,32 @@ mod tests {
         client.connect_blocking().unwrap();
         server.connect_blocking().unwrap();
 
-        client.send(Instruction::TestInstructionOne).unwrap();
-        client.send(Instruction::TestInstructionTwo).unwrap();
+        client.send(Instruction::TestInstructionOne).await.unwrap();
+        client.send(Instruction::TestInstructionTwo).await.unwrap();
 
-        server.send(Instruction::TestInstructionOne).unwrap();
-        server.send(Instruction::TestInstructionTwo).unwrap();
+        server.send(Instruction::TestInstructionOne).await.unwrap();
+        server.send(Instruction::TestInstructionTwo).await.unwrap();
 
-        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
-        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
-        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
-        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+        assert_eq!(
+            client.recv().await.unwrap(),
+            Instruction::TestInstructionOne
+        );
+        assert_eq!(
+            server.recv().await.unwrap(),
+            Instruction::TestInstructionOne
+        );
+        assert_eq!(
+            client.recv().await.unwrap(),
+            Instruction::TestInstructionTwo
+        );
+        assert_eq!(
+            server.recv().await.unwrap(),
+            Instruction::TestInstructionTwo
+        );
     }
 
-    #[test]
-    fn ipc_socket_alternate_traffic_rerun() {
+    #[tokio::test]
+    async fn ipc_socket_alternate_traffic_rerun() {
         let tmp = assert_fs::TempDir::new().unwrap();
         let mut server = server(&tmp).unwrap();
         let mut client = client(&tmp).unwrap();
@@ -290,31 +313,55 @@ mod tests {
         client.connect_blocking().unwrap();
         server.connect_blocking().unwrap();
 
-        client.send(Instruction::TestInstructionOne).unwrap();
-        client.send(Instruction::TestInstructionTwo).unwrap();
+        client.send(Instruction::TestInstructionOne).await.unwrap();
+        client.send(Instruction::TestInstructionTwo).await.unwrap();
 
-        server.send(Instruction::TestInstructionOne).unwrap();
-        server.send(Instruction::TestInstructionTwo).unwrap();
+        server.send(Instruction::TestInstructionOne).await.unwrap();
+        server.send(Instruction::TestInstructionTwo).await.unwrap();
 
-        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
-        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
-        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
-        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+        assert_eq!(
+            client.recv().await.unwrap(),
+            Instruction::TestInstructionOne
+        );
+        assert_eq!(
+            server.recv().await.unwrap(),
+            Instruction::TestInstructionOne
+        );
+        assert_eq!(
+            client.recv().await.unwrap(),
+            Instruction::TestInstructionTwo
+        );
+        assert_eq!(
+            server.recv().await.unwrap(),
+            Instruction::TestInstructionTwo
+        );
 
-        client.send(Instruction::TestInstructionOne).unwrap();
-        client.send(Instruction::TestInstructionTwo).unwrap();
+        client.send(Instruction::TestInstructionOne).await.unwrap();
+        client.send(Instruction::TestInstructionTwo).await.unwrap();
 
-        server.send(Instruction::TestInstructionOne).unwrap();
-        server.send(Instruction::TestInstructionTwo).unwrap();
+        server.send(Instruction::TestInstructionOne).await.unwrap();
+        server.send(Instruction::TestInstructionTwo).await.unwrap();
 
-        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
-        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
-        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
-        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+        assert_eq!(
+            client.recv().await.unwrap(),
+            Instruction::TestInstructionOne
+        );
+        assert_eq!(
+            server.recv().await.unwrap(),
+            Instruction::TestInstructionOne
+        );
+        assert_eq!(
+            client.recv().await.unwrap(),
+            Instruction::TestInstructionTwo
+        );
+        assert_eq!(
+            server.recv().await.unwrap(),
+            Instruction::TestInstructionTwo
+        );
     }
 
-    #[test]
-    fn ipc_socket_traffic_under_load() {
+    #[tokio::test]
+    async fn ipc_socket_traffic_under_load() {
         let tmp = assert_fs::TempDir::new().unwrap();
         let mut server = server(&tmp).unwrap();
         let mut client = client(&tmp).unwrap();
@@ -329,18 +376,32 @@ mod tests {
             let s = server.clone();
             let c = client.clone();
 
-            thread::spawn(move || loop {
-                c.send(Instruction::TestInstructionOne).unwrap();
-                c.send(Instruction::TestInstructionTwo).unwrap();
+            tokio::spawn(async move {
+                loop {
+                    c.send(Instruction::TestInstructionOne).await.unwrap();
+                    c.send(Instruction::TestInstructionTwo).await.unwrap();
 
-                s.send(Instruction::TestInstructionOne).unwrap();
-                s.send(Instruction::TestInstructionTwo).unwrap();
+                    s.send(Instruction::TestInstructionOne).await.unwrap();
+                    s.send(Instruction::TestInstructionTwo).await.unwrap();
+                }
             });
 
-            assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
-            assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
-            assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
-            assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+            assert_eq!(
+                client.recv().await.unwrap(),
+                Instruction::TestInstructionOne
+            );
+            assert_eq!(
+                server.recv().await.unwrap(),
+                Instruction::TestInstructionOne
+            );
+            assert_eq!(
+                client.recv().await.unwrap(),
+                Instruction::TestInstructionTwo
+            );
+            assert_eq!(
+                server.recv().await.unwrap(),
+                Instruction::TestInstructionTwo
+            );
         }
     }
 }
