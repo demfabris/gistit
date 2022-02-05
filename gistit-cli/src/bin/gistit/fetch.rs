@@ -79,7 +79,7 @@ impl Dispatch for Action {
             bridge.connect_blocking()?;
             bridge.send(Instruction::Get {
                 hash: config.hash.to_owned(),
-            })?;
+            }).await?;
         } else {
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())

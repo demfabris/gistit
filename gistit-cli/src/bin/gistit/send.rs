@@ -172,7 +172,7 @@ impl Dispatch for Action {
                 hash: hash.clone(),
                 // data: config.file.to_encoded_data(),
                 data: Vec::new(),
-            })?;
+            }).await?;
             // TODO: wait for ok response from node
             updateln!("Hosted");
         } else {

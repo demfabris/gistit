@@ -104,13 +104,15 @@ impl Dispatch for Action {
                 progress!("Starting gistit node");
 
                 bridge.connect_blocking()?;
-                bridge.send(Instruction::Listen {
-                    host: config.host,
-                    port: config.port,
-                })?;
+                bridge
+                    .send(Instruction::Listen {
+                        host: config.host,
+                        port: config.port,
+                    })
+                    .await?;
                 updateln!("Gistit node started, pid: {}", style(pid).blue());
 
-                if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv()? {
+                if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv().await? {
                     print_success(self.clipboard, &id);
                 }
             }
@@ -120,9 +122,13 @@ impl Dispatch for Action {
                 progress!("Joining");
                 if bridge.alive() {
                     bridge.connect_blocking()?;
-                    bridge.send(Instruction::Dial {
-                        peer_id: address.to_owned(),
-                    })?;
+                    bridge
+                        .send(Instruction::Dial {
+                            peer_id: address.to_owned(),
+                        })
+                        .await?;
+                    updateln!("Joined");
+                    finish!("");
                 } else {
                     interruptln!();
                     errorln!("gistit node must be running");
@@ -131,26 +137,31 @@ impl Dispatch for Action {
 
             // Stop network daemon process
             ProcessCommand::Stop => {
-                progress!("Stopping gistit network node process...");
+                progress!("Stopping");
                 fs::remove_file(runtime_dir.join("gistit.log"))?;
 
                 bridge.connect_blocking()?;
-                bridge.send(Instruction::Shutdown)?;
+                bridge.send(Instruction::Shutdown).await?;
+                updateln!("Stopped");
+                finish!("");
             }
 
             // Check network status
             ProcessCommand::Status => {
+                progress!("Requesting status");
                 if bridge.alive() {
                     bridge.connect_blocking()?;
-                    bridge.send(Instruction::Status)?;
+                    bridge.send(Instruction::Status).await?;
 
                     if let Instruction::Response(ServerResponse::Status(status_str)) =
-                        bridge.recv()?
+                        bridge.recv().await?
                     {
-                        println!("{}", status_str);
+                        updateln!("Requested status");
+                        warnln!("{}", status_str);
                     }
                 } else {
-                    progress!("Not running");
+                    interruptln!();
+                    errorln!("gistit node is not running");
                 }
             }
         };
