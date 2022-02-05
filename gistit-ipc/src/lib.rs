@@ -1,5 +1,5 @@
-//! Inter process comunication module
-#![allow(clippy::missing_errors_doc)]
+//! This is a simple crate to a communication interface for gistit-daemon and gistit-cli
+//! Missing TCP socket implementation
 
 use std::fs::{metadata, remove_file};
 use std::marker::PhantomData;
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 const NAMED_SOCKET_0: &str = "gistit-0";
 const NAMED_SOCKET_1: &str = "gistit-1";
-const READBUF_SIZE: usize = 60_000;
+const READBUF_SIZE: usize = 60_000; // A bit bigger than 50kb because encoding
 const CONNECT_TIMEOUT_SECS: u64 = 3;
 
 pub trait SockEnd {}
@@ -138,19 +138,34 @@ impl Bridge<Client> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Instruction {
-    Listen { host: Ipv4Addr, port: u16 },
-    Dial { peer_id: String },
-    Provide { hash: String, data: Vec<u8> },
-    Get { hash: String },
+    Listen {
+        host: Ipv4Addr,
+        port: u16,
+    },
+    Dial {
+        peer_id: String,
+    },
+    Provide {
+        hash: String,
+        data: Vec<u8>,
+    },
+    Get {
+        hash: String,
+    },
     Status,
     Shutdown,
     // Daemon responses
     Response(ServerResponse),
+
+    #[cfg(test)]
+    TestInstructionOne,
+    #[cfg(test)]
+    TestInstructionTwo,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum ServerResponse {
     PeerId(String),
     Status(String),
@@ -185,5 +200,147 @@ impl std::error::Error for Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "gistit ipc error")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_fs::prelude::*;
+    use std::sync::Arc;
+    use std::thread;
+
+    #[test]
+    fn ipc_named_socket_spawn() {
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let _ = server(&tmp).unwrap();
+        let _ = client(&tmp).unwrap();
+
+        assert!(tmp.child("gistit-0").exists());
+        assert!(tmp.child("gistit-1").exists());
+    }
+
+    #[test]
+    fn ipc_socket_spawn_is_alive() {
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let server = server(&tmp).unwrap();
+        let client = client(&tmp).unwrap();
+
+        assert!(server.alive());
+        assert!(client.alive());
+    }
+
+    #[test]
+    fn ipc_socket_server_recv_traffic() {
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let server = server(&tmp).unwrap();
+        let mut client = client(&tmp).unwrap();
+
+        client.connect_blocking().unwrap();
+
+        client.send(Instruction::TestInstructionOne).unwrap();
+        client.send(Instruction::TestInstructionTwo).unwrap();
+
+        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
+        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+    }
+
+    #[test]
+    fn ipc_socket_client_recv_traffic() {
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let mut server = server(&tmp).unwrap();
+        let client = client(&tmp).unwrap();
+
+        server.connect_blocking().unwrap();
+
+        server.send(Instruction::TestInstructionOne).unwrap();
+        server.send(Instruction::TestInstructionTwo).unwrap();
+
+        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
+        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
+    }
+
+    #[test]
+    fn ipc_socket_alternate_traffic() {
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let mut server = server(&tmp).unwrap();
+        let mut client = client(&tmp).unwrap();
+
+        client.connect_blocking().unwrap();
+        server.connect_blocking().unwrap();
+
+        client.send(Instruction::TestInstructionOne).unwrap();
+        client.send(Instruction::TestInstructionTwo).unwrap();
+
+        server.send(Instruction::TestInstructionOne).unwrap();
+        server.send(Instruction::TestInstructionTwo).unwrap();
+
+        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
+        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
+        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
+        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+    }
+
+    #[test]
+    fn ipc_socket_alternate_traffic_rerun() {
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let mut server = server(&tmp).unwrap();
+        let mut client = client(&tmp).unwrap();
+
+        client.connect_blocking().unwrap();
+        server.connect_blocking().unwrap();
+
+        client.send(Instruction::TestInstructionOne).unwrap();
+        client.send(Instruction::TestInstructionTwo).unwrap();
+
+        server.send(Instruction::TestInstructionOne).unwrap();
+        server.send(Instruction::TestInstructionTwo).unwrap();
+
+        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
+        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
+        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
+        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+
+        client.send(Instruction::TestInstructionOne).unwrap();
+        client.send(Instruction::TestInstructionTwo).unwrap();
+
+        server.send(Instruction::TestInstructionOne).unwrap();
+        server.send(Instruction::TestInstructionTwo).unwrap();
+
+        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
+        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
+        assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
+        assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+    }
+
+    #[test]
+    fn ipc_socket_traffic_under_load() {
+        let tmp = assert_fs::TempDir::new().unwrap();
+        let mut server = server(&tmp).unwrap();
+        let mut client = client(&tmp).unwrap();
+
+        client.connect_blocking().unwrap();
+        server.connect_blocking().unwrap();
+
+        let server = Arc::new(server);
+        let client = Arc::new(client);
+
+        for _ in 0..8 {
+            let s = server.clone();
+            let c = client.clone();
+
+            thread::spawn(move || loop {
+                c.send(Instruction::TestInstructionOne).unwrap();
+                c.send(Instruction::TestInstructionTwo).unwrap();
+
+                s.send(Instruction::TestInstructionOne).unwrap();
+                s.send(Instruction::TestInstructionTwo).unwrap();
+            });
+
+            assert_eq!(client.recv().unwrap(), Instruction::TestInstructionOne);
+            assert_eq!(server.recv().unwrap(), Instruction::TestInstructionOne);
+            assert_eq!(client.recv().unwrap(), Instruction::TestInstructionTwo);
+            assert_eq!(server.recv().unwrap(), Instruction::TestInstructionTwo);
+        }
     }
 }
