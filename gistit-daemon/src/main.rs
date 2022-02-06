@@ -26,6 +26,7 @@ use std::path::PathBuf;
 mod behaviour;
 mod config;
 mod error;
+mod event;
 mod network;
 
 pub type Error = crate::error::Error;

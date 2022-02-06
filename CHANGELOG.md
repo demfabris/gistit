@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [Unreleased] - ReleaseDate
+# Added
+
+# Changed
+- Use `tokio::UnixDatagram` in gistit-ipc
 
 
 ## [0.1.51] - 2022-02-03

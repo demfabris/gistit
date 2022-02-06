@@ -77,6 +77,7 @@ macro_rules! updateln {
 
     ($msg:literal, $($rest:expr),* $(,)*) => {{
         use crate::fmt::PROGRESS;
+        use console::{style, Emoji};
         let msg = format!($msg, $($rest,)*);
         PROGRESS.println(format!("{} {}", style(Emoji("✔️ ", "> ")).green(), msg));
     }};

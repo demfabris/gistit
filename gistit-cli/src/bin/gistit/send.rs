@@ -168,11 +168,13 @@ impl Dispatch for Action {
             progress!("Hosting");
 
             bridge.connect_blocking()?;
-            bridge.send(Instruction::Provide {
-                hash: hash.clone(),
-                // data: config.file.to_encoded_data(),
-                data: Vec::new(),
-            })?;
+            bridge
+                .send(Instruction::Provide {
+                    hash: hash.clone(),
+                    // data: config.file.to_encoded_data(),
+                    data: Vec::from([1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                })
+                .await?;
             // TODO: wait for ok response from node
             updateln!("Hosted");
         } else {

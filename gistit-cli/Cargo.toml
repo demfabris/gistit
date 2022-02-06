@@ -21,7 +21,7 @@ path = "src/lib.rs"
 name = "libgistit"
 
 [features]
-default = []
+default = ["host"]
 host = []
 
 [dependencies]

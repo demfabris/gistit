@@ -12,7 +12,7 @@ use libgistit::project::{config_dir, runtime_dir};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::{progress, updateln, Error, Result};
+use crate::{errorln, finish, interruptln, progress, updateln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
@@ -93,58 +93,75 @@ impl Dispatch for Action {
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         match config.command {
+            // Start network daemon / check running status
             ProcessCommand::Start => {
                 if bridge.alive() {
-                    progress!("Running..."); // TODO: change this to status msg
+                    finish!("Running"); // TODO: change this to status msg
                     return Ok(());
                 }
 
                 let pid = spawn(&runtime_dir, &config_dir)?;
-
-                progress!(
-                    "Starting gistit network node process, pid: {}",
-                    style(pid).blue()
-                );
+                progress!("Starting gistit node");
 
                 bridge.connect_blocking()?;
-                bridge.send(Instruction::Listen {
-                    host: config.host,
-                    port: config.port,
-                })?;
+                bridge
+                    .send(Instruction::Listen {
+                        host: config.host,
+                        port: config.port,
+                    })
+                    .await?;
+                updateln!("Gistit node started, pid: {}", style(pid).blue());
 
-                if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv()? {
+                if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv().await? {
                     print_success(self.clipboard, &id);
                 }
             }
+
+            // Dial to a peer
             ProcessCommand::Join(address) => {
+                progress!("Joining");
                 if bridge.alive() {
                     bridge.connect_blocking()?;
-                    bridge.send(Instruction::Dial {
-                        peer_id: address.to_owned(),
-                    })?;
+                    bridge
+                        .send(Instruction::Dial {
+                            peer_id: address.to_owned(),
+                        })
+                        .await?;
+                    updateln!("Joined");
+                    finish!("");
                 } else {
-                    progress!("Gistit node must be running to join a peer");
+                    interruptln!();
+                    errorln!("gistit node must be running");
                 }
             }
+
+            // Stop network daemon process
             ProcessCommand::Stop => {
-                progress!("Stopping gistit network node process...");
+                progress!("Stopping");
                 fs::remove_file(runtime_dir.join("gistit.log"))?;
 
                 bridge.connect_blocking()?;
-                bridge.send(Instruction::Shutdown)?;
+                bridge.send(Instruction::Shutdown).await?;
+                updateln!("Stopped");
+                finish!("");
             }
+
+            // Check network status
             ProcessCommand::Status => {
+                progress!("Requesting status");
                 if bridge.alive() {
                     bridge.connect_blocking()?;
-                    bridge.send(Instruction::Status)?;
+                    bridge.send(Instruction::Status).await?;
 
                     if let Instruction::Response(ServerResponse::Status(status_str)) =
-                        bridge.recv()?
+                        bridge.recv().await?
                     {
-                        println!("{}", status_str);
+                        updateln!("Requested status");
+                        warnln!("{}", status_str);
                     }
                 } else {
-                    progress!("Not running");
+                    interruptln!();
+                    errorln!("gistit node is not running");
                 }
             }
         };
@@ -171,12 +188,11 @@ fn print_success(has_clipboard: bool, peer_id: &str) {
     } else {
         "".to_owned()
     };
-    println!(
+    finish!(format!(
         r#"
-SUCCESS:
-    peer id: {} {}
-"#,
-        peer_id,
-        style(clipboard_msg).italic()
-    );
+        peer id: '{}' {}
+        "#,
+        style(peer_id).bold(),
+        style(clipboard_msg).italic().dim()
+    ));
 }
