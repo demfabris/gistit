@@ -190,10 +190,9 @@ fn print_success(has_clipboard: bool, peer_id: &str) {
     };
     finish!(format!(
         r#"
-SUCCESS:
-    peer id: {} {}
-"#,
-        peer_id,
-        style(clipboard_msg).italic()
+        peer id: '{}' {}
+        "#,
+        style(peer_id).bold(),
+        style(clipboard_msg).italic().dim()
     ));
 }

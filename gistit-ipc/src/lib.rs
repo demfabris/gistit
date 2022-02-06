@@ -169,6 +169,7 @@ pub enum Instruction {
 pub enum ServerResponse {
     PeerId(String),
     Status(String),
+    File(Vec<u8>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
