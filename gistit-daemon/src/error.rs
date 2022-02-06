@@ -14,4 +14,7 @@ pub enum Error {
 
     #[error("dial error, {0}")]
     Dial(#[from] libp2p::swarm::DialError),
+
+    #[error("request response codec error, {0}")]
+    Codec(#[from] crate::behaviour::Response),
 }

@@ -1,5 +1,5 @@
 use std::iter::once;
-use std::str::FromStr;
+use std::str::{self, FromStr};
 use std::time::Duration;
 
 use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed};
@@ -22,17 +22,16 @@ use libp2p::request_response::{
 use async_trait::async_trait;
 
 use crate::config::Config;
-use crate::network::{GISTIT_BOOTADDR, GISTIT_RELAY_NODE};
 use crate::Result;
 
-const BOOTNODES: [&str; 4] = [
+pub const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
     "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
     "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
 
-const BOOTADDR: &str = "/dnsaddr/bootstrap.libp2p.io";
+pub const BOOTADDR: &str = "/ip4/147.75.94.115/tcp/4001";
 
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "Event", event_process = false)]
@@ -68,12 +67,6 @@ impl Behaviour {
             }
 
             behaviour.bootstrap().expect("to bootstrap");
-
-            let relay_addr = Multiaddr::from_str(GISTIT_BOOTADDR)?;
-            behaviour.add_address(
-                &PeerId::from_str(GISTIT_RELAY_NODE).expect("peer id to be valid"),
-                relay_addr,
-            );
 
             behaviour
         };
@@ -165,10 +158,22 @@ impl ProtocolName for ExchangeProtocol {
 pub struct ExchangeCodec;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Request(Vec<u8>);
+pub struct Request(pub Vec<u8>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Response(Vec<u8>);
+pub struct Response(pub Vec<u8>);
+
+impl std::fmt::Display for Response {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", str::from_utf8(&self.0).unwrap_or("invalid utf8"))
+    }
+}
+
+impl std::error::Error for Response {
+    fn description(&self) -> &str {
+        "failed to respond"
+    }
+}
 
 const MAX_FILE_SIZE: usize = 50_000;
 

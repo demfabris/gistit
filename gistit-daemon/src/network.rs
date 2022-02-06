@@ -1,9 +1,9 @@
 //! The network module
 #![allow(clippy::missing_errors_doc)]
 
-use std::collections::HashSet;
-use std::str::FromStr;
+use std::collections::{HashMap, HashSet};
 use std::string::ToString;
+use std::task::Poll;
 
 use either::Either;
 use gistit_ipc::{self, Bridge, Instruction, Server, ServerResponse};
@@ -11,54 +11,52 @@ use log::{debug, error, info, warn};
 
 use libp2p::core::either::EitherError;
 use libp2p::core::PeerId;
+use libp2p::futures::future::poll_fn;
 use libp2p::futures::StreamExt;
-use libp2p::multiaddr::{multiaddr, Protocol};
+use libp2p::multiaddr::multiaddr;
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
 use libp2p::{tokio_development_transport, Multiaddr, Swarm};
 
 use libp2p::identify::{IdentifyEvent, IdentifyInfo};
-use libp2p::kad::{self, GetProvidersOk, KademliaEvent, QueryId, QueryResult};
+use libp2p::kad::{protocol, record::Key, QueryId};
 use libp2p::ping::Failure;
+use libp2p::request_response::RequestId;
 
-use crate::behaviour::{Behaviour, Event};
+use crate::behaviour::{Behaviour, Event, Request, BOOTADDR};
 use crate::config::Config;
+use crate::event::{handle_kademlia, handle_request_response};
 use crate::Result;
 
 /// The main event loop
 pub struct Node {
-    swarm: Swarm<Behaviour>,
-    bridge: Bridge<Server>,
-    pending_dial: HashSet<PeerId>,
-    pending_start_providing: HashSet<QueryId>,
-    pending_get_providers: HashSet<QueryId>,
-    // pending_request_file: HashMap<RequestId, oneshot::Sender<Result<String>>>,
-}
+    pub swarm: Swarm<Behaviour>,
+    pub bridge: Bridge<Server>,
 
-const BOOTADDR: &str = "/dnsaddr/bootstrap.libp2p.io";
-pub const GISTIT_RELAY_NODE: &str = "12D3KooWJtJX9qwBdECWoLk2hktSLFBcHSUWpP4FiN3u4Hns7347";
-pub const GISTIT_BOOTADDR: &str = "/ip4/34.125.73.67/tcp/4001";
+    pub pending_dial: HashSet<PeerId>,
+
+    /// Pending kademlia queries to get providers
+    pub pending_get_providers: HashSet<QueryId>,
+
+    pub pending_start_providing: HashSet<QueryId>,
+    pub to_provide: HashMap<Key, Vec<u8>>,
+
+    pub pending_request_file: HashSet<RequestId>,
+
+    /// Stack of request file (`key`) events
+    pub to_request: Vec<(Key, HashSet<PeerId>)>,
+}
 
 impl Node {
     pub async fn new(config: Config) -> Result<Self> {
         let behaviour = Behaviour::new(&config)?;
         let transport = tokio_development_transport(config.keypair)?;
 
-        let mut swarm = SwarmBuilder::new(transport, behaviour, config.peer_id)
+        let swarm = SwarmBuilder::new(transport, behaviour, config.peer_id)
             .executor(Box::new(|fut| {
                 tokio::task::spawn(fut);
             }))
             .build();
         let bridge = gistit_ipc::server(&config.runtime_dir)?;
-
-        let relay = GISTIT_BOOTADDR
-            .parse::<Multiaddr>()
-            .expect("valid multiaddr")
-            .with(Protocol::P2p(
-                PeerId::from_str(GISTIT_RELAY_NODE)
-                    .expect("valid peerid string")
-                    .into(),
-            ));
-        swarm.dial(relay)?;
 
         Ok(Self {
             swarm,
@@ -66,6 +64,10 @@ impl Node {
             pending_dial: HashSet::default(),
             pending_start_providing: HashSet::default(),
             pending_get_providers: HashSet::default(),
+            pending_request_file: HashSet::default(),
+
+            to_provide: HashMap::default(),
+            to_request: Vec::default(),
         })
     }
 
@@ -73,10 +75,27 @@ impl Node {
         loop {
             tokio::select! {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
-                    swarm_event.expect("swarm stream not to end")).await?,
+                    swarm_event.expect("stream not to end")).await?,
 
-                bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await?
+                bridge_event = self.bridge.recv() => self.handle_bridge_event(bridge_event?).await?,
+
+                request_event = poll_fn(|_| {
+                    self.to_request.pop().map_or(Poll::Pending, Poll::Ready)
+                }) => self.handle_request_event(request_event).await,
             }
+        }
+    }
+
+    async fn handle_request_event(&mut self, event: (Key, HashSet<PeerId>)) {
+        let (key, providers) = event;
+
+        for p in providers {
+            let request_id = self
+                .swarm
+                .behaviour_mut()
+                .request_response
+                .send_request(&p, Request(key.to_vec()));
+            self.pending_request_file.insert(request_id);
         }
     }
 
@@ -121,7 +140,7 @@ impl Node {
                 debug!("Identify: {:?}", listen_addrs);
                 if protocols
                     .iter()
-                    .any(|p| p.as_bytes() == kad::protocol::DEFAULT_PROTO_NAME)
+                    .any(|p| p.as_bytes() == protocol::DEFAULT_PROTO_NAME)
                 {
                     for addr in listen_addrs {
                         self.swarm
@@ -132,27 +151,15 @@ impl Node {
                 }
             }
 
-            // Kademlia events
-            SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::OutboundQueryCompleted {
-                id,
-                result: QueryResult::StartProviding(_),
-                ..
-            })) => {
-                info!("Start providing in kad");
-                self.pending_start_providing.remove(&id);
-            }
-            SwarmEvent::Behaviour(Event::Kademlia(KademliaEvent::OutboundQueryCompleted {
-                id,
-                result: QueryResult::GetProviders(Ok(GetProvidersOk { providers, .. })),
-                ..
-            })) => {
-                info!("Got providers: {:?}", providers);
-                self.pending_get_providers.remove(&id);
-            }
-            SwarmEvent::NewListenAddr { address, .. } => {
-                info!("Daemon: Listening on {:?}", address);
+            SwarmEvent::Behaviour(Event::Kademlia(event)) => handle_kademlia(self, event),
 
+            SwarmEvent::Behaviour(Event::RequestResponse(event)) => {
+                handle_request_response(self, event).await?;
+            }
+
+            SwarmEvent::NewListenAddr { address, .. } => {
                 let peer_id = self.swarm.local_peer_id().to_string();
+                info!("Daemon: Listening on {:?}, {:?}", address, peer_id);
 
                 self.bridge.connect_blocking()?;
                 self.bridge
@@ -178,7 +185,7 @@ impl Node {
                 }
             }
             ev => {
-                info!("other event: {:?}", ev);
+                debug!("other event: {:?}", ev);
             }
         }
         Ok(())
@@ -187,16 +194,15 @@ impl Node {
     async fn handle_bridge_event(&mut self, instruction: Instruction) -> Result<()> {
         match instruction {
             Instruction::Listen { host, port } => {
-                info!("Instruction: Listen");
+                warn!("Instruction: Listen");
                 let address = multiaddr!(Ip4(host), Tcp(port));
                 self.swarm.listen_on(address)?;
             }
 
             Instruction::Dial { peer_id } => {
-                info!("Instruction: Dial");
+                warn!("Instruction: Dial");
 
                 let base_addr: Multiaddr = BOOTADDR.parse().unwrap();
-                let relay_addr: Multiaddr = "/ip4/34.125.73.67/tcp/4001/p2p/12D3KooWJtJX9qwBdECWoLk2hktSLFBcHSUWpP4FiN3u4Hns7347/p2p-circuit".parse().unwrap();
                 let peer: PeerId = peer_id.parse().unwrap();
 
                 if self.pending_dial.contains(&peer) {
@@ -209,34 +215,38 @@ impl Node {
                     .kademlia
                     .add_address(&peer, base_addr);
 
-                self.swarm
-                    .dial(relay_addr.with(Protocol::P2p(peer.into())))?;
+                // self.swarm
+                //     .dial()?;
                 self.pending_dial.insert(peer);
             }
 
-            Instruction::Provide { hash, .. } => {
-                info!("Instruction: Provide file {}", hash);
-
-                self.swarm
-                    .behaviour_mut()
-                    .kademlia
-                    .start_providing(hash.into_bytes().into())
-                    .expect("to start providing");
-            }
-
-            Instruction::Get { hash } => {
-                info!("Instruction: Get providers for {}", hash);
+            Instruction::Provide { hash, data } => {
+                warn!("Instruction: Provide gistit {}", hash);
+                let key = Key::new(&hash);
 
                 let query_id = self
                     .swarm
                     .behaviour_mut()
                     .kademlia
-                    .get_providers(hash.into_bytes().into());
+                    .start_providing(key.clone())
+                    .expect("to start providing");
+
+                self.pending_start_providing.insert(query_id);
+                self.to_provide.insert(key, data);
+            }
+
+            Instruction::Get { hash } => {
+                warn!("Instruction: Get providers for {}", hash);
+                let query_id = self
+                    .swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .get_providers(Key::new(&hash));
                 self.pending_get_providers.insert(query_id);
             }
 
             Instruction::Status => {
-                info!("Instruction: Status");
+                warn!("Instruction: Status");
 
                 let listeners: Vec<String> =
                     self.swarm.listeners().map(ToString::to_string).collect();
@@ -255,6 +265,7 @@ impl Node {
                 warn!("Exiting...");
                 std::process::exit(0);
             }
+
             _ => (),
         }
         Ok(())

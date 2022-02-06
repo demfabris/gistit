@@ -26,6 +26,7 @@ use std::path::PathBuf;
 mod behaviour;
 mod config;
 mod error;
+mod event;
 mod network;
 
 pub type Error = crate::error::Error;
@@ -59,7 +60,7 @@ async fn run() -> Result<()> {
 #[tokio::main]
 async fn main() {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
+        .filter_level(log::LevelFilter::Info)
         .write_style(env_logger::WriteStyle::Always)
         .init();
 
