@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ReleaseDate
 # Added
+- Add `gistit-reference`
 
 # Changed
 - Use `tokio::UnixDatagram` in gistit-ipc
+- Refactors to `gistit-daemon` to be more independent
 
 
 ## [0.1.51] - 2022-02-03
