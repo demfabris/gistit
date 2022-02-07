@@ -7,15 +7,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
-use gistit_ipc::{self, Instruction};
 use reqwest::StatusCode;
+
+use gistit_ipc::{self, Instruction};
+use gistit_reference::dir::{config_dir, runtime_dir};
+use gistit_reference::{Gistit, Inner};
 
 use libgistit::clipboard::Clipboard;
 use libgistit::file::File;
 use libgistit::github::{self, CreateResponse, GITHUB_GISTS_API_URL};
 use libgistit::hash::Hasheable;
-use libgistit::project::{config_dir, runtime_dir};
-use libgistit::server::{Gistit, Inner, IntoGistit, Response, SERVER_URL_LOAD};
+use libgistit::server::{IntoGistit, Response, SERVER_URL_LOAD};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;

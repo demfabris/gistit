@@ -4,4 +4,5 @@ members = [
   "gistit-cli",
   "gistit-daemon",
   "gistit-ipc",
+  "gistit-reference"
 ]

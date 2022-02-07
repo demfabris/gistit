@@ -27,7 +27,7 @@ host = []
 [dependencies]
 async-trait = "0.1.52"
 lazy_static = "1.4.0"
-ngrammatic = "0.3.4"
+ngrammatic = "0.3.5"
 console = "0.15.0"
 indicatif = "0.16.2"
 url = "2.2.2"
@@ -35,21 +35,21 @@ reqwest = { version = "0.11.9", features = ["json"] }
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.78"
 base64 = "0.13.0"
-directories = "4.0.1"
 names = { version = "0.12.0", default-features = false }
 md5 = "0.7.0"
-which = "4.2.2"
+which = "4.2.4"
 rand = "0.8.4"
 phf = { version = "0.10.1", features = ["macros"] }
 thiserror = "1.0.30"
 gistit-ipc = { version = "0.1.1", path = "../gistit-ipc" }
+gistit-reference = { version = "0.1.0", path = "../gistit-reference" }
 
 [build-dependencies]
-clap_complete = { version = "3.0.5", optional = true }
-clap = { version = "3.0.13", optional = true, features = ["cargo"] }
+clap_complete = { version = "3.0.6", optional = true }
+clap = { version = "3.0.14", optional = true, features = ["cargo"] }
 
 [dependencies.clap]
-version = "3.0.13"
+version = "3.0.14"
 features = ["cargo"]
 
 [dependencies.bat]

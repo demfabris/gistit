@@ -7,10 +7,11 @@ use reqwest::StatusCode;
 use serde::Serialize;
 
 use gistit_ipc::{self, Instruction};
+use gistit_reference::dir::{data_dir, runtime_dir};
+use gistit_reference::Gistit;
 
 use libgistit::file::File;
-use libgistit::project::{data_dir, runtime_dir};
-use libgistit::server::{Gistit, IntoGistit, Response, SERVER_URL_GET};
+use libgistit::server::{IntoGistit, Response, SERVER_URL_GET};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
@@ -77,9 +78,11 @@ impl Dispatch for Action {
 
         if bridge.alive() {
             bridge.connect_blocking()?;
-            bridge.send(Instruction::Get {
-                hash: config.hash.to_owned(),
-            }).await?;
+            bridge
+                .send(Instruction::Get {
+                    hash: config.hash.to_owned(),
+                })
+                .await?;
         } else {
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())
@@ -90,16 +93,16 @@ impl Dispatch for Action {
 
             match response.status() {
                 StatusCode::OK => {
-                    let payload = response.json::<Response>().await?.into_gistit()?;
-                    let gistit = payload.to_file()?;
+                    let gistit = response.json::<Response>().await?.into_gistit()?;
+                    let file = File::from_bytes_encoded(gistit.data(), gistit.name())?;
 
                     if self.save {
-                        let saved_file = save_gistit(&gistit)?;
+                        let saved_file = save_gistit(&file)?;
                         warnln!("gistit saved at: `{}`", saved_file.to_string_lossy());
                         finish!("💾  Saved");
                     } else {
                         finish!("👀  Preview");
-                        preview_gistit(self, &payload, &gistit)?;
+                        preview_gistit(self, &gistit, &file)?;
                     }
                 }
                 StatusCode::NOT_FOUND => {

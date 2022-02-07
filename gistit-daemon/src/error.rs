@@ -9,6 +9,9 @@ pub enum Error {
     #[error("socket error, {0}")]
     Ipc(#[from] gistit_ipc::Error),
 
+    #[error("reference error, {0}")]
+    Reference(#[from] gistit_reference::Error),
+
     #[error("p2p transport error, {0}")]
     Transport(#[from] libp2p::TransportError<std::io::Error>),
 

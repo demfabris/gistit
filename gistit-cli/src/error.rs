@@ -27,6 +27,9 @@ pub enum Error {
     Ipc(#[from] gistit_ipc::Error),
 
     #[error("{0}")]
+    Reference(#[from] gistit_reference::Error),
+
+    #[error("{0}")]
     Tui(#[from] bat::error::Error),
 
     #[error("{0}")]
