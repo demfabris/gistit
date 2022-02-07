@@ -123,33 +123,5 @@ to peer file sharing.")
                         .help("Display the status of your gistit network node process")
                         .conflicts_with_all(&["start", "stop"]),
                 )
-                .arg(
-                    Arg::new("host")
-                        .long("host")
-                        .help("The Ipv4 address used to listen for inbound connections. Defaults to '127.0.0.1'")
-                        .takes_value(true)
-                        .value_name("ivp4-address")
-                        .default_value("0.0.0.0")
-                        .value_hint(ValueHint::Hostname)
-                        .conflicts_with_all(&["stop", "status"]),
-                )
-                .arg(
-                    Arg::new("port")
-                        .long("port")
-                        .help("The port to listen for connections. Defaults to 0 (random open port)")
-                        .takes_value(true)
-                        .value_name("port")
-                        .default_value("0")
-                        .conflicts_with_all(&["stop", "status"]),
-                )
-                .arg(
-                    Arg::new("join")
-                        .long("join")
-                        .help("Join a private network.")
-                        .takes_value(true)
-                        .value_name("address")
-                        .group("other")
-                        .conflicts_with_all(&["start", "stop", "status"]),
-                )
         )
 }

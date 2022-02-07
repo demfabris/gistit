@@ -7,6 +7,7 @@
 //         \/        \/
 //
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
+#![allow(clippy::multiple_crate_versions)]
 #![cfg_attr(
     test,
     allow(
@@ -68,7 +69,7 @@ async fn run() -> Result<()> {
         }
         #[cfg(feature = "host")]
         ("node", Some(args)) => {
-            let action = node::Action::from_args(args)?;
+            let action = node::Action::from_args(args);
             let payload = action.prepare().await?;
             action.dispatch(payload).await?;
         }

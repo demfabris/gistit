@@ -1,5 +1,4 @@
 use std::fs;
-use std::net::Ipv4Addr;
 use std::process::{Command, Stdio};
 
 use async_trait::async_trait;
@@ -11,8 +10,7 @@ use gistit_reference::dir;
 
 use crate::arg::app;
 use crate::dispatch::Dispatch;
-use crate::param::check;
-use crate::{errorln, finish, interruptln, progress, updateln, warnln, Error, Result};
+use crate::{errorln, finish, interruptln, progress, updateln, warnln, Result};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
@@ -20,25 +18,17 @@ pub struct Action {
     pub start: bool,
     pub stop: bool,
     pub status: bool,
-    pub host: &'static str,
-    pub port: &'static str,
 }
 
 impl Action {
     pub fn from_args(
         args: &'static ArgMatches,
-    ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
-        Ok(Box::new(Self {
-            host: args
-                .value_of("host")
-                .ok_or(Error::Argument("missing argument", "--host"))?,
-            port: args
-                .value_of("port")
-                .ok_or(Error::Argument("missing argument", "--port"))?,
+    ) -> Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static> {
+        Box::new(Self {
             start: args.is_present("start"),
             stop: args.is_present("stop"),
             status: args.is_present("status"),
-        }))
+        })
     }
 }
 
@@ -50,8 +40,6 @@ enum ProcessCommand {
 
 pub struct Config {
     command: ProcessCommand,
-    host: Ipv4Addr,
-    port: u16,
 }
 
 #[async_trait]
@@ -60,8 +48,6 @@ impl Dispatch for Action {
 
     async fn prepare(&self) -> Result<Self::InnerData> {
         progress!("Preparing");
-        let host = check::host(self.host)?;
-        let port = check::port(self.port)?;
 
         let command = match (self.start, self.stop, self.status) {
             (true, false, false) => ProcessCommand::Start,
@@ -72,11 +58,7 @@ impl Dispatch for Action {
                 std::process::exit(0);
             }
         };
-        let config = Config {
-            command,
-            host,
-            port,
-        };
+        let config = Config { command };
         updateln!("Prepared");
 
         Ok(config)
@@ -105,15 +87,6 @@ impl Dispatch for Action {
                         .spawn()?
                         .id()
                 };
-
-                bridge.connect_blocking()?;
-                bridge
-                    .send(Instruction::Listen {
-                        host: config.host,
-                        port: config.port,
-                    })
-                    .await?;
-
                 updateln!("Gistit node started, pid: {}", style(pid).blue());
 
                 if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv().await? {

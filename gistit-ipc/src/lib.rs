@@ -24,7 +24,6 @@
 
 use std::fs::{metadata, remove_file};
 use std::marker::PhantomData;
-use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tokio::net::UnixDatagram;
@@ -199,10 +198,6 @@ impl Bridge<Client> {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Instruction {
-    Listen {
-        host: Ipv4Addr,
-        port: u16,
-    },
     Provide {
         hash: String,
         data: Vec<u8>,
