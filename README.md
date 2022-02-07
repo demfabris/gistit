@@ -88,10 +88,12 @@ $ gistit f 8765d324ddd800f1112e77fece3d3ff2 --save
 ## Installation
 
 **Compiled binaries**
-_soon_
 
-**With** _\<Insert package manager here\>_
-_soon_
+Check [releases](https://github.com/demfabris/gistit/releases)
+
+**With** _\<my favorite package manager here\>_
+- **AUR** - Upcomming
+- You tell me
 
 **From [crates.io](https://crates.io/crates/gistit/)**
 
@@ -99,7 +101,7 @@ _soon_
 cargo install gistit
 ```
 
-**From source** _(msrv 1.58)_
+**From source** _(msrv 1.60 nightly)_
 
 ```shell
 # Clone
