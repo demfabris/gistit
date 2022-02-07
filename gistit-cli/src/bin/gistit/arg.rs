@@ -151,13 +151,5 @@ to peer file sharing.")
                         .group("other")
                         .conflicts_with_all(&["start", "stop", "status"]),
                 )
-                .arg(
-                    Arg::new("clipboard")
-                        .long("clipboard")
-                        .short('c')
-                        .requires("start")
-                        .help("Attempt to copy your gistit node id into clipboard")
-                        .conflicts_with_all(&["stop", "status"]),
-                )
         )
 }

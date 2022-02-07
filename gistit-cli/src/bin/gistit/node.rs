@@ -1,6 +1,5 @@
 use std::fs;
 use std::net::Ipv4Addr;
-use std::path::Path;
 use std::process::{Command, Stdio};
 
 use async_trait::async_trait;
@@ -8,8 +7,9 @@ use clap::ArgMatches;
 use console::style;
 
 use gistit_ipc::{self, Instruction, ServerResponse};
-use gistit_reference::dir::{config_dir, runtime_dir};
+use gistit_reference::dir;
 
+use crate::arg::app;
 use crate::dispatch::Dispatch;
 use crate::param::check;
 use crate::{errorln, finish, interruptln, progress, updateln, warnln, Error, Result};
@@ -22,8 +22,6 @@ pub struct Action {
     pub status: bool,
     pub host: &'static str,
     pub port: &'static str,
-    pub join: Option<&'static str>,
-    pub clipboard: bool,
 }
 
 impl Action {
@@ -31,8 +29,6 @@ impl Action {
         args: &'static ArgMatches,
     ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
         Ok(Box::new(Self {
-            join: args.value_of("join"),
-            clipboard: args.is_present("clipboard"),
             host: args
                 .value_of("host")
                 .ok_or(Error::Argument("missing argument", "--host"))?,
@@ -47,7 +43,6 @@ impl Action {
 }
 
 enum ProcessCommand {
-    Join(&'static str),
     Start,
     Stop,
     Status,
@@ -66,17 +61,17 @@ impl Dispatch for Action {
     async fn prepare(&self) -> Result<Self::InnerData> {
         progress!("Preparing");
         let host = check::host(self.host)?;
-
         let port = check::port(self.port)?;
 
-        let command = match (self.join, self.start, self.stop, self.status) {
-            (Some(address), false, false, false) => ProcessCommand::Join(address),
-            (None, true, false, false) => ProcessCommand::Start,
-            (None, false, true, false) => ProcessCommand::Stop,
-            (None, false, false, true) => ProcessCommand::Status,
-            (_, _, _, _) => unreachable!(), // TODO: print app help
+        let command = match (self.start, self.stop, self.status) {
+            (true, false, false) => ProcessCommand::Start,
+            (false, true, false) => ProcessCommand::Stop,
+            (false, false, true) => ProcessCommand::Status,
+            (_, _, _) => {
+                app().print_help()?;
+                std::process::exit(0);
+            }
         };
-
         let config = Config {
             command,
             host,
@@ -88,8 +83,7 @@ impl Dispatch for Action {
     }
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
-        let runtime_dir = runtime_dir()?;
-        let config_dir = config_dir()?;
+        let runtime_dir = dir::runtime()?;
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         match config.command {
@@ -100,8 +94,17 @@ impl Dispatch for Action {
                     return Ok(());
                 }
 
-                let pid = spawn(&runtime_dir, &config_dir)?;
                 progress!("Starting gistit node");
+                let pid = {
+                    let stdout = fs::File::create(runtime_dir.join("gistit.log"))?;
+                    let daemon =
+                        "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
+                    Command::new(daemon)
+                        .stderr(stdout)
+                        .stdout(Stdio::null())
+                        .spawn()?
+                        .id()
+                };
 
                 bridge.connect_blocking()?;
                 bridge
@@ -110,28 +113,11 @@ impl Dispatch for Action {
                         port: config.port,
                     })
                     .await?;
+
                 updateln!("Gistit node started, pid: {}", style(pid).blue());
 
                 if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv().await? {
-                    print_success(self.clipboard, &id);
-                }
-            }
-
-            // Dial to a peer
-            ProcessCommand::Join(address) => {
-                progress!("Joining");
-                if bridge.alive() {
-                    bridge.connect_blocking()?;
-                    bridge
-                        .send(Instruction::Dial {
-                            peer_id: address.to_owned(),
-                        })
-                        .await?;
-                    updateln!("Joined");
-                    finish!("");
-                } else {
-                    interruptln!();
-                    errorln!("gistit node must be running");
+                    finish!(format!("\n    peer id: '{}'\n\n", style(id).bold(),));
                 }
             }
 
@@ -167,32 +153,4 @@ impl Dispatch for Action {
         };
         Ok(())
     }
-}
-
-fn spawn(runtime_dir: &Path, config_dir: &Path) -> Result<u32> {
-    let stdout = fs::File::create(runtime_dir.join("gistit.log"))?;
-    let daemon = "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
-    let child = Command::new(daemon)
-        .args(["--runtime-dir", runtime_dir.to_string_lossy().as_ref()])
-        .args(["--config-dir", config_dir.to_string_lossy().as_ref()])
-        .stderr(stdout)
-        .stdout(Stdio::null())
-        .spawn()?;
-
-    Ok(child.id())
-}
-
-fn print_success(has_clipboard: bool, peer_id: &str) {
-    let clipboard_msg = if has_clipboard {
-        "(copied to clipboard)".to_owned()
-    } else {
-        "".to_owned()
-    };
-    finish!(format!(
-        r#"
-        peer id: '{}' {}
-        "#,
-        style(peer_id).bold(),
-        style(clipboard_msg).italic().dim()
-    ));
 }

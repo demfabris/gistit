@@ -1,6 +1,8 @@
 [package]
 authors = ["Fabricio <fabricio7p@protonmail.com>"]
 description = "Gistit reference crate for project and data definitions"
+categories = ["command-line-utilities", "text-processing"]
+keywords = ["gistit"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 name = "gistit-reference"

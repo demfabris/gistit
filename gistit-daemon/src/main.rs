@@ -29,12 +29,37 @@ mod network;
 pub type Error = crate::error::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
-use gistit_reference::dir::{config_dir, runtime_dir};
+use std::path::PathBuf;
+
+use argh::FromArgs;
+
+use gistit_reference::dir;
+
+#[derive(FromArgs, PartialEq, Debug)]
+/// Gistit p2p node
+struct Args {
+    #[argh(option, long = "runtime-path")]
+    /// override runtime directory
+    runtime_path: Option<PathBuf>,
+
+    #[argh(option, long = "config-path")]
+    /// override config directory
+    config_path: Option<PathBuf>,
+}
 
 async fn run() -> Result<()> {
-    let config = config::Config::new(runtime_dir()?, config_dir()?);
+    let args: Args = argh::from_env();
+    let default_runtime = dir::runtime()?;
+    let default_config = dir::config()?;
+
+    let runtime_path = args.runtime_path.unwrap_or(default_runtime);
+    let config_path = args.config_path.unwrap_or(default_config);
+
+    let config = config::Config::new(runtime_path, config_path);
     let node = network::Node::new(config).await?;
+
     node.run().await?;
+
     Ok(())
 }
 

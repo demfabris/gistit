@@ -14,13 +14,13 @@ const QUALIFIER: &str = "io";
 /// # Errors
 ///
 /// Fails if can't create folder in home config directory
-pub fn init_dirs() -> Result<()> {
-    let config = config_dir()?;
+pub fn init() -> Result<()> {
+    let config = config()?;
     if fs::metadata(&config).is_err() {
         fs::create_dir(&config)?;
     }
 
-    let data = data_dir()?;
+    let data = data()?;
     if fs::metadata(&data).is_err() {
         fs::create_dir(&data)?;
     }
@@ -34,7 +34,7 @@ pub fn init_dirs() -> Result<()> {
 /// # Errors
 ///
 /// Fails if the system doesn't have a HOME directory
-pub fn runtime_dir() -> Result<PathBuf> {
+pub fn runtime() -> Result<PathBuf> {
     let dirs = BaseDirs::new().ok_or(ErrorKind::Directory("can't open home directory"))?;
 
     Ok(dirs
@@ -47,7 +47,7 @@ pub fn runtime_dir() -> Result<PathBuf> {
 /// # Errors
 ///
 /// Fails if the system doesn't have a HOME directory
-pub fn config_dir() -> Result<PathBuf> {
+pub fn config() -> Result<PathBuf> {
     Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
         .ok_or(ErrorKind::Directory("can't open home directory"))?
         .config_dir()
@@ -59,7 +59,7 @@ pub fn config_dir() -> Result<PathBuf> {
 /// # Errors
 ///
 /// Fails if the system doesn't have a HOME directory
-pub fn data_dir() -> Result<PathBuf> {
+pub fn data() -> Result<PathBuf> {
     Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
         .ok_or(ErrorKind::Directory("can't open home directory"))?
         .data_dir()

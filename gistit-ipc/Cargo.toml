@@ -1,6 +1,8 @@
 [package]
 name = "gistit-ipc"
 authors = ["Fabricio <fabricio7p@protonmail.com>"]
+keywords = ["gistit"]
+categories = ["command-line-utilities", "text-processing"]
 description = "Inter process communication for gistit-cli and gistit-daemon"
 edition = "2021"
 license = "MIT OR Apache-2.0"

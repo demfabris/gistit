@@ -7,7 +7,7 @@ use reqwest::StatusCode;
 use serde::Serialize;
 
 use gistit_ipc::{self, Instruction};
-use gistit_reference::dir::{data_dir, runtime_dir};
+use gistit_reference::dir;
 use gistit_reference::Gistit;
 
 use libgistit::file::File;
@@ -73,7 +73,7 @@ impl Dispatch for Action {
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         progress!("Fetching");
-        let runtime_dir = runtime_dir()?;
+        let runtime_dir = dir::runtime()?;
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         if bridge.alive() {
@@ -142,7 +142,7 @@ fn preview_gistit(action: &Action, gistit: &Gistit, file: &File) -> Result<bool>
 }
 
 fn save_gistit(file: &File) -> Result<PathBuf> {
-    let save_location = data_dir()?;
+    let save_location = dir::data()?;
 
     let file_path = save_location.join(file.name());
     file.save_as(&file_path)?;

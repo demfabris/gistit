@@ -43,10 +43,12 @@ pub struct Gistit {
 }
 
 impl Gistit {
-    pub fn data(&self) -> &Base64Encoded {
+    #[must_use]
+    pub const fn data(&self) -> &Base64Encoded {
         &self.inner.data
     }
 
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.inner.name
     }

@@ -10,7 +10,7 @@ use console::style;
 use reqwest::StatusCode;
 
 use gistit_ipc::{self, Instruction};
-use gistit_reference::dir::{config_dir, runtime_dir};
+use gistit_reference::dir;
 use gistit_reference::{Gistit, Inner};
 
 use libgistit::clipboard::Clipboard;
@@ -141,7 +141,7 @@ impl Dispatch for Action {
                 oauth.poll_token().await?;
                 warnln!(
                     "storing github token at: '{}'",
-                    config_dir()?.to_string_lossy()
+                    dir::config()?.to_string_lossy()
                 );
             }
             updateln!("Authorized");
@@ -162,7 +162,7 @@ impl Dispatch for Action {
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let hash = config.hash();
 
-        let runtime_dir = runtime_dir()?;
+        let runtime_dir = dir::runtime()?;
         let clipboard = config.clipboard;
 
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
@@ -173,8 +173,7 @@ impl Dispatch for Action {
             bridge
                 .send(Instruction::Provide {
                     hash: hash.clone(),
-                    // data: config.file.to_encoded_data(),
-                    data: Vec::from([1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                    data: config.file.to_encoded_data().as_ref().to_vec(),
                 })
                 .await?;
             // TODO: wait for ok response from node

@@ -56,7 +56,11 @@ pub struct Bridge<T: SockEnd> {
 }
 
 /// Recv from [`NAMED_SOCKET_0`] and send to [`NAMED_SOCKET_1`]
-/// The owner of sock_0
+/// The owner of `sock_0`
+///
+/// # Errors
+///
+/// Fails if can't spawn a named socket
 pub fn server(base: &Path) -> Result<Bridge<Server>> {
     let sockpath_0 = &base.join(NAMED_SOCKET_0);
 
@@ -76,7 +80,11 @@ pub fn server(base: &Path) -> Result<Bridge<Server>> {
 }
 
 /// Recv from [`NAMED_SOCKET_1`] and send to [`NAMED_SOCKET_0`]
-/// The owner of sock_1
+/// The owner of `sock_1`
+///
+/// # Errors
+///
+/// Fails if can't spawn a named socket
 pub fn client(base: &Path) -> Result<Bridge<Client>> {
     let sockpath_1 = &base.join(NAMED_SOCKET_1);
 
@@ -116,21 +124,36 @@ impl Bridge<Server> {
         __alive(&self.base, &self.sock_1, NAMED_SOCKET_1)
     }
 
+    /// Connect to the other end
+    ///
+    /// # Errors
+    ///
+    /// Inherits errors of [`__connect_blocking`]
     pub fn connect_blocking(&mut self) -> Result<()> {
         __connect_blocking(&self.base, &self.sock_1, NAMED_SOCKET_1)
     }
 
+    /// Send bincode serialized data through the pipe
+    ///
+    /// # Errors
+    ///
+    /// Fails if the socket is not alive
     pub async fn send(&self, instruction: Instruction) -> Result<()> {
-        let encoded = serialize(&instruction).unwrap();
+        let encoded = serialize(&instruction)?;
         log::trace!("Sending to client {} bytes", encoded.len());
         self.sock_1.send(&encoded).await?;
         Ok(())
     }
 
+    /// Attempts to receive serialized data from the pipe
+    ///
+    /// # Errors
+    ///
+    /// Fails if the socket is not alive
     pub async fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
         self.sock_0.recv(&mut buf).await?;
-        let target = deserialize(&buf).unwrap();
+        let target = deserialize(&buf)?;
         Ok(target)
     }
 }
@@ -140,21 +163,36 @@ impl Bridge<Client> {
         __alive(&self.base, &self.sock_0, NAMED_SOCKET_0)
     }
 
+    /// Connect to the other end
+    ///
+    /// # Errors
+    ///
+    /// Inherits errors of [`__connect_blocking`]
     pub fn connect_blocking(&mut self) -> Result<()> {
         __connect_blocking(&self.base, &self.sock_0, NAMED_SOCKET_0)
     }
 
+    /// Send bincode serialized data through the pipe
+    ///
+    /// # Errors
+    ///
+    /// Fails if the socket is not alive
     pub async fn send(&self, instruction: Instruction) -> Result<()> {
-        let encoded = serialize(&instruction).unwrap();
+        let encoded = serialize(&instruction)?;
         log::trace!("Sending to server {} bytes", encoded.len());
         self.sock_0.send(&encoded).await?;
         Ok(())
     }
 
+    /// Attempts to receive serialized data from the pipe
+    ///
+    /// # Errors
+    ///
+    /// Fails if the socket is not alive
     pub async fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
         self.sock_1.recv(&mut buf).await?;
-        let target = deserialize(&buf).unwrap();
+        let target = deserialize(&buf)?;
         Ok(target)
     }
 }
@@ -164,9 +202,6 @@ pub enum Instruction {
     Listen {
         host: Ipv4Addr,
         port: u16,
-    },
-    Dial {
-        peer_id: String,
     },
     Provide {
         hash: String,
@@ -203,12 +238,21 @@ pub struct Error {
 #[derive(Debug)]
 pub enum ErrorKind {
     IO(std::io::Error),
+    Serialization(bincode::Error),
 }
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         Self {
             kind: ErrorKind::IO(err),
+        }
+    }
+}
+
+impl From<bincode::Error> for Error {
+    fn from(err: bincode::Error) -> Self {
+        Self {
+            kind: ErrorKind::Serialization(err),
         }
     }
 }
