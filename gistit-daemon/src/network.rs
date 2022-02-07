@@ -15,14 +15,14 @@ use libp2p::futures::future::poll_fn;
 use libp2p::futures::StreamExt;
 use libp2p::multiaddr::multiaddr;
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
-use libp2p::{tokio_development_transport, Multiaddr, Swarm};
+use libp2p::{tokio_development_transport, Swarm};
 
 use libp2p::identify::{IdentifyEvent, IdentifyInfo};
 use libp2p::kad::{protocol, record::Key, QueryId};
 use libp2p::ping::Failure;
 use libp2p::request_response::RequestId;
 
-use crate::behaviour::{Behaviour, Event, Request, BOOTADDR};
+use crate::behaviour::{Behaviour, Event, Request};
 use crate::config::Config;
 use crate::event::{handle_kademlia, handle_request_response};
 use crate::Result;
@@ -199,27 +199,6 @@ impl Node {
                 self.swarm.listen_on(address)?;
             }
 
-            Instruction::Dial { peer_id } => {
-                warn!("Instruction: Dial");
-
-                let base_addr: Multiaddr = BOOTADDR.parse().unwrap();
-                let peer: PeerId = peer_id.parse().unwrap();
-
-                if self.pending_dial.contains(&peer) {
-                    error!("Already dialing peer: {}", peer_id);
-                    return Ok(());
-                }
-
-                self.swarm
-                    .behaviour_mut()
-                    .kademlia
-                    .add_address(&peer, base_addr);
-
-                // self.swarm
-                //     .dial()?;
-                self.pending_dial.insert(peer);
-            }
-
             Instruction::Provide { hash, data } => {
                 warn!("Instruction: Provide gistit {}", hash);
                 let key = Key::new(&hash);
@@ -266,7 +245,7 @@ impl Node {
                 std::process::exit(0);
             }
 
-            _ => (),
+            Instruction::Response(_) => (),
         }
         Ok(())
     }
