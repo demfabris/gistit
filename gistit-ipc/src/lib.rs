@@ -218,8 +218,12 @@ pub enum Instruction {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum ServerResponse {
+    Status {
+        peer_count: usize,
+        pending_connections: u32,
+        listeners: Vec<String>,
+    },
     PeerId(String),
-    Status(String),
     File(Vec<u8>),
 }
 

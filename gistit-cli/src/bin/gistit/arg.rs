@@ -98,7 +98,6 @@ Run `gistit --colorschemes` to list available ones.",
                 .alias("n")
                 .about("Start a p2p gistit node for file transfer")
                 .group(ArgGroup::new("daemon_cmd"))
-                .group(ArgGroup::new("other"))
                 .arg(
                     Arg::new("start")
                         .long("start")
@@ -107,7 +106,7 @@ Run `gistit --colorschemes` to list available ones.",
                         .long_help(
                             "Spawn the gistit network node background process to enable peer 
 to peer file sharing.")
-                        .conflicts_with_all(&["join", "stop", "status"]),
+                        .conflicts_with_all(&["stop", "status"]),
                 )
                 .arg(
                     Arg::new("stop")

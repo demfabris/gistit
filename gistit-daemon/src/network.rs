@@ -2,6 +2,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::collections::{HashMap, HashSet};
+use std::net::Ipv4Addr;
 use std::string::ToString;
 use std::task::Poll;
 
@@ -51,12 +52,16 @@ impl Node {
         let behaviour = Behaviour::new(&config)?;
         let transport = tokio_development_transport(config.keypair)?;
 
-        let swarm = SwarmBuilder::new(transport, behaviour, config.peer_id)
+        let mut swarm = SwarmBuilder::new(transport, behaviour, config.peer_id)
             .executor(Box::new(|fut| {
                 tokio::task::spawn(fut);
             }))
             .build();
         let bridge = gistit_ipc::server(&config.runtime_dir)?;
+
+        // Listen on all interfaces
+        let address = multiaddr!(Ip4(Ipv4Addr::new(0, 0, 0, 0)), Tcp(0_u16));
+        swarm.listen_on(address)?;
 
         Ok(Self {
             swarm,
@@ -193,12 +198,6 @@ impl Node {
 
     async fn handle_bridge_event(&mut self, instruction: Instruction) -> Result<()> {
         match instruction {
-            Instruction::Listen { host, port } => {
-                warn!("Instruction: Listen");
-                let address = multiaddr!(Ip4(host), Tcp(port));
-                self.swarm.listen_on(address)?;
-            }
-
             Instruction::Provide { hash, data } => {
                 warn!("Instruction: Provide gistit {}", hash);
                 let key = Key::new(&hash);
@@ -233,10 +232,11 @@ impl Node {
 
                 self.bridge.connect_blocking()?;
                 self.bridge
-                    .send(Instruction::Response(ServerResponse::Status(format!(
-                        "listeners: {:?}, network: {:?}",
-                        listeners, network_info
-                    ))))
+                    .send(Instruction::Response(ServerResponse::Status {
+                        peer_count: network_info.num_peers(),
+                        pending_connections: network_info.connection_counters().num_pending(),
+                        listeners,
+                    }))
                     .await?;
             }
 

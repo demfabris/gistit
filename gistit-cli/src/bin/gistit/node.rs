@@ -10,7 +10,7 @@ use gistit_reference::dir;
 
 use crate::arg::app;
 use crate::dispatch::Dispatch;
-use crate::{errorln, finish, interruptln, progress, updateln, warnln, Result};
+use crate::{errorln, finish, interruptln, progress, updateln, Result};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
@@ -72,7 +72,16 @@ impl Dispatch for Action {
             // Start network daemon / check running status
             ProcessCommand::Start => {
                 if bridge.alive() {
-                    finish!("Running"); // TODO: change this to status msg
+                    bridge.connect_blocking()?;
+                    bridge.send(Instruction::Status).await?;
+                    if let Instruction::Response(ServerResponse::Status {
+                        listeners,
+                        peer_count,
+                        pending_connections,
+                    }) = bridge.recv().await?
+                    {
+                        format_daemon_status(&listeners, peer_count, pending_connections);
+                    }
                     return Ok(());
                 }
 
@@ -112,11 +121,13 @@ impl Dispatch for Action {
                     bridge.connect_blocking()?;
                     bridge.send(Instruction::Status).await?;
 
-                    if let Instruction::Response(ServerResponse::Status(status_str)) =
-                        bridge.recv().await?
+                    if let Instruction::Response(ServerResponse::Status {
+                        listeners,
+                        peer_count,
+                        pending_connections,
+                    }) = bridge.recv().await?
                     {
-                        updateln!("Requested status");
-                        warnln!("{}", status_str);
+                        format_daemon_status(&listeners, peer_count, pending_connections);
                     }
                 } else {
                     interruptln!();
@@ -126,4 +137,18 @@ impl Dispatch for Action {
         };
         Ok(())
     }
+}
+
+fn format_daemon_status(listeners: &Vec<String>, peer_count: usize, pending_connections: u32) {
+    updateln!("Running status");
+    finish!(format!(
+        r#"
+    peers: {}
+    pending connections: {}
+    listening on: {:?}
+                            "#,
+        style(peer_count).blue(),
+        pending_connections,
+        listeners
+    ));
 }
