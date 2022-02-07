@@ -1,3 +1,4 @@
+#![allow(clippy::all, clippy::pedantic, clippy::nursery)]
 //! Open URLs in the web browsers available on a platform.
 //!
 //! Inspired by the [webbrowser](https://docs.python.org/2/library/webbrowser.html) python library.
