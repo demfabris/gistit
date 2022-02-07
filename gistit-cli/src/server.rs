@@ -2,20 +2,11 @@ use std::option_env;
 use url::Url;
 
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use crate::file::{B64EncodedFileData, File};
+use gistit_reference::Gistit;
+
 use crate::{Error, Result};
-
-// #[cfg(debug_assertions)]
-// lazy_static! {
-//     static ref SERVER_URL_BASE: Url = Url::parse("http://localhost:4001/")
-//         .unwrap()
-//         .join("gistit-base/")
-//         .unwrap()
-//         .join("us-central1/")
-//         .unwrap();
-// }
 
 lazy_static! {
     static ref SERVER_URL_BASE: Url =
@@ -42,36 +33,6 @@ lazy_static! {
             .expect("invalid `GISTIT_SERVER_URL` variable")
             .join(SERVER_SUBPATH_TOKEN)
             .unwrap();
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Gistit {
-    pub hash: String,
-    pub author: String,
-    pub description: Option<String>,
-    pub timestamp: String,
-    pub inner: Inner,
-}
-
-impl Gistit {
-    /// Converts a [`Gistit`] into our [`File`] format
-    ///
-    /// # Errors
-    ///
-    /// Fails if the payload is somehow corrupted
-    pub fn to_file(&self) -> Result<File> {
-        let name = self.inner.name.clone();
-
-        File::from_bytes_encoded(self.inner.data.0.as_bytes(), &name)
-    }
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Inner {
-    pub name: String,
-    pub lang: String,
-    pub size: usize,
-    pub data: B64EncodedFileData,
 }
 
 #[derive(Deserialize, Debug, Default)]

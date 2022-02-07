@@ -26,7 +26,6 @@ pub mod file;
 pub mod github;
 pub mod hash;
 pub mod patch;
-pub mod project;
 pub mod server;
 
 pub use error::Error;

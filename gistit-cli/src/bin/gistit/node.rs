@@ -8,7 +8,7 @@ use clap::ArgMatches;
 use console::style;
 
 use gistit_ipc::{self, Instruction, ServerResponse};
-use libgistit::project::{config_dir, runtime_dir};
+use gistit_reference::dir::{config_dir, runtime_dir};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;

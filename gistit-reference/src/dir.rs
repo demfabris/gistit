@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use directories::{BaseDirs, ProjectDirs};
 
-use crate::{Error, Result};
+use crate::{ErrorKind, Result};
 
 const APPLICATION: &str = "Gistit";
 const ORGANIZATION: &str = "fabricio7p";
@@ -34,7 +34,7 @@ pub fn init_dirs() -> Result<()> {
 ///
 /// Fails if the machine doesn't have a HOME directory
 pub fn runtime_dir() -> Result<PathBuf> {
-    let dirs = BaseDirs::new().ok_or(Error::Unknown)?;
+    let dirs = BaseDirs::new().ok_or(ErrorKind::Directory("can't open home directory"))?;
 
     Ok(dirs
         .runtime_dir()
@@ -48,7 +48,7 @@ pub fn runtime_dir() -> Result<PathBuf> {
 /// Fails if the machine doesn't have a HOME directory
 pub fn config_dir() -> Result<PathBuf> {
     Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
-        .ok_or(Error::Unknown)?
+        .ok_or(ErrorKind::Directory("can't open home directory"))?
         .config_dir()
         .to_path_buf())
 }
@@ -60,7 +60,7 @@ pub fn config_dir() -> Result<PathBuf> {
 /// Fails if the machine doesn't have a HOME directory
 pub fn data_dir() -> Result<PathBuf> {
     Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
-        .ok_or(Error::Unknown)?
+        .ok_or(ErrorKind::Directory("can't open home directory"))?
         .data_dir()
         .to_path_buf())
 }

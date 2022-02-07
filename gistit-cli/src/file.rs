@@ -12,12 +12,10 @@ use std::str;
 
 use phf::{phf_map, Map};
 use rand::{distributions::Alphanumeric, Rng};
-use serde::{Deserialize, Serialize};
+
+use gistit_reference::Base64Encoded;
 
 use crate::Result;
-
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
-pub struct B64EncodedFileData(pub String);
 
 /// Supported file extensions
 /// This is a compile time built hashmap to check incomming file extensions against.
@@ -671,7 +669,7 @@ impl File {
     /// # Errors
     ///
     /// Fails with [`std::io::Error`]
-    pub fn from_bytes_encoded(bytes: &[u8], name: &str) -> Result<Self> {
+    pub fn from_bytes_encoded(bytes: impl AsRef<[u8]>, name: &str) -> Result<Self> {
         let decoded_bytes = base64::decode(bytes)?;
         Self::from_bytes(decoded_bytes, name)
     }
@@ -692,8 +690,8 @@ impl File {
     }
 
     #[must_use]
-    pub fn to_encoded_data(&self) -> B64EncodedFileData {
-        B64EncodedFileData(base64::encode(&self.bytes))
+    pub fn to_encoded_data(&self) -> Base64Encoded {
+        Base64Encoded(base64::encode(&self.bytes))
     }
 
     /// Save the file to the given path
