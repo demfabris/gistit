@@ -1,6 +1,28 @@
-use serde::{Deserialize, Serialize};
-
+//
+//   ________.__          __  .__  __
+//  /  _____/|__| _______/  |_|__|/  |_
+// /   \  ___|  |/  ___/\   __\  \   __\
+// \    \_\  \  |\___ \  |  | |  ||  |
+//  \______  /__/____  > |__| |__||__|
+//         \/        \/
+//
+#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
+#![cfg_attr(
+    test,
+    allow(
+        unused,
+        clippy::all,
+        clippy::pedantic,
+        clippy::nursery,
+        clippy::dbg_macro,
+        clippy::unwrap_used,
+        clippy::missing_docs_in_private_items,
+    )
+)]
+//! Define some common data structures and project directories for Gistit
 pub mod dir;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Base64Encoded(pub String);

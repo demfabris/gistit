@@ -1,5 +1,26 @@
-//! This is a simple crate to a communication interface for gistit-daemon and gistit-cli
-//! Missing TCP socket implementation
+//
+//   ________.__          __  .__  __
+//  /  _____/|__| _______/  |_|__|/  |_
+// /   \  ___|  |/  ___/\   __\  \   __\
+// \    \_\  \  |\___ \  |  | |  ||  |
+//  \______  /__/____  > |__| |__||__|
+//         \/        \/
+//
+#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
+#![cfg_attr(
+    test,
+    allow(
+        unused,
+        clippy::all,
+        clippy::pedantic,
+        clippy::nursery,
+        clippy::dbg_macro,
+        clippy::unwrap_used,
+        clippy::missing_docs_in_private_items,
+    )
+)]
+//! This is a simple crate to handle the inter process comms for gistit-daemon and gistit-cli
+//! TODO: Missing TCP socket implementation
 
 use std::fs::{metadata, remove_file};
 use std::marker::PhantomData;
