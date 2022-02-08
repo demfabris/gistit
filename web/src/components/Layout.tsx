@@ -6,7 +6,7 @@ import type { FC } from 'react'
 
 interface Props {
   withHeaderBar: boolean
-  title: string
+  title?: string
 }
 
 export const Layout: FC<Props> = ({
