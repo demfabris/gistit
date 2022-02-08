@@ -1,3 +1,4 @@
+use std::io;
 use std::iter::once;
 use std::str::{self, FromStr};
 use std::time::Duration;
@@ -21,6 +22,9 @@ use libp2p::request_response::{
 
 use async_trait::async_trait;
 
+use gistit_ipc::bincode;
+use gistit_reference::Gistit;
+
 use crate::config::Config;
 use crate::Result;
 
@@ -31,7 +35,7 @@ pub const BOOTNODES: [&str; 4] = [
     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
 
-pub const BOOTADDR: &str = "/ip4/147.75.94.115/tcp/4001";
+pub const BOOTADDR: &str = "/dnsaddr/bootstrap.libp2p.io";
 
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "Event", event_process = false)]
@@ -67,7 +71,6 @@ impl Behaviour {
             }
 
             behaviour.bootstrap().expect("to bootstrap");
-
             behaviour
         };
 
@@ -161,11 +164,11 @@ pub struct ExchangeCodec;
 pub struct Request(pub Vec<u8>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Response(pub Vec<u8>);
+pub struct Response(pub Gistit);
 
 impl std::fmt::Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", str::from_utf8(&self.0).unwrap_or("invalid utf8"))
+        write!(f, "{:?}", self.0)
     }
 }
 
@@ -176,6 +179,7 @@ impl std::error::Error for Response {
 }
 
 const MAX_FILE_SIZE: usize = 50_000;
+const HASH_SIZE: usize = 32;
 
 #[async_trait]
 impl RequestResponseCodec for ExchangeCodec {
@@ -187,13 +191,13 @@ impl RequestResponseCodec for ExchangeCodec {
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
-    ) -> tokio::io::Result<Self::Request> {
-        let bytes = read_length_prefixed(io, MAX_FILE_SIZE).await?;
+    ) -> io::Result<Self::Request> {
+        let hash = read_length_prefixed(io, HASH_SIZE).await?;
 
-        if bytes.is_empty() {
-            Err(tokio::io::ErrorKind::UnexpectedEof.into())
+        if hash.is_empty() {
+            Err(io::ErrorKind::UnexpectedEof.into())
         } else {
-            Ok(Request(bytes))
+            Ok(Request(hash))
         }
     }
 
@@ -201,13 +205,15 @@ impl RequestResponseCodec for ExchangeCodec {
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
-    ) -> tokio::io::Result<Self::Response> {
+    ) -> io::Result<Self::Response> {
         let bytes = read_length_prefixed(io, MAX_FILE_SIZE).await?;
+        let gistit: Gistit =
+            bincode::deserialize(&bytes).map_err(|_| io::ErrorKind::InvalidInput)?;
 
         if bytes.is_empty() {
-            Err(tokio::io::ErrorKind::UnexpectedEof.into())
+            Err(io::ErrorKind::UnexpectedEof.into())
         } else {
-            Ok(Response(bytes))
+            Ok(Response(gistit))
         }
     }
 
@@ -215,9 +221,10 @@ impl RequestResponseCodec for ExchangeCodec {
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
-        Request(data): Self::Request,
-    ) -> tokio::io::Result<()> {
-        write_length_prefixed(io, data).await?;
+        Request(gistit): Self::Request,
+    ) -> io::Result<()> {
+        let bytes = bincode::serialize(&gistit).map_err(|_| io::ErrorKind::InvalidInput)?;
+        write_length_prefixed(io, bytes).await?;
         io.close().await?;
 
         Ok(())
@@ -227,12 +234,13 @@ impl RequestResponseCodec for ExchangeCodec {
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
-        Response(data): Self::Response,
-    ) -> tokio::io::Result<()>
+        Response(gistit): Self::Response,
+    ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        write_length_prefixed(io, data).await?;
+        let bytes = bincode::serialize(&gistit).map_err(|_| io::ErrorKind::InvalidInput)?;
+        write_length_prefixed(io, bytes).await?;
         io.close().await?;
 
         Ok(())
