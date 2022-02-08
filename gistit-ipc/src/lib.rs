@@ -34,10 +34,12 @@ use serde::{Deserialize, Serialize};
 
 use gistit_reference::{Gistit, NAMED_SOCKET_0, NAMED_SOCKET_1};
 
-pub mod error;
-pub use bincode;
+mod error;
 
-pub type Result<T> = std::result::Result<T, error::Error>;
+pub use bincode;
+pub use error::Error;
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 const READBUF_SIZE: usize = 60_000; // A bit bigger than 50kb because encoding
 const CONNECT_TIMEOUT_SECS: u64 = 3;
@@ -204,16 +206,19 @@ impl Bridge<Client> {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Instruction {
-    Provide {
-        hash: String,
-        data: Gistit,
-    },
-    Get {
-        hash: String,
-    },
+    /// Request to start hosting a file
+    Provide { hash: String, data: Gistit },
+
+    /// Request to find providers and fetch a file
+    Fetch { hash: String },
+
+    /// Request server network status
     Status,
+
+    /// Shutdown (has no server response)
     Shutdown,
-    // Daemon responses
+
+    /// Server responses
     Response(ServerResponse),
 
     #[cfg(test)]
@@ -224,6 +229,14 @@ pub enum Instruction {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum ServerResponse {
+    /// Response for a host request
+    /// None indicates that hosting failed
+    Provide(Option<String>),
+
+    /// Response for a file request
+    Fetch(Gistit),
+
+    /// Response for a status request
     Status {
         peer_id: String,
         peer_count: usize,
@@ -231,7 +244,6 @@ pub enum ServerResponse {
         listeners: Vec<String>,
         hosting: usize,
     },
-    File(Vec<u8>),
 }
 
 #[cfg(test)]
