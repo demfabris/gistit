@@ -1,8 +1,5 @@
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("fail to parse multiaddr: {0}")]
-    Multiaddr(#[from] libp2p::multiaddr::Error),
-
     #[error("i/o error, {0}")]
     IO(#[from] std::io::Error),
 
@@ -10,7 +7,17 @@ pub enum Error {
     Ipc(#[from] gistit_ipc::Error),
 
     #[error("serialize error, {0}")]
-    Serialize(#[from] gistit_ipc::bincode::Error),
+    Bincode(#[from] gistit_ipc::bincode::Error),
+    #[error("serialize error, {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("decode error, {0}")]
+    Identity(#[from] libp2p::identity::error::DecodingError),
+    #[error("decode error, {0}")]
+    Base64(#[from] base64::DecodeError),
+
+    #[error("fail to parse multiaddr: {0}")]
+    Multiaddr(#[from] libp2p::multiaddr::Error),
 
     #[error("reference error, {0}")]
     Reference(#[from] gistit_reference::Error),
@@ -23,4 +30,7 @@ pub enum Error {
 
     #[error("request response codec error, {0}")]
     Codec(#[from] crate::behaviour::Response),
+
+    #[error("parse error, {0}")]
+    Parse(&'static str),
 }

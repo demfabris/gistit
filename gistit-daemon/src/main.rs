@@ -48,6 +48,10 @@ struct Args {
     /// override config directory
     config_path: Option<PathBuf>,
 
+    #[argh(option, long = "config-file")]
+    /// IPFS config file to extract key material
+    config_file: Option<PathBuf>,
+
     #[argh(option)]
     /// address to listen for connections
     host: Option<Ipv4Addr>,
@@ -61,11 +65,12 @@ async fn run() -> Result<()> {
     let Args {
         runtime_path,
         config_path,
+        config_file,
         host,
         port,
     } = argh::from_env();
 
-    let config = Config::from_args(runtime_path, config_path, host, port)?;
+    let config = Config::from_args(runtime_path, config_path, config_file, host, port)?;
     log::debug!("Running config: {:?}", config);
 
     Node::new(config).await?.run().await?;
@@ -76,7 +81,7 @@ async fn run() -> Result<()> {
 #[tokio::main]
 async fn main() {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
+        .filter_level(log::LevelFilter::Debug)
         .write_style(env_logger::WriteStyle::Always)
         .init();
 

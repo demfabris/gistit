@@ -3,6 +3,7 @@ use std::str;
 use libp2p::identify::{IdentifyEvent, IdentifyInfo};
 use libp2p::kad::record::Key;
 use libp2p::kad::{self, GetProvidersError, GetProvidersOk, KademliaEvent, QueryResult};
+use libp2p::relay;
 use libp2p::request_response::{RequestResponseEvent, RequestResponseMessage};
 
 use gistit_ipc::{Instruction, ServerResponse};
@@ -123,11 +124,8 @@ pub fn handle_identify(node: &mut Node, event: IdentifyEvent) {
             },
     } = event
     {
-        debug!("Identify: {:?}", listen_addrs);
-        if protocols
-            .iter()
-            .any(|p| p.as_bytes() == kad::protocol::DEFAULT_PROTO_NAME)
-        {
+        info!("Identify: {:?}, protocols: {:?}", listen_addrs, protocols);
+        if protocols.iter().any(|p| p.as_bytes() == KADEMLIA_PROTO) {
             for addr in listen_addrs {
                 node.swarm
                     .behaviour_mut()
@@ -137,3 +135,7 @@ pub fn handle_identify(node: &mut Node, event: IdentifyEvent) {
         }
     }
 }
+
+const KADEMLIA_PROTO: &[u8] = b"/ipfs/kad/1.0.0";
+// const RELAY_HOP_PROTO: &[u8] = b"/libp2p/circuit/relay/0.2.0/hop";
+// const RELAY_STOP_PROTO: &[u8] = b"/libp2p/circuit/relay/0.2.0/stop";

@@ -8,12 +8,13 @@ use std::task::Poll;
 use either::Either;
 use gistit_ipc::{self, Bridge, Instruction, Server, ServerResponse};
 use gistit_reference::Gistit;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 
 use libp2p::core::either::EitherError;
-use libp2p::core::PeerId;
+use libp2p::core::{Multiaddr, PeerId};
 use libp2p::futures::future::poll_fn;
 use libp2p::futures::StreamExt;
+use libp2p::multiaddr::multiaddr;
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
 use libp2p::{tokio_development_transport, Swarm};
 
@@ -82,23 +83,29 @@ impl Node {
 
                 request_event = poll_fn(|_| {
                     self.to_request.pop().map_or(Poll::Pending, Poll::Ready)
-                }) => self.handle_request_event(request_event).await,
+                }) => self.handle_request_event(request_event).await?,
             }
         }
     }
 
-    async fn handle_request_event(&mut self, event: (Key, HashSet<PeerId>)) {
+    async fn handle_request_event(&mut self, event: (Key, HashSet<PeerId>)) -> Result<()> {
         let (key, providers) = event;
 
         for p in providers {
+            let relayed_addr: Multiaddr = format!("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN/p2p-circuit/p2p/{}", p).parse().unwrap();
+            self.swarm.dial(relayed_addr)?;
+
             let request_id = self
                 .swarm
                 .behaviour_mut()
                 .request_response
                 .send_request(&p, Request(key.to_vec()));
             info!("Requesting gistit from {:?}", p);
+
             self.pending_request_file.insert(request_id);
         }
+
+        Ok(())
     }
 
     #[allow(clippy::type_complexity)]
@@ -143,7 +150,7 @@ impl Node {
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
             } => {
-                debug!("Connection established {:?}", peer_id);
+                info!("Connection established {:?}", peer_id);
                 if endpoint.is_dialer() {
                     self.pending_dial.remove(&peer_id);
                 }
@@ -153,7 +160,7 @@ impl Node {
                 error,
                 ..
             } => {
-                debug!("Outgoing connection error: {:?}", error);
+                error!("Outgoing connection error: {:?}", error);
                 if let Some(peer_id) = maybe_peer_id {
                     self.pending_dial.remove(&peer_id);
                 }
