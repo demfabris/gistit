@@ -69,18 +69,12 @@ impl Dispatch for Action {
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         match config.command {
-            // Start network daemon / check running status
             ProcessCommand::Start => {
                 if bridge.alive() {
                     bridge.connect_blocking()?;
                     bridge.send(Instruction::Status).await?;
-                    if let Instruction::Response(ServerResponse::Status {
-                        listeners,
-                        peer_count,
-                        pending_connections,
-                    }) = bridge.recv().await?
-                    {
-                        format_daemon_status(&listeners, peer_count, pending_connections);
+                    if let Instruction::Response(response) = bridge.recv().await? {
+                        format_daemon_status(&response);
                     }
                     return Ok(());
                 }
@@ -98,36 +92,38 @@ impl Dispatch for Action {
                 };
                 updateln!("Gistit node started, pid: {}", style(pid).blue());
 
-                if let Instruction::Response(ServerResponse::PeerId(id)) = bridge.recv().await? {
-                    finish!(format!("\n    peer id: '{}'\n\n", style(id).bold(),));
+                bridge.connect_blocking()?;
+                bridge.send(Instruction::Status).await?;
+                if let Instruction::Response(ServerResponse::Status { peer_id, .. }) =
+                    bridge.recv().await?
+                {
+                    finish!(format!("\n    peer id: '{}'\n\n", style(peer_id).bold()));
                 }
             }
 
-            // Stop network daemon process
             ProcessCommand::Stop => {
                 progress!("Stopping");
-                fs::remove_file(runtime_dir.join("gistit.log"))?;
+                if bridge.alive() {
+                    fs::remove_file(runtime_dir.join("gistit.log"))?;
 
-                bridge.connect_blocking()?;
-                bridge.send(Instruction::Shutdown).await?;
-                updateln!("Stopped");
-                finish!("");
+                    bridge.connect_blocking()?;
+                    bridge.send(Instruction::Shutdown).await?;
+                    updateln!("Stopped");
+                    finish!("");
+                } else {
+                    interruptln!();
+                    errorln!("gistit node is not running");
+                }
             }
 
-            // Check network status
             ProcessCommand::Status => {
                 progress!("Requesting status");
                 if bridge.alive() {
                     bridge.connect_blocking()?;
                     bridge.send(Instruction::Status).await?;
 
-                    if let Instruction::Response(ServerResponse::Status {
-                        listeners,
-                        peer_count,
-                        pending_connections,
-                    }) = bridge.recv().await?
-                    {
-                        format_daemon_status(&listeners, peer_count, pending_connections);
+                    if let Instruction::Response(response) = bridge.recv().await? {
+                        format_daemon_status(&response);
                     }
                 } else {
                     interruptln!();
@@ -139,16 +135,29 @@ impl Dispatch for Action {
     }
 }
 
-fn format_daemon_status(listeners: &Vec<String>, peer_count: usize, pending_connections: u32) {
-    updateln!("Running status");
-    finish!(format!(
-        r#"
+fn format_daemon_status(response: &ServerResponse) {
+    if let ServerResponse::Status {
+        peer_id,
+        listeners,
+        peer_count,
+        pending_connections,
+        hosting,
+    } = response
+    {
+        updateln!("Running status");
+        finish!(format!(
+            r#"
+    peer id: '{}'
+    hosting: {} gistit
     peers: {}
     pending connections: {}
     listening on: {:?}
-                            "#,
-        style(peer_count).blue(),
-        pending_connections,
-        listeners
-    ));
+        "#,
+            style(peer_id).bold(),
+            hosting,
+            style(peer_count).blue(),
+            pending_connections,
+            listeners
+        ));
+    }
 }

@@ -77,12 +77,16 @@ impl Dispatch for Action {
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         if bridge.alive() {
+            warnln!("gistit-daemon running, looking in the DHT");
             bridge.connect_blocking()?;
             bridge
-                .send(Instruction::Get {
+                .send(Instruction::Fetch {
                     hash: config.hash.to_owned(),
                 })
                 .await?;
+
+            let _a = bridge.recv().await?;
+            warnln!("{:?}", _a);
         } else {
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())

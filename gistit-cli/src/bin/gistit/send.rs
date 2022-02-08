@@ -9,7 +9,7 @@ use clap::ArgMatches;
 use console::style;
 use reqwest::StatusCode;
 
-use gistit_ipc::{self, Instruction};
+use gistit_ipc::{self, Instruction, ServerResponse};
 use gistit_reference::dir;
 use gistit_reference::{Gistit, Inner};
 
@@ -21,7 +21,7 @@ use libgistit::server::{IntoGistit, Response, SERVER_URL_LOAD};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::{finish, progress, updateln, warnln, Error, Result};
+use crate::{errorln, finish, interruptln, progress, updateln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -159,6 +159,7 @@ impl Dispatch for Action {
         })
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         let hash = config.hash();
 
@@ -173,11 +174,19 @@ impl Dispatch for Action {
             bridge
                 .send(Instruction::Provide {
                     hash: hash.clone(),
-                    data: config.file.to_encoded_data().as_ref().to_vec(),
+                    data: config.into_gistit()?,
                 })
                 .await?;
-            // TODO: wait for ok response from node
-            updateln!("Hosted");
+
+            if let Instruction::Response(ServerResponse::Provide(Some(hash))) =
+                bridge.recv().await?
+            {
+                updateln!("Hosted");
+                finish!(format!("\n    hash: '{}'\n\n", style(hash).bold()));
+            } else {
+                interruptln!();
+                errorln!("failed to provide gistit, check gistit-daemon logs");
+            }
         } else {
             progress!("Sending");
             let maybe_github_token = config.github_token.as_ref().map(Clone::clone);
