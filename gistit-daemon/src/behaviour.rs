@@ -84,10 +84,22 @@ impl Behaviour {
             relay::Config::default(),
         );
 
-        let autonat = autonat::Behaviour::new(
-            PeerId::from(config.keypair.public()),
-            autonat::Config::default(),
-        );
+        let autonat = {
+            let mut behaviour = autonat::Behaviour::new(
+                PeerId::from(config.keypair.public()),
+                autonat::Config::default(),
+            );
+
+            for peer in BOOTNODES {
+                let bootaddr = Multiaddr::from_str(BOOTADDR)?;
+                behaviour.add_server(
+                    PeerId::from_str(peer).expect("peer id to be valid"),
+                    Some(bootaddr),
+                );
+            }
+
+            behaviour
+        };
 
         let ping = PingBehaviour::new(PingConfig::new().with_keep_alive(true));
 

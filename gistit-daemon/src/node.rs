@@ -92,8 +92,7 @@ impl Node {
         let (key, providers) = event;
 
         for p in providers {
-            let relayed_addr: Multiaddr = format!("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN/p2p-circuit/p2p/{}", p).parse().unwrap();
-            self.swarm.dial(relayed_addr)?;
+            self.swarm.dial(p)?;
 
             let request_id = self
                 .swarm

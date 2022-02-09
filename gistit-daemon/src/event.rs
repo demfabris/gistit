@@ -2,8 +2,7 @@ use std::str;
 
 use libp2p::identify::{IdentifyEvent, IdentifyInfo};
 use libp2p::kad::record::Key;
-use libp2p::kad::{self, GetProvidersError, GetProvidersOk, KademliaEvent, QueryResult};
-use libp2p::relay;
+use libp2p::kad::{GetProvidersError, GetProvidersOk, KademliaEvent, QueryResult};
 use libp2p::request_response::{RequestResponseEvent, RequestResponseMessage};
 
 use gistit_ipc::{Instruction, ServerResponse};
