@@ -123,7 +123,7 @@ pub fn handle_identify(node: &mut Node, event: IdentifyEvent) {
             },
     } = event
     {
-        info!("Identify: {:?}, protocols: {:?}", listen_addrs, protocols);
+        debug!("Identify: {:?}, protocols: {:?}", listen_addrs, protocols);
         if protocols.iter().any(|p| p.as_bytes() == KADEMLIA_PROTO) {
             for addr in listen_addrs {
                 node.swarm

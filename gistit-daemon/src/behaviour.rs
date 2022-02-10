@@ -14,6 +14,7 @@ use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{Kademlia, KademliaConfig, KademliaEvent};
 use libp2p::ping::{Behaviour as PingBehaviour, Config as PingConfig, Event as PingEvent, Ping};
+use libp2p::relay::v2::client::{self, Client, Event as ClientEvent};
 use libp2p::relay::v2::relay::{self, Event as RelayEvent, Relay};
 use libp2p::request_response::{
     ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
@@ -46,10 +47,13 @@ pub struct Behaviour {
     pub relay: Relay,
     pub autonat: Autonat,
     pub ping: Ping,
+    pub client: Client,
 }
 
 impl Behaviour {
-    pub fn new(config: &Config) -> Result<Self> {
+    pub fn new_behaviour_and_transport(
+        config: &Config,
+    ) -> Result<(Self, client::transport::ClientTransport)> {
         let request_response = RequestResponse::new(
             ExchangeCodec,
             once((ExchangeProtocol, ProtocolSupport::Full)),
@@ -63,14 +67,16 @@ impl Behaviour {
             let mut behaviour = Kademlia::with_config(config.peer_id, store, cfg);
 
             let bootaddr = Multiaddr::from_str(BOOTADDR)?;
-            for peer in BOOTNODES {
-                behaviour.add_address(
-                    &PeerId::from_str(peer).expect("peer id to be valid"),
-                    bootaddr.clone(),
-                );
-            }
+            if config.bootstrap {
+                for peer in BOOTNODES {
+                    behaviour.add_address(
+                        &PeerId::from_str(peer).expect("peer id to be valid"),
+                        bootaddr.clone(),
+                    );
+                }
 
-            behaviour.bootstrap().expect("to bootstrap");
+                behaviour.bootstrap().expect("to bootstrap");
+            }
             behaviour
         };
 
@@ -84,18 +90,22 @@ impl Behaviour {
             relay::Config::default(),
         );
 
+        let (client_transport, client) =
+            client::Client::new_transport_and_behaviour(config.peer_id);
+
         let autonat = {
             let mut behaviour = autonat::Behaviour::new(
                 PeerId::from(config.keypair.public()),
                 autonat::Config::default(),
             );
-
-            for peer in BOOTNODES {
-                let bootaddr = Multiaddr::from_str(BOOTADDR)?;
-                behaviour.add_server(
-                    PeerId::from_str(peer).expect("peer id to be valid"),
-                    Some(bootaddr),
-                );
+            if config.bootstrap {
+                for peer in BOOTNODES {
+                    let bootaddr = Multiaddr::from_str(BOOTADDR)?;
+                    behaviour.add_server(
+                        PeerId::from_str(peer).expect("peer id to be valid"),
+                        Some(bootaddr),
+                    );
+                }
             }
 
             behaviour
@@ -103,14 +113,18 @@ impl Behaviour {
 
         let ping = PingBehaviour::new(PingConfig::new().with_keep_alive(true));
 
-        Ok(Self {
-            request_response,
-            kademlia,
-            identify,
-            relay,
-            autonat,
-            ping,
-        })
+        Ok((
+            Self {
+                request_response,
+                kademlia,
+                identify,
+                relay,
+                autonat,
+                ping,
+                client,
+            },
+            client_transport,
+        ))
     }
 }
 
@@ -122,6 +136,7 @@ pub enum Event {
     Relay(RelayEvent),
     Autonat(AutonatEvent),
     Ping(PingEvent),
+    Client(ClientEvent),
 }
 
 impl From<RequestResponseEvent<Request, Response>> for Event {
@@ -157,6 +172,12 @@ impl From<AutonatEvent> for Event {
 impl From<PingEvent> for Event {
     fn from(event: PingEvent) -> Self {
         Self::Ping(event)
+    }
+}
+
+impl From<ClientEvent> for Event {
+    fn from(event: ClientEvent) -> Self {
+        Self::Client(event)
     }
 }
 

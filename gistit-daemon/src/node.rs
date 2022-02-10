@@ -2,6 +2,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::collections::{HashMap, HashSet};
+use std::io;
 use std::string::ToString;
 use std::task::Poll;
 
@@ -11,12 +12,12 @@ use gistit_reference::Gistit;
 use log::{debug, error, info, warn};
 
 use libp2p::core::either::EitherError;
-use libp2p::core::{Multiaddr, PeerId};
+use libp2p::core::{self, Multiaddr, PeerId};
 use libp2p::futures::future::poll_fn;
 use libp2p::futures::StreamExt;
 use libp2p::multiaddr::multiaddr;
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
-use libp2p::{tokio_development_transport, Swarm};
+use libp2p::{/* dns, */ mplex, noise, tcp, websocket, yamux, Swarm, Transport};
 
 use libp2p::kad::{record::Key, QueryId};
 use libp2p::ping::Failure;
@@ -48,8 +49,27 @@ pub struct Node {
 
 impl Node {
     pub async fn new(config: Config) -> Result<Self> {
-        let behaviour = Behaviour::new(&config)?;
-        let transport = tokio_development_transport(config.keypair)?;
+        let (behaviour, client_transport) = Behaviour::new_behaviour_and_transport(&config)?;
+
+        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+            .into_authentic(&config.keypair)
+            .expect("Signing libp2p-noise static DH keypair failed.");
+
+        let transport = {
+            let tcp = tcp::TokioTcpConfig::new().nodelay(true).port_reuse(true);
+            // let dns_tcp = dns::TokioDnsConfig::system(tcp)?;
+            let ws_dns_tcp = websocket::WsConfig::new(tcp.clone());
+            tcp.or_transport(ws_dns_tcp)
+                .or_transport(client_transport)
+                .upgrade(core::upgrade::Version::V1)
+                .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+                .multiplex(core::upgrade::SelectUpgrade::new(
+                    yamux::YamuxConfig::default(),
+                    mplex::MplexConfig::default(),
+                ))
+                .timeout(std::time::Duration::from_secs(20))
+                .boxed()
+        };
 
         let mut swarm = SwarmBuilder::new(transport, behaviour, config.peer_id)
             .executor(Box::new(|fut| {
@@ -73,7 +93,11 @@ impl Node {
         })
     }
 
-    pub async fn run(mut self) -> Result<()> {
+    pub fn dial_on_init(&mut self, address: &str) -> Result<()> {
+        Ok(self.swarm.dial(address.parse::<Multiaddr>()?)?)
+    }
+
+    pub async fn run(&mut self) -> Result<()> {
         loop {
             tokio::select! {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
@@ -92,7 +116,8 @@ impl Node {
         let (key, providers) = event;
 
         for p in providers {
-            self.swarm.dial(p)?;
+            let address = multiaddr!(P2p(p));
+            self.swarm.dial(address)?;
 
             let request_id = self
                 .swarm
@@ -116,22 +141,30 @@ impl Node {
                 EitherError<
                     EitherError<
                         EitherError<
-                            EitherError<ProtocolsHandlerUpgrErr<std::io::Error>, std::io::Error>,
-                            std::io::Error,
-                        >,
-                        Either<
-                            ProtocolsHandlerUpgrErr<
-                                EitherError<
-                                    impl std::error::Error + Send,
-                                    impl std::error::Error + Send,
-                                >,
+                            EitherError<
+                                EitherError<ProtocolsHandlerUpgrErr<io::Error>, io::Error>,
+                                io::Error,
                             >,
-                            void::Void,
+                            Either<
+                                ProtocolsHandlerUpgrErr<
+                                    EitherError<
+                                        impl std::error::Error + Send,
+                                        impl std::error::Error + Send,
+                                    >,
+                                >,
+                                void::Void,
+                            >,
                         >,
+                        ProtocolsHandlerUpgrErr<io::Error>,
                     >,
-                    ProtocolsHandlerUpgrErr<std::io::Error>,
+                    Failure,
                 >,
-                Failure,
+                Either<
+                    ProtocolsHandlerUpgrErr<
+                        EitherError<impl std::error::Error + Send, impl std::error::Error + Send>,
+                    >,
+                    void::Void,
+                >,
             >,
         >,
     ) -> Result<()> {
@@ -164,6 +197,8 @@ impl Node {
                     self.pending_dial.remove(&peer_id);
                 }
             }
+            SwarmEvent::Behaviour(Event::Relay(e)) => warn!("{:?}", e),
+            // SwarmEvent::Behaviour(Event::Autonat(e)) => warn!("{:?}", e),
             ev => {
                 debug!("other event: {:?}", ev);
             }
@@ -184,8 +219,6 @@ impl Node {
                     .kademlia
                     .start_providing(key.clone())
                     .expect("to start providing");
-
-                //TODO: Clone file to stash directory
 
                 self.pending_start_providing.insert(query_id);
                 self.to_provide.insert(key, data);

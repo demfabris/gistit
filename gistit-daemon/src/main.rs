@@ -59,6 +59,14 @@ struct Args {
     #[argh(option)]
     /// port to listen for connections
     port: Option<u16>,
+
+    #[argh(option)]
+    /// dial these addresses on start
+    dial: Vec<String>,
+
+    #[argh(switch)]
+    /// bootstrap this node
+    bootstrap: bool,
 }
 
 async fn run() -> Result<()> {
@@ -68,12 +76,26 @@ async fn run() -> Result<()> {
         config_file,
         host,
         port,
+        dial,
+        bootstrap,
     } = argh::from_env();
 
-    let config = Config::from_args(runtime_path, config_path, config_file, host, port)?;
+    let config = Config::from_args(
+        runtime_path,
+        config_path,
+        config_file,
+        host,
+        port,
+        bootstrap,
+    )?;
     log::debug!("Running config: {:?}", config);
 
-    Node::new(config).await?.run().await?;
+    let mut node = Node::new(config).await?;
+    for addr in dial {
+        node.dial_on_init(&addr)?;
+    }
+
+    node.run().await?;
 
     Ok(())
 }
@@ -81,7 +103,7 @@ async fn run() -> Result<()> {
 #[tokio::main]
 async fn main() {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
+        // .filter_level(log::LevelFilter::Info)
         .write_style(env_logger::WriteStyle::Always)
         .init();
 

@@ -22,6 +22,7 @@ pub struct Config {
     pub runtime_path: PathBuf,
     pub config_path: PathBuf,
     pub multiaddr: Multiaddr,
+    pub bootstrap: bool,
 }
 
 impl Debug for Config {
@@ -41,6 +42,7 @@ impl Config {
         config_file: Option<PathBuf>,
         host: Option<Ipv4Addr>,
         port: Option<u16>,
+        bootstrap: bool,
     ) -> Result<Self> {
         dir::init()?;
 
@@ -87,6 +89,7 @@ impl Config {
             runtime_path,
             config_path,
             multiaddr,
+            bootstrap,
         })
     }
 }
