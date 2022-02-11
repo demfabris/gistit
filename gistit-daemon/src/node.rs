@@ -2,29 +2,30 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::collections::{HashMap, HashSet};
+use std::io;
 use std::string::ToString;
 use std::task::Poll;
 
 use either::Either;
 use gistit_ipc::{self, Bridge, Instruction, Server, ServerResponse};
+use gistit_reference::Gistit;
 use log::{debug, error, info, warn};
 
 use libp2p::core::either::EitherError;
-use libp2p::core::PeerId;
+use libp2p::core::{self, Multiaddr, PeerId};
 use libp2p::futures::future::poll_fn;
 use libp2p::futures::StreamExt;
 use libp2p::multiaddr::multiaddr;
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
-use libp2p::{tokio_development_transport, Swarm};
+use libp2p::{dns, mplex, noise, tcp, websocket, yamux, Swarm, Transport};
 
-use libp2p::identify::{IdentifyEvent, IdentifyInfo};
-use libp2p::kad::{protocol, record::Key, QueryId};
+use libp2p::kad::{record::Key, QueryId};
 use libp2p::ping::Failure;
 use libp2p::request_response::RequestId;
 
 use crate::behaviour::{Behaviour, Event, Request};
 use crate::config::Config;
-use crate::event::{handle_kademlia, handle_request_response};
+use crate::event::{handle_identify, handle_kademlia, handle_request_response};
 use crate::Result;
 
 /// The main event loop
@@ -38,7 +39,7 @@ pub struct Node {
     pub pending_get_providers: HashSet<QueryId>,
 
     pub pending_start_providing: HashSet<QueryId>,
-    pub to_provide: HashMap<Key, Vec<u8>>,
+    pub to_provide: HashMap<Key, Gistit>,
 
     pub pending_request_file: HashSet<RequestId>,
 
@@ -48,15 +49,38 @@ pub struct Node {
 
 impl Node {
     pub async fn new(config: Config) -> Result<Self> {
-        let behaviour = Behaviour::new(&config)?;
-        let transport = tokio_development_transport(config.keypair)?;
+        let (behaviour, client_transport) = Behaviour::new_behaviour_and_transport(&config)?;
 
-        let swarm = SwarmBuilder::new(transport, behaviour, config.peer_id)
+        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
+            .into_authentic(&config.keypair)
+            .expect("Signing libp2p-noise static DH keypair failed.");
+
+        let transport = {
+            let tcp = tcp::TokioTcpConfig::new().nodelay(true);
+            let dns_tcp = dns::TokioDnsConfig::system(tcp.clone())?;
+            let ws_dns_tcp = websocket::WsConfig::new(tcp.clone());
+
+            tcp.or_transport(client_transport)
+                .or_transport(dns_tcp)
+                .or_transport(ws_dns_tcp)
+                .upgrade(core::upgrade::Version::V1)
+                .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+                .multiplex(core::upgrade::SelectUpgrade::new(
+                    yamux::YamuxConfig::default(),
+                    mplex::MplexConfig::default(),
+                ))
+                .timeout(std::time::Duration::from_secs(20))
+                .boxed()
+        };
+
+        let mut swarm = SwarmBuilder::new(transport, behaviour, config.peer_id)
             .executor(Box::new(|fut| {
                 tokio::task::spawn(fut);
             }))
             .build();
-        let bridge = gistit_ipc::server(&config.runtime_dir)?;
+        swarm.listen_on(config.multiaddr)?;
+
+        let bridge = gistit_ipc::server(&config.runtime_path)?;
 
         Ok(Self {
             swarm,
@@ -71,7 +95,11 @@ impl Node {
         })
     }
 
-    pub async fn run(mut self) -> Result<()> {
+    pub fn dial_on_init(&mut self, address: &str) -> Result<()> {
+        Ok(self.swarm.dial(address.parse::<Multiaddr>()?)?)
+    }
+
+    pub async fn run(&mut self) -> Result<()> {
         loop {
             tokio::select! {
                 swarm_event = self.swarm.next() => self.handle_swarm_event(
@@ -81,22 +109,29 @@ impl Node {
 
                 request_event = poll_fn(|_| {
                     self.to_request.pop().map_or(Poll::Pending, Poll::Ready)
-                }) => self.handle_request_event(request_event).await,
+                }) => self.handle_request_event(request_event).await?,
             }
         }
     }
 
-    async fn handle_request_event(&mut self, event: (Key, HashSet<PeerId>)) {
+    async fn handle_request_event(&mut self, event: (Key, HashSet<PeerId>)) -> Result<()> {
         let (key, providers) = event;
 
         for p in providers {
+            let address = multiaddr!(P2p(p));
+            self.swarm.dial(address)?;
+
             let request_id = self
                 .swarm
                 .behaviour_mut()
                 .request_response
                 .send_request(&p, Request(key.to_vec()));
+            info!("Requesting gistit from {:?}", p);
+
             self.pending_request_file.insert(request_id);
         }
+
+        Ok(())
     }
 
     #[allow(clippy::type_complexity)]
@@ -108,51 +143,36 @@ impl Node {
                 EitherError<
                     EitherError<
                         EitherError<
-                            EitherError<ProtocolsHandlerUpgrErr<std::io::Error>, std::io::Error>,
-                            std::io::Error,
-                        >,
-                        Either<
-                            ProtocolsHandlerUpgrErr<
-                                EitherError<
-                                    impl std::error::Error + Send,
-                                    impl std::error::Error + Send,
-                                >,
+                            EitherError<
+                                EitherError<ProtocolsHandlerUpgrErr<io::Error>, io::Error>,
+                                io::Error,
                             >,
-                            void::Void,
+                            Either<
+                                ProtocolsHandlerUpgrErr<
+                                    EitherError<
+                                        impl std::error::Error + Send,
+                                        impl std::error::Error + Send,
+                                    >,
+                                >,
+                                void::Void,
+                            >,
                         >,
+                        ProtocolsHandlerUpgrErr<io::Error>,
                     >,
-                    ProtocolsHandlerUpgrErr<std::io::Error>,
+                    Failure,
                 >,
-                Failure,
+                Either<
+                    ProtocolsHandlerUpgrErr<
+                        EitherError<impl std::error::Error + Send, impl std::error::Error + Send>,
+                    >,
+                    void::Void,
+                >,
             >,
         >,
     ) -> Result<()> {
         match event {
-            SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {
-                peer_id,
-                info:
-                    IdentifyInfo {
-                        listen_addrs,
-                        protocols,
-                        ..
-                    },
-            })) => {
-                debug!("Identify: {:?}", listen_addrs);
-                if protocols
-                    .iter()
-                    .any(|p| p.as_bytes() == protocol::DEFAULT_PROTO_NAME)
-                {
-                    for addr in listen_addrs {
-                        self.swarm
-                            .behaviour_mut()
-                            .kademlia
-                            .add_address(&peer_id, addr);
-                    }
-                }
-            }
-
-            SwarmEvent::Behaviour(Event::Kademlia(event)) => handle_kademlia(self, event),
-
+            SwarmEvent::Behaviour(Event::Identify(event)) => handle_identify(self, event),
+            SwarmEvent::Behaviour(Event::Kademlia(event)) => handle_kademlia(self, event).await?,
             SwarmEvent::Behaviour(Event::RequestResponse(event)) => {
                 handle_request_response(self, event).await?;
             }
@@ -160,11 +180,6 @@ impl Node {
             SwarmEvent::NewListenAddr { address, .. } => {
                 let peer_id = self.swarm.local_peer_id().to_string();
                 info!("Daemon: Listening on {:?}, {:?}", address, peer_id);
-
-                self.bridge.connect_blocking()?;
-                self.bridge
-                    .send(Instruction::Response(ServerResponse::PeerId(peer_id)))
-                    .await?;
             }
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..
@@ -184,6 +199,9 @@ impl Node {
                     self.pending_dial.remove(&peer_id);
                 }
             }
+            SwarmEvent::Behaviour(Event::Relay(e)) => warn!("{:?}", e),
+            SwarmEvent::Behaviour(Event::Ping(_)) => {}
+            // SwarmEvent::Behaviour(Event::Autonat(e)) => warn!("{:?}", e),
             ev => {
                 debug!("other event: {:?}", ev);
             }
@@ -191,14 +209,9 @@ impl Node {
         Ok(())
     }
 
+    #[allow(clippy::match_wildcard_for_single_variants)]
     async fn handle_bridge_event(&mut self, instruction: Instruction) -> Result<()> {
         match instruction {
-            Instruction::Listen { host, port } => {
-                warn!("Instruction: Listen");
-                let address = multiaddr!(Ip4(host), Tcp(port));
-                self.swarm.listen_on(address)?;
-            }
-
             Instruction::Provide { hash, data } => {
                 warn!("Instruction: Provide gistit {}", hash);
                 let key = Key::new(&hash);
@@ -214,7 +227,7 @@ impl Node {
                 self.to_provide.insert(key, data);
             }
 
-            Instruction::Get { hash } => {
+            Instruction::Fetch { hash } => {
                 warn!("Instruction: Get providers for {}", hash);
                 let query_id = self
                     .swarm
@@ -227,16 +240,21 @@ impl Node {
             Instruction::Status => {
                 warn!("Instruction: Status");
 
+                let peer_id = self.swarm.local_peer_id().to_string();
                 let listeners: Vec<String> =
                     self.swarm.listeners().map(ToString::to_string).collect();
                 let network_info = self.swarm.network_info();
+                let hosting = self.to_provide.len();
 
                 self.bridge.connect_blocking()?;
                 self.bridge
-                    .send(Instruction::Response(ServerResponse::Status(format!(
-                        "listeners: {:?}, network: {:?}",
-                        listeners, network_info
-                    ))))
+                    .send(Instruction::Response(ServerResponse::Status {
+                        peer_count: network_info.num_peers(),
+                        pending_connections: network_info.connection_counters().num_pending(),
+                        peer_id,
+                        listeners,
+                        hosting,
+                    }))
                     .await?;
             }
 
@@ -245,7 +263,7 @@ impl Node {
                 std::process::exit(0);
             }
 
-            Instruction::Response(_) => (),
+            _ => (),
         }
         Ok(())
     }

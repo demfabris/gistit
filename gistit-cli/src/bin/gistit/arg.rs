@@ -98,7 +98,6 @@ Run `gistit --colorschemes` to list available ones.",
                 .alias("n")
                 .about("Start a p2p gistit node for file transfer")
                 .group(ArgGroup::new("daemon_cmd"))
-                .group(ArgGroup::new("other"))
                 .arg(
                     Arg::new("start")
                         .long("start")
@@ -107,7 +106,7 @@ Run `gistit --colorschemes` to list available ones.",
                         .long_help(
                             "Spawn the gistit network node background process to enable peer 
 to peer file sharing.")
-                        .conflicts_with_all(&["join", "stop", "status"]),
+                        .conflicts_with_all(&["stop", "status"]),
                 )
                 .arg(
                     Arg::new("stop")
@@ -122,34 +121,6 @@ to peer file sharing.")
                         .group("daemon_cmd")
                         .help("Display the status of your gistit network node process")
                         .conflicts_with_all(&["start", "stop"]),
-                )
-                .arg(
-                    Arg::new("host")
-                        .long("host")
-                        .help("The Ipv4 address used to listen for inbound connections. Defaults to '127.0.0.1'")
-                        .takes_value(true)
-                        .value_name("ivp4-address")
-                        .default_value("0.0.0.0")
-                        .value_hint(ValueHint::Hostname)
-                        .conflicts_with_all(&["stop", "status"]),
-                )
-                .arg(
-                    Arg::new("port")
-                        .long("port")
-                        .help("The port to listen for connections. Defaults to 0 (random open port)")
-                        .takes_value(true)
-                        .value_name("port")
-                        .default_value("0")
-                        .conflicts_with_all(&["stop", "status"]),
-                )
-                .arg(
-                    Arg::new("join")
-                        .long("join")
-                        .help("Join a private network.")
-                        .takes_value(true)
-                        .value_name("address")
-                        .group("other")
-                        .conflicts_with_all(&["start", "stop", "status"]),
                 )
         )
 }

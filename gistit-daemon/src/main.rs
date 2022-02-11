@@ -24,16 +24,18 @@ mod behaviour;
 mod config;
 mod error;
 mod event;
-mod network;
+mod node;
 
 pub type Error = crate::error::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
+use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
 use argh::FromArgs;
 
-use gistit_reference::dir;
+use config::Config;
+use node::Node;
 
 #[derive(FromArgs, PartialEq, Debug)]
 /// Gistit p2p node
@@ -45,18 +47,53 @@ struct Args {
     #[argh(option, long = "config-path")]
     /// override config directory
     config_path: Option<PathBuf>,
+
+    #[argh(option, long = "config-file")]
+    /// IPFS config file to extract key material
+    config_file: Option<PathBuf>,
+
+    #[argh(option)]
+    /// address to listen for connections
+    host: Option<Ipv4Addr>,
+
+    #[argh(option)]
+    /// port to listen for connections
+    port: Option<u16>,
+
+    #[argh(option)]
+    /// dial these addresses on start
+    dial: Vec<String>,
+
+    #[argh(switch)]
+    /// bootstrap this node
+    bootstrap: bool,
 }
 
 async fn run() -> Result<()> {
-    let args: Args = argh::from_env();
-    let default_runtime = dir::runtime()?;
-    let default_config = dir::config()?;
+    let Args {
+        runtime_path,
+        config_path,
+        config_file,
+        host,
+        port,
+        dial,
+        bootstrap,
+    } = argh::from_env();
 
-    let runtime_path = args.runtime_path.unwrap_or(default_runtime);
-    let config_path = args.config_path.unwrap_or(default_config);
+    let config = Config::from_args(
+        runtime_path,
+        config_path,
+        config_file,
+        host,
+        port,
+        bootstrap,
+    )?;
+    log::debug!("Running config: {:?}", config);
 
-    let config = config::Config::new(runtime_path, config_path);
-    let node = network::Node::new(config).await?;
+    let mut node = Node::new(config).await?;
+    for addr in dial {
+        node.dial_on_init(&addr)?;
+    }
 
     node.run().await?;
 
@@ -66,7 +103,7 @@ async fn run() -> Result<()> {
 #[tokio::main]
 async fn main() {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
+        // .filter_level(log::LevelFilter::Info)
         .write_style(env_logger::WriteStyle::Always)
         .init();
 

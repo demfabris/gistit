@@ -7,6 +7,7 @@
 //         \/        \/
 //
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
+#![allow(clippy::module_name_repetitions)]
 #![cfg_attr(
     test,
     allow(
@@ -24,7 +25,6 @@
 
 use std::fs::{metadata, remove_file};
 use std::marker::PhantomData;
-use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tokio::net::UnixDatagram;
@@ -32,8 +32,15 @@ use tokio::net::UnixDatagram;
 use bincode::{deserialize, serialize};
 use serde::{Deserialize, Serialize};
 
-const NAMED_SOCKET_0: &str = "gistit-0";
-const NAMED_SOCKET_1: &str = "gistit-1";
+use gistit_reference::{Gistit, NAMED_SOCKET_0, NAMED_SOCKET_1};
+
+mod error;
+
+pub use bincode;
+pub use error::Error;
+
+pub type Result<T> = std::result::Result<T, Error>;
+
 const READBUF_SIZE: usize = 60_000; // A bit bigger than 50kb because encoding
 const CONNECT_TIMEOUT_SECS: u64 = 3;
 
@@ -199,20 +206,19 @@ impl Bridge<Client> {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum Instruction {
-    Listen {
-        host: Ipv4Addr,
-        port: u16,
-    },
-    Provide {
-        hash: String,
-        data: Vec<u8>,
-    },
-    Get {
-        hash: String,
-    },
+    /// Request to start hosting a file
+    Provide { hash: String, data: Gistit },
+
+    /// Request to find providers and fetch a file
+    Fetch { hash: String },
+
+    /// Request server network status
     Status,
+
+    /// Shutdown (has no server response)
     Shutdown,
-    // Daemon responses
+
+    /// Server responses
     Response(ServerResponse),
 
     #[cfg(test)]
@@ -223,50 +229,21 @@ pub enum Instruction {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum ServerResponse {
-    PeerId(String),
-    Status(String),
-    File(Vec<u8>),
-}
+    /// Response for a host request
+    /// None indicates that hosting failed
+    Provide(Option<String>),
 
-pub type Result<T> = std::result::Result<T, Error>;
+    /// Response for a file request
+    Fetch(Gistit),
 
-#[derive(Debug)]
-pub struct Error {
-    pub kind: ErrorKind,
-}
-
-#[derive(Debug)]
-pub enum ErrorKind {
-    IO(std::io::Error),
-    Serialization(bincode::Error),
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Self {
-            kind: ErrorKind::IO(err),
-        }
-    }
-}
-
-impl From<bincode::Error> for Error {
-    fn from(err: bincode::Error) -> Self {
-        Self {
-            kind: ErrorKind::Serialization(err),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        "gistit ipc error"
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "gistit ipc error")
-    }
+    /// Response for a status request
+    Status {
+        peer_id: String,
+        peer_count: usize,
+        pending_connections: u32,
+        listeners: Vec<String>,
+        hosting: usize,
+    },
 }
 
 #[cfg(test)]
