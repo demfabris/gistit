@@ -17,7 +17,7 @@ use libp2p::futures::future::poll_fn;
 use libp2p::futures::StreamExt;
 use libp2p::multiaddr::multiaddr;
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
-use libp2p::{/* dns, */ mplex, noise, tcp, websocket, yamux, Swarm, Transport};
+use libp2p::{dns, mplex, noise, tcp, websocket, yamux, Swarm, Transport};
 
 use libp2p::kad::{record::Key, QueryId};
 use libp2p::ping::Failure;
@@ -56,11 +56,13 @@ impl Node {
             .expect("Signing libp2p-noise static DH keypair failed.");
 
         let transport = {
-            let tcp = tcp::TokioTcpConfig::new().nodelay(true).port_reuse(true);
-            // let dns_tcp = dns::TokioDnsConfig::system(tcp)?;
+            let tcp = tcp::TokioTcpConfig::new().nodelay(true);
+            let dns_tcp = dns::TokioDnsConfig::system(tcp.clone())?;
             let ws_dns_tcp = websocket::WsConfig::new(tcp.clone());
-            tcp.or_transport(ws_dns_tcp)
-                .or_transport(client_transport)
+
+            tcp.or_transport(client_transport)
+                .or_transport(dns_tcp)
+                .or_transport(ws_dns_tcp)
                 .upgrade(core::upgrade::Version::V1)
                 .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
                 .multiplex(core::upgrade::SelectUpgrade::new(
@@ -198,6 +200,7 @@ impl Node {
                 }
             }
             SwarmEvent::Behaviour(Event::Relay(e)) => warn!("{:?}", e),
+            SwarmEvent::Behaviour(Event::Ping(_)) => {}
             // SwarmEvent::Behaviour(Event::Autonat(e)) => warn!("{:?}", e),
             ev => {
                 debug!("other event: {:?}", ev);
