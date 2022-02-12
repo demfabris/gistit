@@ -13,7 +13,7 @@ use std::str;
 use phf::{phf_map, Map};
 use rand::{distributions::Alphanumeric, Rng};
 
-use gistit_reference::Base64Encoded;
+use gistit_reference::Base64Data;
 
 use crate::Result;
 
@@ -690,8 +690,8 @@ impl File {
     }
 
     #[must_use]
-    pub fn to_encoded_data(&self) -> Base64Encoded {
-        Base64Encoded(base64::encode(&self.bytes))
+    pub fn to_encoded_data(&self) -> Base64Data {
+        base64::encode(&self.bytes)
     }
 
     /// Save the file to the given path
