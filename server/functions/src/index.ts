@@ -12,7 +12,7 @@ admin.initializeApp();
 
 export const db = admin.firestore();
 
-const GISTIT_HASH_LENGTH = 32; // md5 hash
+const GISTIT_HASH_LENGTH = 64; // md5 hash
 
 const GISTIT_AUTHOR_MAX_CHAR_LENGTH = 50;
 const GISTIT_AUTHOR_MIN_CHAR_LENGTH = 3;
