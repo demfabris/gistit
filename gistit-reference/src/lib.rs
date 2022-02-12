@@ -24,14 +24,7 @@ pub mod dir;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Base64Encoded(pub String);
-
-impl AsRef<[u8]> for Base64Encoded {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-}
+pub type Base64Data = String;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Gistit {
@@ -44,7 +37,7 @@ pub struct Gistit {
 
 impl Gistit {
     #[must_use]
-    pub const fn data(&self) -> &Base64Encoded {
+    pub const fn data(&self) -> &String {
         &self.inner.data
     }
 
@@ -59,11 +52,8 @@ pub struct Inner {
     pub name: String,
     pub lang: String,
     pub size: usize,
-    pub data: Base64Encoded,
+    pub data: Base64Data,
 }
-
-pub const NAMED_SOCKET_0: &str = "gistit-0";
-pub const NAMED_SOCKET_1: &str = "gistit-1";
 
 pub type Result<T> = std::result::Result<T, Error>;
 

@@ -32,14 +32,14 @@ use tokio::net::UnixDatagram;
 use bincode::{deserialize, serialize};
 use serde::{Deserialize, Serialize};
 
-use gistit_reference::{Gistit, NAMED_SOCKET_0, NAMED_SOCKET_1};
-
-mod error;
+use gistit_reference::Gistit;
 
 pub use bincode;
-pub use error::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+const NAMED_SOCKET_0: &str = "gistit-0";
+const NAMED_SOCKET_1: &str = "gistit-1";
 
 const READBUF_SIZE: usize = 60_000; // A bit bigger than 50kb because encoding
 const CONNECT_TIMEOUT_SECS: u64 = 3;
@@ -244,6 +244,45 @@ pub enum ServerResponse {
         listeners: Vec<String>,
         hosting: usize,
     },
+}
+
+#[derive(Debug)]
+pub struct Error {
+    pub kind: ErrorKind,
+}
+
+#[derive(Debug)]
+pub enum ErrorKind {
+    IO(std::io::Error),
+    Serialization(bincode::Error),
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self {
+            kind: ErrorKind::IO(err),
+        }
+    }
+}
+
+impl From<bincode::Error> for Error {
+    fn from(err: bincode::Error) -> Self {
+        Self {
+            kind: ErrorKind::Serialization(err),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn description(&self) -> &str {
+        "gistit ipc error"
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "gistit ipc error")
+    }
 }
 
 #[cfg(test)]
