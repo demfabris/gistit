@@ -25,7 +25,6 @@ pub mod clipboard;
 pub mod error;
 pub mod file;
 pub mod github;
-pub mod hash;
 pub mod patch;
 pub mod server;
 

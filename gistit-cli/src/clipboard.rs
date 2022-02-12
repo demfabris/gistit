@@ -185,8 +185,10 @@ fn is_ssh_tty() -> bool {
 impl Clipboard {
     /// Creates a new Clipboard instance with the content string
     #[must_use]
-    pub const fn new(content: String) -> Self {
-        Self { content }
+    pub fn new(content: &str) -> Self {
+        Self {
+            content: content.to_owned(),
+        }
     }
 
     /// Tries to select the current display
@@ -398,21 +400,15 @@ mod tests {
         env::remove_var("WSL_INTEROP");
 
         env::set_var("DISPLAY", "localhost");
-        let clip1 = Clipboard::new("foo".to_owned())
-            .try_into_selected()
-            .unwrap();
+        let clip1 = Clipboard::new("foo").try_into_selected().unwrap();
         assert_eq!(clip1.display, DisplayKind::X11);
 
         env::set_var("WAYLAND_DISPLAY", "wayland");
-        let clip2 = Clipboard::new("bar".to_owned())
-            .try_into_selected()
-            .unwrap();
+        let clip2 = Clipboard::new("bar").try_into_selected().unwrap();
         assert_eq!(clip2.display, DisplayKind::Wayland);
 
         env::set_var("WSL_DISTRO_NAME", "hanna_montana_linux");
-        let clip3 = Clipboard::new("baz".to_owned())
-            .try_into_selected()
-            .unwrap();
+        let clip3 = Clipboard::new("baz").try_into_selected().unwrap();
         assert_eq!(clip3.display, DisplayKind::Wsl);
     }
 }

@@ -12,9 +12,6 @@ pub enum Error {
     Clipboard(#[from] Clipboard),
 
     #[error("{0}")]
-    Encoding(#[from] base64::DecodeError),
-
-    #[error("{0}")]
     Utf8(#[from] std::str::Utf8Error),
 
     #[error("{0}")]

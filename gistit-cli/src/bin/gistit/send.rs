@@ -10,13 +10,12 @@ use console::style;
 use reqwest::StatusCode;
 
 use gistit_ipc::{self, Instruction, ServerResponse};
-use gistit_reference::dir;
+use gistit_reference::{dir, hash};
 use gistit_reference::{Gistit, Inner};
 
 use libgistit::clipboard::Clipboard;
 use libgistit::file::File;
 use libgistit::github::{self, CreateResponse, GITHUB_GISTS_API_URL};
-use libgistit::hash::Hasheable;
 use libgistit::server::{IntoGistit, Response, SERVER_URL_LOAD};
 
 use crate::dispatch::Dispatch;
@@ -60,27 +59,13 @@ pub struct Config {
     github_token: Option<github::Token>,
 }
 
-impl Hasheable for Config {
-    fn hash(&self) -> String {
-        let to_digest = [
-            self.file.data(),
-            self.author.as_bytes(),
-            self.description.unwrap_or("").as_bytes(),
-        ];
-
-        let mut md5 = md5::Context::new();
-        for digest in to_digest {
-            md5.consume(digest);
-        }
-
-        format!("{:x}", md5.compute())
-    }
-}
-
 impl IntoGistit for Config {
     fn into_gistit(self) -> Result<Gistit> {
+        let data = self.file.read()?;
+        let hash = hash::compute(&data, self.author, self.description.unwrap_or(""));
+
         Ok(Gistit {
-            hash: self.hash(),
+            hash,
             author: self.author.to_owned(),
             description: self.description.map(ToOwned::to_owned),
             timestamp: SystemTime::now()
@@ -92,7 +77,7 @@ impl IntoGistit for Config {
                 name: self.file.name(),
                 lang: self.file.lang().to_owned(),
                 size: self.file.size(),
-                data: self.file.to_encoded_data(),
+                data,
             },
         })
     }
@@ -114,7 +99,7 @@ impl Dispatch for Action {
 
             File::from_path(path)?
         } else if let Some(ref stdin) = self.maybe_stdin {
-            File::from_bytes(stdin.as_bytes().to_vec(), "stdin")?
+            File::from_data(stdin, "stdin")?
         } else {
             return Err(Error::Argument("missing file input", "[FILE]/[STDIN]"));
         };
@@ -161,20 +146,20 @@ impl Dispatch for Action {
 
     #[allow(clippy::too_many_lines)]
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
-        let hash = config.hash();
-
         let runtime_dir = dir::runtime()?;
         let clipboard = config.clipboard;
 
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
         if bridge.alive() {
+            // Daemon is running, hosting with p2p
             progress!("Hosting");
+            let gistit = config.into_gistit()?;
 
             bridge.connect_blocking()?;
             bridge
                 .send(Instruction::Provide {
-                    hash: hash.clone(),
-                    data: config.into_gistit()?,
+                    hash: gistit.hash.clone(),
+                    data: gistit,
                 })
                 .await?;
 
@@ -190,11 +175,13 @@ impl Dispatch for Action {
         } else {
             progress!("Sending");
             let maybe_github_token = config.github_token.as_ref().map(Clone::clone);
+            let gistit = config.into_gistit()?;
 
             let maybe_gist = if let Some(token) = maybe_github_token {
-                let name = config.file.name();
-                let description = config.description.unwrap_or("");
-                let data = str::from_utf8(config.file.data())?;
+                // Github flag was provided, sending to Github Gists
+                let name = gistit.name();
+                let data = gistit.data();
+                let description = gistit.description.as_deref().unwrap_or("");
 
                 let response = reqwest::Client::new()
                     .post(GITHUB_GISTS_API_URL)
@@ -234,7 +221,6 @@ impl Dispatch for Action {
                 None
             };
 
-            let gistit = config.into_gistit()?;
             let response: Response = reqwest::Client::new()
                 .post(SERVER_URL_LOAD.to_string())
                 .json(&gistit)
@@ -245,7 +231,7 @@ impl Dispatch for Action {
             let server_hash = response.into_gistit()?.hash;
 
             if clipboard {
-                Clipboard::new(server_hash)
+                Clipboard::new(&server_hash)
                     .try_into_selected()?
                     .into_provider()
                     .set_contents()?;
@@ -268,9 +254,9 @@ impl Dispatch for Action {
     hash: '{}' {}
     url: 'https://gistit.vercel.app/h/{}'
     {}      "#,
-                style(&hash).bold(),
+                style(&server_hash).bold(),
                 clipboard_msg,
-                style(&hash).bold(),
+                style(&server_hash).bold(),
                 gist
             ));
         };

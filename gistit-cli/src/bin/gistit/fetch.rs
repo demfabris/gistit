@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
@@ -98,15 +96,38 @@ impl Dispatch for Action {
             match response.status() {
                 StatusCode::OK => {
                     let gistit = response.json::<Response>().await?.into_gistit()?;
-                    let file = File::from_bytes_encoded(gistit.data(), gistit.name())?;
+                    let mut file = File::from_data(gistit.data(), gistit.name())?;
 
                     if self.save {
-                        let saved_file = save_gistit(&file)?;
-                        warnln!("gistit saved at: `{}`", saved_file.to_string_lossy());
+                        let save_location = dir::data()?;
+                        let file_path = save_location.join(file.name());
+                        file.save_as(&file_path)?;
+
+                        warnln!("gistit saved at: `{}`", file_path.to_string_lossy());
                         finish!("💾  Saved");
                     } else {
                         finish!("👀  Preview");
-                        preview_gistit(self, &gistit, &file)?;
+                        let mut header_string = style(&gistit.inner.name).green().to_string();
+                        header_string
+                            .push_str(&format!(" | {}", style(&gistit.author).blue().bold()));
+
+                        if let Some(ref description) = gistit.description {
+                            header_string.push_str(&format!(" | {}", style(description).italic()));
+                        }
+
+                        let input = bat::Input::from_reader(&*file)
+                            .name(&gistit.inner.name)
+                            .title(header_string);
+
+                        bat::PrettyPrinter::new()
+                            .header(true)
+                            .grid(true)
+                            .input(input)
+                            .line_numbers(true)
+                            .theme(self.colorscheme)
+                            .use_italics(true)
+                            .paging_mode(bat::PagingMode::QuitIfOneScreen)
+                            .print()?;
                     }
                 }
                 StatusCode::NOT_FOUND => {
@@ -118,37 +139,4 @@ impl Dispatch for Action {
 
         Ok(())
     }
-}
-
-fn preview_gistit(action: &Action, gistit: &Gistit, file: &File) -> Result<bool> {
-    let mut header_string = style(&gistit.inner.name).green().to_string();
-    header_string.push_str(&format!(" | {}", style(&gistit.author).blue().bold()));
-
-    if let Some(ref description) = gistit.description {
-        header_string.push_str(&format!(" | {}", style(description).italic()));
-    }
-
-    let colorscheme = action.colorscheme;
-
-    let input = bat::Input::from_reader(file.data())
-        .name(&gistit.inner.name)
-        .title(header_string);
-
-    Ok(bat::PrettyPrinter::new()
-        .header(true)
-        .grid(true)
-        .input(input)
-        .line_numbers(true)
-        .theme(colorscheme)
-        .use_italics(true)
-        .paging_mode(bat::PagingMode::QuitIfOneScreen)
-        .print()?)
-}
-
-fn save_gistit(file: &File) -> Result<PathBuf> {
-    let save_location = dir::data()?;
-
-    let file_path = save_location.join(file.name());
-    file.save_as(&file_path)?;
-    Ok(file_path)
 }
