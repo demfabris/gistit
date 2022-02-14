@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package gistit.gistit;
+
+// A Gistit payload
+message Gistit {
+  string hash = 1;
+  
+  // Author name is currently auto-generated
+  string author = 2;
+
+  optional string description = 3;
+
+  string timestamp = 4;
+
+  // Inner file
+  message Inner {
+    // The file name with extension
+    string name = 1;
+
+    // Mapped language
+    string lang = 2;
+    
+    // File size in bytes
+    uint32 size = 3;
+
+    // Using string instead of bytes since we moved to UTF-8
+    string data = 4;
+  }
+
+  // If we decide to support multiple files in the future
+  repeated Inner inner = 5;
+}

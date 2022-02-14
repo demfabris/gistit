@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package gistit.ipc;
+
+import "gistit.proto";
+
+message Instruction {
+  message Provide {
+    string hash = 1;
+    string data = 2;
+  }
+
+  message Fetch {
+    string hash = 1;
+  }
+
+  message Status {
+    reserved 1;
+  }
+
+  message Shutdown {
+    reserved 1;
+  }
+
+  oneof kind {
+    Provide provide = 3;
+    Fetch fetch = 4;
+    Status status = 5;
+    Shutdown shutdown = 6;
+    Response response = 7;   
+  }
+}
+
+message Response {
+  message Provide {
+    optional string hash = 1;
+  }
+
+  message Fetch {
+    gistit.Gistit gistit = 1;
+  }
+
+  message Status {
+    string peer_id = 1;
+    uint32 peer_count = 2;
+    uint32 pending_connections = 3;
+    repeated string listeners = 4;
+    uint32 hosting = 5;
+  }
+
+  oneof kind {
+    Provide provide = 1;
+    Fetch fetch = 2;
+    Status status = 3;
+  }
+}
+
