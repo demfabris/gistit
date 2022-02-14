@@ -14,13 +14,9 @@ message Instruction {
     string hash = 1;
   }
 
-  message Status {
-    reserved 1;
-  }
+  message Status {}
 
-  message Shutdown {
-    reserved 1;
-  }
+  message Shutdown {}
 
   oneof kind {
     Provide provide = 3;

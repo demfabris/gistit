@@ -4,12 +4,13 @@ use console::style;
 use reqwest::StatusCode;
 use serde::Serialize;
 
-use gistit_ipc::{self, Instruction};
-use gistit_reference::dir;
-use gistit_reference::Gistit;
+use gistit_proto::gistit::Gistit;
+use gistit_proto::ipc::Instruction;
+use gistit_proto::server::Response;
+use gistit_reference::project;
 
 use libgistit::file::File;
-use libgistit::server::{IntoGistit, Response, SERVER_URL_GET};
+use libgistit::server::{IntoGistit, SERVER_URL_GET};
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
@@ -71,16 +72,14 @@ impl Dispatch for Action {
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         progress!("Fetching");
-        let runtime_dir = dir::runtime()?;
+        let runtime_dir = project::path::runtime()?;
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         if bridge.alive() {
             warnln!("gistit-daemon running, looking in the DHT");
             bridge.connect_blocking()?;
             bridge
-                .send(Instruction::Fetch {
-                    hash: config.hash.to_owned(),
-                })
+                .send(Instruction::fetch(self.hash.to_owned()))
                 .await?;
 
             let _a = bridge.recv().await?;
@@ -99,7 +98,7 @@ impl Dispatch for Action {
                     let mut file = File::from_data(gistit.data(), gistit.name())?;
 
                     if self.save {
-                        let save_location = dir::data()?;
+                        let save_location = project::path::data()?;
                         let file_path = save_location.join(file.name());
                         file.save_as(&file_path)?;
 

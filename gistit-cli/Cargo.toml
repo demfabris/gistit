@@ -42,6 +42,7 @@ thiserror = "1.0.30"
 base64 = "0.13.0"
 gistit-ipc = { version = "0.1.1", path = "../gistit-ipc" }
 gistit-reference = { version = "0.1.0", path = "../gistit-reference" }
+gistit-proto = { version = "0.1.0", path = "../gistit-proto" }
 
 [build-dependencies]
 clap_complete = { version = "3.0.6", optional = true }

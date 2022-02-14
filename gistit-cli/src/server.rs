@@ -2,9 +2,9 @@ use std::option_env;
 use url::Url;
 
 use lazy_static::lazy_static;
-use serde::Deserialize;
 
-use gistit_reference::Gistit;
+use gistit_proto::gistit::Gistit;
+use gistit_proto::server::Response;
 
 use crate::{Error, Result};
 
@@ -33,12 +33,6 @@ lazy_static! {
             .expect("invalid `GISTIT_SERVER_URL` variable")
             .join(SERVER_SUBPATH_TOKEN)
             .unwrap();
-}
-
-#[derive(Deserialize, Debug, Default)]
-pub struct Response {
-    success: Option<Gistit>,
-    error: Option<String>,
 }
 
 pub trait IntoGistit {

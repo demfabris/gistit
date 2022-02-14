@@ -31,6 +31,19 @@ pub mod gistit {
 
 pub mod ipc {
     include!(concat!(env!("OUT_DIR"), "/gistit.ipc.rs"));
+
+    impl Instruction {
+        #[must_use]
+        pub const fn fetch(hash: String) -> Self {
+            Self {
+                kind: Some(instruction::Kind::Fetch(instruction::Fetch { hash })),
+            }
+        }
+    }
+}
+
+pub mod server {
+    include!(concat!(env!("OUT_DIR"), "/gistit.server.rs"));
 }
 
 #[cfg(test)]
@@ -42,9 +55,6 @@ mod tests {
     fn test_basic_encoding() {
         let mut instruction = ipc::Instruction::default();
         instruction.kind = Some(ipc::instruction::Kind::Status(ipc::instruction::Status {}));
-        // instruction.kind = Some(ipc::instruction::Kind::Fetch(ipc::instruction::Fetch {
-        //     hash: "asdas".to_string(),
-        // }));
 
         let mut buf = bytes::BytesMut::new();
         instruction.encode(&mut buf).unwrap();
