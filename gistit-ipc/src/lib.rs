@@ -30,8 +30,8 @@ use std::time::Instant;
 use tokio::net::UnixDatagram;
 
 use gistit_proto::bytes::BytesMut;
-use gistit_proto::ipc;
 use gistit_proto::prost::{self, Message};
+use gistit_proto::Instruction;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -142,7 +142,7 @@ impl Bridge<Server> {
     /// # Errors
     ///
     /// Fails if the socket is not alive
-    pub async fn send(&self, instruction: ipc::Instruction) -> Result<()> {
+    pub async fn send(&self, instruction: Instruction) -> Result<()> {
         let mut buf = BytesMut::with_capacity(READBUF_SIZE);
         instruction.encode(&mut buf)?;
         log::trace!("Sending to client {} bytes", buf.len());
@@ -155,11 +155,11 @@ impl Bridge<Server> {
     /// # Errors
     ///
     /// Fails if the socket is not alive
-    pub async fn recv(&self) -> Result<ipc::Instruction> {
+    pub async fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
         let read = self.sock_0.recv(&mut buf).await?;
         buf.truncate(read);
-        let target = ipc::Instruction::decode(&*buf)?;
+        let target = Instruction::decode(&*buf)?;
         Ok(target)
     }
 }
@@ -183,7 +183,7 @@ impl Bridge<Client> {
     /// # Errors
     ///
     /// Fails if the socket is not alive
-    pub async fn send(&self, instruction: ipc::Instruction) -> Result<()> {
+    pub async fn send(&self, instruction: Instruction) -> Result<()> {
         let mut buf = BytesMut::with_capacity(READBUF_SIZE);
         instruction.encode(&mut buf)?;
         log::trace!("Sending to server {} bytes", buf.len());
@@ -196,61 +196,25 @@ impl Bridge<Client> {
     /// # Errors
     ///
     /// Fails if the socket is not alive
-    pub async fn recv(&self) -> Result<ipc::Instruction> {
+    pub async fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
         let read = self.sock_1.recv(&mut buf).await?;
         buf.truncate(read);
-        let target = ipc::Instruction::decode(&*buf)?;
+        let target = Instruction::decode(&*buf)?;
         Ok(target)
     }
 }
 
-#[derive(Debug)]
-pub struct Error {
-    pub kind: ErrorKind,
-}
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("io error {0}")]
+    IO(#[from] std::io::Error),
 
-#[derive(Debug)]
-pub enum ErrorKind {
-    IO(std::io::Error),
-    Decode(prost::DecodeError),
-    Encode(prost::EncodeError),
-}
+    #[error("decode error {0}")]
+    Decode(#[from] prost::DecodeError),
 
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Self {
-            kind: ErrorKind::IO(err),
-        }
-    }
-}
-
-impl From<prost::DecodeError> for Error {
-    fn from(err: prost::DecodeError) -> Self {
-        Self {
-            kind: ErrorKind::Decode(err),
-        }
-    }
-}
-
-impl From<prost::EncodeError> for Error {
-    fn from(err: prost::EncodeError) -> Self {
-        Self {
-            kind: ErrorKind::Encode(err),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        "gistit ipc error"
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "gistit ipc error")
-    }
+    #[error("encode error {0}")]
+    Encode(#[from] prost::EncodeError),
 }
 
 #[cfg(test)]
@@ -259,16 +223,12 @@ mod tests {
     use assert_fs::prelude::*;
     use std::sync::Arc;
 
-    pub fn test_instruction_1() -> ipc::Instruction {
-        let mut instruction = ipc::Instruction::default();
-        instruction.kind = Some(ipc::instruction::Kind::Status(ipc::instruction::Status {}));
-        instruction
+    pub fn test_instruction_1() -> Instruction {
+        Instruction::request_status()
     }
 
-    pub fn test_instruction_2() -> ipc::Instruction {
-        let mut instruction = ipc::Instruction::default();
-        instruction.kind = Some(ipc::instruction::Kind::Status(ipc::instruction::Status {}));
-        instruction
+    pub fn test_instruction_2() -> Instruction {
+        Instruction::request_shutdown()
     }
 
     #[tokio::test]

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package gistit.gistit;
+package gistit.payload;
 
 // A Gistit payload
 message Gistit {

@@ -27,13 +27,16 @@ pub enum Error {
     Reference(#[from] gistit_reference::Error),
 
     #[error("{0}")]
+    Proto(#[from] gistit_proto::Error),
+
+    #[error("{0}")]
     Tui(#[from] bat::error::Error),
 
     #[error("{0}")]
     Other(#[from] which::Error),
 
     #[error("{0}")]
-    Server(String),
+    Server(&'static str),
 
     /// (Reason, Param)
     #[error("{}", fmt_subcat("PARAM", .0, .1))]

@@ -126,7 +126,7 @@ impl Oauth {
                 StatusCode::OK => {
                     break response.json().await?;
                 }
-                _ => return Err(Error::Server("unexpected response".to_owned())),
+                _ => return Err(Error::Server("unexpected response")),
             }
         };
 

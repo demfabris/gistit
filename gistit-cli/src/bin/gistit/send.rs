@@ -9,14 +9,15 @@ use clap::ArgMatches;
 use console::style;
 use reqwest::StatusCode;
 
-use gistit_ipc::{self, Instruction, ServerResponse};
-use gistit_reference::{dir, hash};
-use gistit_reference::{Gistit, Inner};
+use gistit_proto::payload::{hash, Gistit};
+use gistit_proto::prost::Message;
+use gistit_proto::{ipc, Instruction};
+use gistit_reference::project;
 
 use libgistit::clipboard::Clipboard;
 use libgistit::file::File;
 use libgistit::github::{self, CreateResponse, GITHUB_GISTS_API_URL};
-use libgistit::server::{IntoGistit, Response, SERVER_URL_LOAD};
+use libgistit::server::SERVER_URL_LOAD;
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
@@ -59,27 +60,35 @@ pub struct Config {
     github_token: Option<github::Token>,
 }
 
-impl IntoGistit for Config {
-    fn into_gistit(self) -> Result<Gistit> {
-        let data = self.file.read()?;
-        let hash = hash::compute(&data, self.author, self.description.unwrap_or(""));
+impl TryFrom<Config> for Gistit {
+    type Error = Error;
 
-        Ok(Gistit {
+    #[allow(clippy::cast_possible_truncation)]
+    fn try_from(value: Config) -> std::result::Result<Self, Self::Error> {
+        let data = value.file.read()?;
+        let hash = hash(value.author, value.description, &data);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Check your system time")
+            .as_millis()
+            .to_string();
+
+        let inner = Self::new_inner(
+            value.file.name(),
+            value.file.lang().to_owned(),
+            value.file.size() as u32,
+            data,
+        );
+
+        let gistit = Self::new(
             hash,
-            author: self.author.to_owned(),
-            description: self.description.map(ToOwned::to_owned),
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Check your system time")
-                .as_millis()
-                .to_string(),
-            inner: Inner {
-                name: self.file.name(),
-                lang: self.file.lang().to_owned(),
-                size: self.file.size(),
-                data,
-            },
-        })
+            value.author.to_owned(),
+            value.description.map(ToOwned::to_owned),
+            now,
+            vec![inner],
+        );
+
+        Ok(gistit)
     }
 }
 
@@ -126,7 +135,7 @@ impl Dispatch for Action {
                 oauth.poll_token().await?;
                 warnln!(
                     "storing github token at: '{}'",
-                    dir::config()?.to_string_lossy()
+                    project::path::config()?.to_string_lossy()
                 );
             }
             updateln!("Authorized");
@@ -146,25 +155,21 @@ impl Dispatch for Action {
 
     #[allow(clippy::too_many_lines)]
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
-        let runtime_dir = dir::runtime()?;
+        let runtime_dir = project::path::runtime()?;
         let clipboard = config.clipboard;
 
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
         if bridge.alive() {
             // Daemon is running, hosting with p2p
             progress!("Hosting");
-            let gistit = config.into_gistit()?;
+            let gistit: Gistit = config.try_into()?;
 
             bridge.connect_blocking()?;
-            bridge
-                .send(Instruction::Provide {
-                    hash: gistit.hash.clone(),
-                    data: gistit,
-                })
-                .await?;
+            bridge.send(Instruction::request_provide(gistit)).await?;
 
-            if let Instruction::Response(ServerResponse::Provide(Some(hash))) =
-                bridge.recv().await?
+            if let ipc::instruction::Kind::ProvideResponse(ipc::instruction::ProvideResponse {
+                hash: Some(hash),
+            }) = bridge.recv().await?.expect_response()?
             {
                 updateln!("Hosted");
                 finish!(format!("\n    hash: '{}'\n\n", style(hash).bold()));
@@ -175,12 +180,13 @@ impl Dispatch for Action {
         } else {
             progress!("Sending");
             let maybe_github_token = config.github_token.as_ref().map(Clone::clone);
-            let gistit = config.into_gistit()?;
+            let gistit: Gistit = config.try_into()?;
 
             let maybe_gist = if let Some(token) = maybe_github_token {
                 // Github flag was provided, sending to Github Gists
-                let name = gistit.name();
-                let data = gistit.data();
+                // NOTE: Currently we only support one file
+                let inner = gistit.inner.first().expect("to have at least one file");
+                let name = &inner.name;
                 let description = gistit.description.as_deref().unwrap_or("");
 
                 let response = reqwest::Client::new()
@@ -193,7 +199,7 @@ impl Dispatch for Action {
                         "public": true,
                         "files": {
                             name: {
-                                "content": data
+                                "content": inner.data
                             }
                         }
                     }))
@@ -221,46 +227,52 @@ impl Dispatch for Action {
                 None
             };
 
-            let response: Response = reqwest::Client::new()
+            let response = reqwest::Client::new()
                 .post(SERVER_URL_LOAD.to_string())
-                .json(&gistit)
+                .body(gistit.encode_to_vec())
                 .send()
-                .await?
-                .json()
                 .await?;
-            let server_hash = response.into_gistit()?.hash;
 
-            if clipboard {
-                Clipboard::new(&server_hash)
-                    .try_into_selected()?
-                    .into_provider()
-                    .set_contents()?;
+            match response.status() {
+                StatusCode::OK => {
+                    let server_hash = Gistit::from_bytes(response.bytes().await?)?.hash;
+
+                    if clipboard {
+                        Clipboard::new(&server_hash)
+                            .try_into_selected()?
+                            .into_provider()
+                            .set_contents()?;
+                    }
+                    updateln!("Sent");
+
+                    let clipboard_msg = if self.clipboard {
+                        style("(copied to clipboard)").italic().dim().to_string()
+                    } else {
+                        "".to_string()
+                    };
+
+                    let gist = maybe_gist.map_or_else(
+                        || "".to_string(),
+                        |gist_url| format!("github gist: '{}'\n", gist_url),
+                    );
+
+                    finish!(format!(
+                        r#"
+            hash: '{}' {}
+            url: 'https://gistit.vercel.app/h/{}'
+            {}      "#,
+                        style(&server_hash).bold(),
+                        clipboard_msg,
+                        style(&server_hash).bold(),
+                        gist
+                    ));
+                }
+                StatusCode::UNPROCESSABLE_ENTITY | StatusCode::BAD_REQUEST => {
+                    return Err(Error::Server("invalid gistit payload"));
+                }
+                _ => return Err(Error::Server("invalid server response")),
             }
-            updateln!("Sent");
-
-            let clipboard_msg = if self.clipboard {
-                style("(copied to clipboard)").italic().dim().to_string()
-            } else {
-                "".to_string()
-            };
-
-            let gist = maybe_gist.map_or_else(
-                || "".to_string(),
-                |gist_url| format!("github gist: '{}'\n", gist_url),
-            );
-
-            finish!(format!(
-                r#"
-    hash: '{}' {}
-    url: 'https://gistit.vercel.app/h/{}'
-    {}      "#,
-                style(&server_hash).bold(),
-                clipboard_msg,
-                style(&server_hash).bold(),
-                gist
-            ));
         };
-
         Ok(())
     }
 }

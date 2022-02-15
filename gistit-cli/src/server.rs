@@ -3,11 +3,6 @@ use url::Url;
 
 use lazy_static::lazy_static;
 
-use gistit_proto::gistit::Gistit;
-use gistit_proto::server::Response;
-
-use crate::{Error, Result};
-
 lazy_static! {
     static ref SERVER_URL_BASE: Url =
         Url::parse("https://us-central1-gistit-base.cloudfunctions.net/").unwrap();
@@ -33,28 +28,4 @@ lazy_static! {
             .expect("invalid `GISTIT_SERVER_URL` variable")
             .join(SERVER_SUBPATH_TOKEN)
             .unwrap();
-}
-
-pub trait IntoGistit {
-    /// Converts [`Self`] into a [`Gistit`]
-    ///
-    /// # Errors
-    ///
-    /// Fails if payload is corrupted
-    fn into_gistit(self) -> Result<Gistit>;
-}
-
-impl IntoGistit for Response {
-    fn into_gistit(self) -> Result<Gistit> {
-        match self {
-            Self {
-                error: Some(msg), ..
-            } => Err(Error::Server(msg)),
-            Self {
-                success: Some(payload),
-                ..
-            } => Ok(payload),
-            _ => unreachable!("gistit server is unreachable"),
-        }
-    }
 }

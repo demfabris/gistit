@@ -4,13 +4,13 @@ use console::style;
 use reqwest::StatusCode;
 use serde::Serialize;
 
-use gistit_proto::gistit::Gistit;
 use gistit_proto::ipc::Instruction;
-use gistit_proto::server::Response;
+use gistit_proto::payload::Gistit;
+use gistit_proto::prost::Message;
 use gistit_reference::project;
 
 use libgistit::file::File;
-use libgistit::server::{IntoGistit, SERVER_URL_GET};
+use libgistit::server::SERVER_URL_GET;
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
@@ -44,11 +44,13 @@ pub struct Config {
     save: bool,
 }
 
-impl IntoGistit for Config {
-    fn into_gistit(self) -> Result<Gistit> {
-        Ok(Gistit {
-            hash: self.hash.to_owned(),
-            ..Gistit::default()
+impl TryFrom<Config> for Gistit {
+    type Error = Error;
+
+    fn try_from(value: Config) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            hash: value.hash.to_owned(),
+            ..Self::default()
         })
     }
 }
@@ -79,23 +81,26 @@ impl Dispatch for Action {
             warnln!("gistit-daemon running, looking in the DHT");
             bridge.connect_blocking()?;
             bridge
-                .send(Instruction::fetch(self.hash.to_owned()))
+                .send(Instruction::request_fetch(self.hash.to_owned()))
                 .await?;
 
             let _a = bridge.recv().await?;
             warnln!("{:?}", _a);
         } else {
+            let gistit: Gistit = config.try_into()?;
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())
-                .json(&config.into_gistit()?)
+                .body(gistit.encode_to_vec())
                 .send()
                 .await?;
             updateln!("Fetched");
 
             match response.status() {
                 StatusCode::OK => {
-                    let gistit = response.json::<Response>().await?.into_gistit()?;
-                    let mut file = File::from_data(gistit.data(), gistit.name())?;
+                    let gistit = Gistit::from_bytes(response.bytes().await?)?;
+                    // NOTE: Currently we support one file
+                    let inner = gistit.inner.first().expect("to have at least one file");
+                    let mut file = File::from_data(&inner.data, &inner.name)?;
 
                     if self.save {
                         let save_location = project::path::data()?;
@@ -106,7 +111,7 @@ impl Dispatch for Action {
                         finish!("💾  Saved");
                     } else {
                         finish!("👀  Preview");
-                        let mut header_string = style(&gistit.inner.name).green().to_string();
+                        let mut header_string = style(&inner.name).green().to_string();
                         header_string
                             .push_str(&format!(" | {}", style(&gistit.author).blue().bold()));
 
@@ -115,7 +120,7 @@ impl Dispatch for Action {
                         }
 
                         let input = bat::Input::from_reader(&*file)
-                            .name(&gistit.inner.name)
+                            .name(&inner.name)
                             .title(header_string);
 
                         bat::PrettyPrinter::new()
@@ -130,9 +135,9 @@ impl Dispatch for Action {
                     }
                 }
                 StatusCode::NOT_FOUND => {
-                    return Err(Error::Server("gistit hash not found".to_owned()));
+                    return Err(Error::Server("gistit hash not found"));
                 }
-                _ => return Err(Error::Server("unexpected response".to_owned())),
+                _ => return Err(Error::Server("unexpected response")),
             }
         }
 
