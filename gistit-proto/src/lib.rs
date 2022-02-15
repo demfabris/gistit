@@ -228,9 +228,6 @@ pub enum Error {
     #[error("decode error {0}")]
     Decode(#[from] prost::DecodeError),
 
-    #[error("encode error {0}")]
-    Encode(#[from] prost::EncodeError),
-
     #[error("other error {0}")]
     Other(&'static str),
 }
@@ -239,4 +236,45 @@ pub enum Error {
 mod tests {
     use super::*;
     use prost::Message;
+
+    #[test]
+    fn test_payload_encode_decode() {
+        let mut payload = Gistit::default();
+        payload.description = Some("foo".to_owned());
+        payload.author = "Matthew McCaunaghey".to_owned();
+
+        let bytes = payload.encode_to_vec();
+        assert_eq!(Gistit::decode(&*bytes).unwrap(), payload);
+    }
+
+    #[test]
+    fn test_ipc_encode_decode() {
+        let instruction = Instruction::request_shutdown();
+        let bytes = instruction.encode_to_vec();
+        assert_eq!(Instruction::decode(&*bytes).unwrap(), instruction);
+    }
+
+    #[test]
+    fn test_ipc_unwrap_methods() {
+        let req1 = Instruction::request_shutdown().expect_request().unwrap();
+        let req2 = Instruction::request_provide(Gistit::default())
+            .expect_request()
+            .unwrap();
+        let req3 = Instruction::request_status().expect_request().unwrap();
+        let req4 = Instruction::request_fetch(String::new())
+            .expect_request()
+            .unwrap();
+
+        let res1 = Instruction::respond_fetch(Gistit::default())
+            .expect_response()
+            .unwrap();
+        let res2 = Instruction::respond_provide(None)
+            .expect_response()
+            .unwrap();
+        let res3 = Instruction::respond_status(String::new(), 0, 0, Vec::new(), 0)
+            .expect_response()
+            .unwrap();
+
+        assert!(true);
+    }
 }
