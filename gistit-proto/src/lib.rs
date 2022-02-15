@@ -131,6 +131,70 @@ pub mod ipc {
             }
         }
 
+        #[must_use]
+        pub const fn respond_status(
+            peer_id: String,
+            peer_count: u32,
+            pending_connections: u32,
+            listeners: Vec<String>,
+            hosting: u32,
+        ) -> Self {
+            Self {
+                kind: Some(instruction::Kind::StatusResponse(
+                    instruction::StatusResponse {
+                        peer_id,
+                        peer_count,
+                        pending_connections,
+                        listeners,
+                        hosting,
+                    },
+                )),
+            }
+        }
+
+        #[must_use]
+        pub const fn respond_fetch(gistit: Gistit) -> Self {
+            Self {
+                kind: Some(instruction::Kind::FetchResponse(
+                    instruction::FetchResponse {
+                        gistit: Some(gistit),
+                    },
+                )),
+            }
+        }
+
+        #[must_use]
+        pub const fn respond_provide(maybe_hash: Option<String>) -> Self {
+            Self {
+                kind: Some(instruction::Kind::ProvideResponse(
+                    instruction::ProvideResponse { hash: maybe_hash },
+                )),
+            }
+        }
+
+        /// Unwraps [`Self`] expecting a request kind
+        ///
+        /// # Errors
+        ///
+        /// Fails if instruction is not a request or is none
+        #[allow(clippy::missing_const_for_fn)]
+        pub fn expect_request(self) -> Result<instruction::Kind> {
+            match self {
+                Self {
+                    kind:
+                        Some(
+                            instruction::Kind::FetchResponse(_)
+                            | instruction::Kind::ProvideResponse(_)
+                            | instruction::Kind::StatusResponse(_),
+                        )
+                        | None,
+                } => Err(Error::Other("instruction is not a request")),
+                Self {
+                    kind: Some(request),
+                } => Ok(request),
+            }
+        }
+
         /// Unwraps [`Self`] expecting a response kind
         ///
         /// # Errors
@@ -166,9 +230,6 @@ pub enum Error {
 
     #[error("encode error {0}")]
     Encode(#[from] prost::EncodeError),
-
-    #[error("server error {0}")]
-    Server(String),
 
     #[error("other error {0}")]
     Other(&'static str),

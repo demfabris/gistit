@@ -12,7 +12,7 @@ use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, Zeroizing};
 
-use gistit_reference::dir;
+use gistit_reference::project;
 
 use crate::{Error, Result};
 
@@ -44,14 +44,14 @@ impl Config {
         port: Option<u16>,
         bootstrap: bool,
     ) -> Result<Self> {
-        dir::init()?;
+        project::path::init()?;
 
         let host = host.unwrap_or(Ipv4Addr::new(0, 0, 0, 0));
         let port = port.unwrap_or(0_u16);
         let multiaddr = multiaddr!(Ip4(host), Tcp(port));
 
-        let runtime_path = runtime_path.unwrap_or(dir::runtime()?);
-        let config_path = config_path.unwrap_or(dir::config()?);
+        let runtime_path = runtime_path.unwrap_or(project::path::runtime()?);
+        let config_path = config_path.unwrap_or(project::path::config()?);
         let node_config = config_file.unwrap_or_else(|| config_path.join("node-config"));
 
         let (peer_id, keypair) = if fs::metadata(&node_config).is_ok() {

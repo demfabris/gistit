@@ -5,7 +5,7 @@ use libp2p::kad::record::Key;
 use libp2p::kad::{GetProvidersError, GetProvidersOk, KademliaEvent, QueryResult};
 use libp2p::request_response::{RequestResponseEvent, RequestResponseMessage};
 
-use gistit_ipc::{Instruction, ServerResponse};
+use gistit_proto::Instruction;
 use log::{debug, error, info};
 
 use crate::behaviour::{Request, Response};
@@ -42,7 +42,7 @@ pub async fn handle_request_response(
                 node.pending_request_file.remove(&request_id);
                 node.bridge.connect_blocking()?;
                 node.bridge
-                    .send(Instruction::Response(ServerResponse::Fetch(response.0)))
+                    .send(Instruction::respond_fetch(response.0))
                     .await?;
             }
         },
@@ -77,15 +77,13 @@ pub async fn handle_kademlia(node: &mut Node, event: KademliaEvent) -> Result<()
                         .expect("hash format to be valid utf8")
                         .to_owned();
                     node.bridge
-                        .send(Instruction::Response(ServerResponse::Provide(Some(hash))))
+                        .send(Instruction::respond_provide(Some(hash)))
                         .await?;
                 }
                 Err(provider) => {
                     error!("Kademlia start providing failed: {:?}", provider);
                     node.to_provide.remove(provider.key());
-                    node.bridge
-                        .send(Instruction::Response(ServerResponse::Provide(None)))
-                        .await?;
+                    node.bridge.send(Instruction::respond_provide(None)).await?;
                 }
             }
             Ok(())
