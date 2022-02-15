@@ -46,6 +46,9 @@ pub struct Node {
 
     /// Stack of request file (`key`) events
     pub to_request: Vec<(Key, HashSet<PeerId>)>,
+
+    /// Addresses that can be used as relay
+    pub relays: HashSet<Multiaddr>,
 }
 
 impl Node {
@@ -93,11 +96,18 @@ impl Node {
 
             to_provide: HashMap::default(),
             to_request: Vec::default(),
+
+            relays: HashSet::default(),
         })
     }
 
     pub fn dial_on_init(&mut self, address: &str) -> Result<()> {
         Ok(self.swarm.dial(address.parse::<Multiaddr>()?)?)
+    }
+
+    pub fn listen_on_init(&mut self, address: &str) -> Result<()> {
+        self.swarm.listen_on(address.parse::<Multiaddr>()?)?;
+        Ok(())
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -172,7 +182,7 @@ impl Node {
         >,
     ) -> Result<()> {
         match event {
-            SwarmEvent::Behaviour(Event::Identify(event)) => handle_identify(self, event),
+            SwarmEvent::Behaviour(Event::Identify(event)) => handle_identify(self, event)?,
             SwarmEvent::Behaviour(Event::Kademlia(event)) => handle_kademlia(self, event).await?,
             SwarmEvent::Behaviour(Event::RequestResponse(event)) => {
                 handle_request_response(self, event).await?;
@@ -180,7 +190,7 @@ impl Node {
 
             SwarmEvent::NewListenAddr { address, .. } => {
                 let peer_id = self.swarm.local_peer_id().to_string();
-                info!("Daemon: Listening on {:?}, {:?}", address, peer_id);
+                info!("Listening on {:?}, {:?}", address, peer_id);
             }
             SwarmEvent::ConnectionEstablished {
                 peer_id, endpoint, ..

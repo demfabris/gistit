@@ -64,6 +64,10 @@ struct Args {
     /// dial these addresses on start
     dial: Vec<String>,
 
+    #[argh(option)]
+    /// listen to these addresses, useful for relays
+    listen: Vec<String>,
+
     #[argh(switch)]
     /// bootstrap this node
     bootstrap: bool,
@@ -76,8 +80,9 @@ async fn run() -> Result<()> {
         config_file,
         host,
         port,
-        dial,
         bootstrap,
+        dial,
+        listen,
     } = argh::from_env();
 
     let config = Config::from_args(
@@ -91,8 +96,13 @@ async fn run() -> Result<()> {
     log::debug!("Running config: {:?}", config);
 
     let mut node = Node::new(config).await?;
+
     for addr in dial {
         node.dial_on_init(&addr)?;
+    }
+
+    for addr in listen {
+        node.listen_on_init(&addr)?;
     }
 
     node.run().await?;

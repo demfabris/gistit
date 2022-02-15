@@ -88,6 +88,7 @@ impl Dispatch for Action {
                     let daemon =
                         "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
                     Command::new(daemon)
+                        .arg("--bootstrap")
                         .stderr(stdout)
                         .stdout(Stdio::null())
                         .spawn()?
