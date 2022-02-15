@@ -7,9 +7,10 @@ use std::string::ToString;
 use std::task::Poll;
 
 use either::Either;
-use gistit_ipc::{self, Bridge, Instruction, Server, ServerResponse};
-use gistit_reference::Gistit;
 use log::{debug, error, info, warn};
+
+use gistit_ipc::{Bridge, Server};
+use gistit_proto::{ipc, Gistit, Instruction};
 
 use libp2p::core::either::EitherError;
 use libp2p::core::{self, Multiaddr, PeerId};
@@ -210,11 +211,14 @@ impl Node {
     }
 
     #[allow(clippy::match_wildcard_for_single_variants)]
+    #[allow(clippy::cast_possible_truncation)]
     async fn handle_bridge_event(&mut self, instruction: Instruction) -> Result<()> {
-        match instruction {
-            Instruction::Provide { hash, data } => {
-                warn!("Instruction: Provide gistit {}", hash);
-                let key = Key::new(&hash);
+        match instruction.expect_request()? {
+            ipc::instruction::Kind::ProvideRequest(ipc::instruction::ProvideRequest {
+                gistit: Some(gistit),
+            }) => {
+                warn!("Instruction: Provide gistit {}", &gistit.hash);
+                let key = Key::new(&gistit.hash);
 
                 let query_id = self
                     .swarm
@@ -224,10 +228,10 @@ impl Node {
                     .expect("to start providing");
 
                 self.pending_start_providing.insert(query_id);
-                self.to_provide.insert(key, data);
+                self.to_provide.insert(key, gistit);
             }
 
-            Instruction::Fetch { hash } => {
+            ipc::instruction::Kind::FetchRequest(ipc::instruction::FetchRequest { hash }) => {
                 warn!("Instruction: Get providers for {}", hash);
                 let query_id = self
                     .swarm
@@ -237,28 +241,31 @@ impl Node {
                 self.pending_get_providers.insert(query_id);
             }
 
-            Instruction::Status => {
+            ipc::instruction::Kind::StatusRequest(ipc::instruction::StatusRequest {}) => {
                 warn!("Instruction: Status");
 
+                let network_info = self.swarm.network_info();
+
                 let peer_id = self.swarm.local_peer_id().to_string();
+                let peer_count = network_info.num_peers() as u32;
+                let pending_connections = network_info.connection_counters().num_pending();
                 let listeners: Vec<String> =
                     self.swarm.listeners().map(ToString::to_string).collect();
-                let network_info = self.swarm.network_info();
-                let hosting = self.to_provide.len();
+                let hosting = self.to_provide.len() as u32;
 
                 self.bridge.connect_blocking()?;
                 self.bridge
-                    .send(Instruction::Response(ServerResponse::Status {
-                        peer_count: network_info.num_peers(),
-                        pending_connections: network_info.connection_counters().num_pending(),
+                    .send(Instruction::respond_status(
                         peer_id,
+                        peer_count,
+                        pending_connections,
                         listeners,
                         hosting,
-                    }))
+                    ))
                     .await?;
             }
 
-            Instruction::Shutdown => {
+            ipc::instruction::Kind::ShutdownRequest(ipc::instruction::ShutdownRequest {}) => {
                 warn!("Exiting...");
                 std::process::exit(0);
             }

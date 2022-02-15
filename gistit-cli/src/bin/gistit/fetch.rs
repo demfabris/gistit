@@ -1,17 +1,16 @@
-use std::path::PathBuf;
-
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
 use reqwest::StatusCode;
 use serde::Serialize;
 
-use gistit_ipc::{self, Instruction};
-use gistit_reference::dir;
-use gistit_reference::Gistit;
+use gistit_proto::ipc::Instruction;
+use gistit_proto::payload::Gistit;
+use gistit_proto::prost::Message;
+use gistit_reference::project;
 
 use libgistit::file::File;
-use libgistit::server::{IntoGistit, Response, SERVER_URL_GET};
+use libgistit::server::SERVER_URL_GET;
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
@@ -45,11 +44,13 @@ pub struct Config {
     save: bool,
 }
 
-impl IntoGistit for Config {
-    fn into_gistit(self) -> Result<Gistit> {
-        Ok(Gistit {
-            hash: self.hash.to_owned(),
-            ..Gistit::default()
+impl TryFrom<Config> for Gistit {
+    type Error = Error;
+
+    fn try_from(value: Config) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            hash: value.hash.to_owned(),
+            ..Self::default()
         })
     }
 }
@@ -73,82 +74,74 @@ impl Dispatch for Action {
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         progress!("Fetching");
-        let runtime_dir = dir::runtime()?;
+        let runtime_dir = project::path::runtime()?;
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         if bridge.alive() {
             warnln!("gistit-daemon running, looking in the DHT");
             bridge.connect_blocking()?;
             bridge
-                .send(Instruction::Fetch {
-                    hash: config.hash.to_owned(),
-                })
+                .send(Instruction::request_fetch(self.hash.to_owned()))
                 .await?;
 
             let _a = bridge.recv().await?;
             warnln!("{:?}", _a);
         } else {
+            let gistit: Gistit = config.try_into()?;
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())
-                .json(&config.into_gistit()?)
+                .header("content-type", "application/x-protobuf")
+                .body(gistit.encode_to_vec())
                 .send()
                 .await?;
             updateln!("Fetched");
 
             match response.status() {
                 StatusCode::OK => {
-                    let gistit = response.json::<Response>().await?.into_gistit()?;
-                    let file = File::from_bytes_encoded(gistit.data(), gistit.name())?;
+                    let gistit = Gistit::from_bytes(response.bytes().await?)?;
+                    // NOTE: Currently we support one file
+                    let inner = gistit.inner.first().expect("to have at least one file");
+                    let mut file = File::from_data(&inner.data, &inner.name)?;
 
                     if self.save {
-                        let saved_file = save_gistit(&file)?;
-                        warnln!("gistit saved at: `{}`", saved_file.to_string_lossy());
+                        let save_location = project::path::data()?;
+                        let file_path = save_location.join(file.name());
+                        file.save_as(&file_path)?;
+
+                        warnln!("gistit saved at: `{}`", file_path.to_string_lossy());
                         finish!("💾  Saved");
                     } else {
                         finish!("👀  Preview");
-                        preview_gistit(self, &gistit, &file)?;
+                        let mut header_string = style(&inner.name).green().to_string();
+                        header_string
+                            .push_str(&format!(" | {}", style(&gistit.author).blue().bold()));
+
+                        if let Some(ref description) = gistit.description {
+                            header_string.push_str(&format!(" | {}", style(description).italic()));
+                        }
+
+                        let input = bat::Input::from_reader(&*file)
+                            .name(&inner.name)
+                            .title(header_string);
+
+                        bat::PrettyPrinter::new()
+                            .header(true)
+                            .grid(true)
+                            .input(input)
+                            .line_numbers(true)
+                            .theme(self.colorscheme)
+                            .use_italics(true)
+                            .paging_mode(bat::PagingMode::QuitIfOneScreen)
+                            .print()?;
                     }
                 }
                 StatusCode::NOT_FOUND => {
-                    return Err(Error::Server("gistit hash not found".to_owned()));
+                    return Err(Error::Server("gistit hash not found"));
                 }
-                _ => return Err(Error::Server("unexpected response".to_owned())),
+                _ => return Err(Error::Server("unexpected response")),
             }
         }
 
         Ok(())
     }
-}
-
-fn preview_gistit(action: &Action, gistit: &Gistit, file: &File) -> Result<bool> {
-    let mut header_string = style(&gistit.inner.name).green().to_string();
-    header_string.push_str(&format!(" | {}", style(&gistit.author).blue().bold()));
-
-    if let Some(ref description) = gistit.description {
-        header_string.push_str(&format!(" | {}", style(description).italic()));
-    }
-
-    let colorscheme = action.colorscheme;
-
-    let input = bat::Input::from_reader(file.data())
-        .name(&gistit.inner.name)
-        .title(header_string);
-
-    Ok(bat::PrettyPrinter::new()
-        .header(true)
-        .grid(true)
-        .input(input)
-        .line_numbers(true)
-        .theme(colorscheme)
-        .use_italics(true)
-        .paging_mode(bat::PagingMode::QuitIfOneScreen)
-        .print()?)
-}
-
-fn save_gistit(file: &File) -> Result<PathBuf> {
-    let save_location = dir::data()?;
-
-    let file_path = save_location.join(file.name());
-    file.save_as(&file_path)?;
-    Ok(file_path)
 }

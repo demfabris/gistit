@@ -6,14 +6,14 @@
 use std::env::temp_dir;
 use std::ffi::OsStr;
 use std::fs::{self, write};
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::str;
 
 use phf::{phf_map, Map};
 use rand::{distributions::Alphanumeric, Rng};
 
-use gistit_reference::Base64Encoded;
+use gistit_reference::def::GISTIT_MAX_SIZE;
 
 use crate::Result;
 
@@ -591,10 +591,23 @@ pub const EXTENSION_TO_LANG_MAPPING: Map<&'static str, &'static str> = phf_map! 
 
 #[derive(Debug)]
 pub struct File {
-    inner: fs::File,
+    handler: fs::File,
     path: PathBuf,
-    bytes: Vec<u8>,
     size: usize,
+}
+
+impl std::ops::Deref for File {
+    type Target = fs::File;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handler
+    }
+}
+
+impl std::ops::DerefMut for File {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handler
+    }
 }
 
 #[must_use]
@@ -605,44 +618,20 @@ pub fn name_from_path(path: &Path) -> String {
         .to_string()
 }
 
-fn spawn_from_bytes(bytes: &[u8], name: &str) -> Result<(fs::File, PathBuf)> {
-    let path = rng_temp_file(name);
-    let mut handler = fs::File::create(&path)?;
-    handler.write_all(bytes)?;
-    Ok((handler, path))
-}
-
-fn rng_temp_file(suffix: &str) -> PathBuf {
-    let rng_string: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(8)
-        .map(char::from)
-        .collect();
-
-    let mut rng_name = "__gistit-".to_owned();
-    rng_name.push_str(&rng_string);
-    rng_name.push_str(suffix);
-
-    temp_dir().join(&rng_name)
-}
-
 impl File {
     /// Create file from a given path
     ///
     /// # Errors
     ///
     /// Fails with [`std::io::Error`]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn from_path(path: &Path) -> Result<Self> {
-        let mut handler = fs::File::open(path)?;
-        let mut buf = Vec::with_capacity(50_000);
-
-        let size = handler.read_to_end(&mut buf)?;
-        buf.shrink_to_fit();
+        let handler = fs::File::open(path)?;
+        let size = fs::metadata(path)?.len() as usize;
 
         Ok(Self {
-            inner: handler,
+            handler,
             path: path.to_path_buf(),
-            bytes: buf,
             size,
         })
     }
@@ -652,55 +641,44 @@ impl File {
     /// # Errors
     ///
     /// Fails with [`std::io::Error`]
-    pub fn from_bytes(decoded_bytes: Vec<u8>, name: &str) -> Result<Self> {
-        let (handler, path) = spawn_from_bytes(&decoded_bytes, name)?;
-        let size = decoded_bytes.len();
+    pub fn from_data(data: impl AsRef<str>, name: &str) -> Result<Self> {
+        let data = data.as_ref();
+
+        let (handler, path) = {
+            let rng_string: String = rand::thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(8)
+                .map(char::from)
+                .collect();
+
+            let mut rng_name = "gistit-".to_owned();
+            rng_name.push_str(&rng_string);
+            rng_name.push_str(name);
+
+            let path = temp_dir().join(&rng_name);
+            let mut handler = fs::OpenOptions::new()
+                .write(true)
+                .read(true)
+                .create(true)
+                .truncate(true)
+                .open(&path)?;
+
+            handler.write_all(data.as_bytes())?;
+            handler.rewind()?;
+
+            (handler, path)
+        };
 
         Ok(Self {
-            inner: handler,
+            handler,
             path,
-            bytes: decoded_bytes,
-            size,
+            size: data.len(),
         })
-    }
-
-    /// Create a file from a b64 encoded vector of bytes
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`std::io::Error`]
-    pub fn from_bytes_encoded(bytes: impl AsRef<[u8]>, name: &str) -> Result<Self> {
-        let decoded_bytes = base64::decode(bytes)?;
-        Self::from_bytes(decoded_bytes, name)
-    }
-
-    #[must_use]
-    pub const fn inner(&self) -> &fs::File {
-        &self.inner
-    }
-
-    #[must_use]
-    pub fn data(&self) -> &[u8] {
-        &self.bytes
     }
 
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
-    }
-
-    #[must_use]
-    pub fn to_encoded_data(&self) -> Base64Encoded {
-        Base64Encoded(base64::encode(&self.bytes))
-    }
-
-    /// Save the file to the given path
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`std::io::Error`]
-    pub fn save_as(&self, file_path: &Path) -> Result<()> {
-        Ok(write(file_path, &self.bytes)?)
     }
 
     #[must_use]
@@ -720,6 +698,29 @@ impl File {
     pub const fn size(&self) -> usize {
         self.size
     }
+
+    /// Reads the file using [`BufReader`] and returns contents as string
+    ///
+    /// # Errors
+    ///
+    /// Fails if can't read the file
+    pub fn read(&self) -> Result<String> {
+        let mut buf = String::with_capacity(GISTIT_MAX_SIZE);
+        let mut reader = BufReader::new(&**self);
+        reader.read_to_string(&mut buf)?;
+
+        Ok(buf)
+    }
+
+    /// Reads the contents and save the file to given path
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`std::io::Error`]
+    pub fn save_as(&mut self, path: &Path) -> Result<()> {
+        let content = self.read()?;
+        Ok(write(path, content)?)
+    }
 }
 
 #[cfg(test)]
@@ -728,7 +729,6 @@ mod tests {
     use crate::Error;
     use assert_fs::prelude::*;
     use predicates::prelude::*;
-    use tokio::task::spawn_blocking;
 
     #[test]
     fn file_name_from_path_edge_cases() {
@@ -747,21 +747,21 @@ mod tests {
         assert_eq!(n6, "😁");
     }
 
-    #[tokio::test]
-    async fn file_spawn_random_and_write() {
+    #[test]
+    fn file_spawn_random_and_write() {
         let data: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(512)
             .map(char::from)
             .collect();
-        let (file, path) = spawn_from_bytes(data.as_bytes(), "foo.txt").unwrap();
-        let read_bytes = tokio::fs::read(path).await.unwrap();
+        let mut file = File::from_data(&data, "foo.txt").unwrap();
+        let read = file.read().unwrap();
 
-        assert_eq!(data, std::str::from_utf8(&read_bytes).unwrap());
+        assert_eq!(data, read);
     }
 
-    #[tokio::test]
-    async fn file_structure_new_from_path() {
+    #[test]
+    fn file_structure_new_from_path() {
         let data: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(512)
@@ -773,47 +773,28 @@ mod tests {
         input_file.touch().unwrap();
         input_file.write_binary(data.as_bytes()).unwrap();
 
-        let file = File::from_path(&input_file).unwrap();
+        let mut file = File::from_path(&input_file).unwrap();
         assert_eq!(file.size(), 512);
-        assert_eq!(file.bytes, data.as_bytes());
+        let mut content = file.read().unwrap();
+        assert_eq!(content, data);
         assert_eq!(file.name(), "foo.txt".to_owned());
     }
 
-    #[tokio::test]
-    async fn file_structure_new_from_bytes_encoded() {
+    #[test]
+    fn file_structure_new_from_bytes() {
         let data: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(512)
             .map(char::from)
             .collect();
-        let encoded_data = base64::encode(&data);
-        let file = File::from_bytes_encoded(encoded_data.as_bytes(), "nameless").unwrap();
+        let mut file = File::from_data(data.clone(), "nameless").unwrap();
+        let content = file.read().unwrap();
 
-        assert_eq!(file.bytes, data.as_bytes());
-
-        // Fails when encoding is corrupted
-        let mut corrupted_data = "¨¨¨¨".to_owned();
-        corrupted_data.extend(encoded_data.chars());
-        let decode_err =
-            File::from_bytes_encoded(corrupted_data.as_bytes(), "nameless").unwrap_err();
-
-        assert!(matches!(decode_err, Error::Encoding(_)));
+        assert_eq!(content, data);
     }
 
-    #[tokio::test]
-    async fn file_structure_new_from_bytes() {
-        let data: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(512)
-            .map(char::from)
-            .collect();
-        let file = File::from_bytes(data.as_bytes().to_owned(), "nameless").unwrap();
-
-        assert_eq!(file.bytes, data.as_bytes());
-    }
-
-    #[tokio::test]
-    async fn file_structure_save_as() {
+    #[test]
+    fn file_structure_save_as() {
         let data: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(512)
@@ -825,7 +806,7 @@ mod tests {
         tmp_file.touch().unwrap();
         tmp_file.write_binary(data.as_bytes()).unwrap();
 
-        let file = File::from_path(&tmp_file).unwrap();
+        let mut file = File::from_path(&tmp_file).unwrap();
         file.save_as(&tmp.join("bar.txt")).unwrap();
         tmp.assert(predicates::path::exists());
 
@@ -835,8 +816,8 @@ mod tests {
         assert_eq!(data.as_bytes(), other);
     }
 
-    #[tokio::test]
-    async fn file_structure_extension_to_lang_mapping() {
+    #[test]
+    fn file_structure_extension_to_lang_mapping() {
         let tmp = assert_fs::TempDir::new().unwrap();
 
         let rust = tmp.child("foo.rs");
@@ -857,8 +838,8 @@ mod tests {
         assert_eq!(File::from_path(&brainfuck).unwrap().lang(), "brainfuck");
     }
 
-    #[tokio::test]
-    async fn file_structure_support_methods() {
+    #[test]
+    fn file_structure_support_methods() {
         let data: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(512)

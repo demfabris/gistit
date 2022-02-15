@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
 
-use gistit_ipc::{self, Instruction, ServerResponse};
-use gistit_reference::dir;
+use gistit_proto::{ipc, Instruction};
+use gistit_reference::project;
 
 use crate::arg::app;
 use crate::dispatch::Dispatch;
@@ -65,15 +65,18 @@ impl Dispatch for Action {
     }
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
-        let runtime_dir = dir::runtime()?;
+        let runtime_dir = project::path::runtime()?;
         let mut bridge = gistit_ipc::client(&runtime_dir)?;
 
         match config.command {
             ProcessCommand::Start => {
                 if bridge.alive() {
                     bridge.connect_blocking()?;
-                    bridge.send(Instruction::Status).await?;
-                    if let Instruction::Response(response) = bridge.recv().await? {
+                    bridge.send(Instruction::request_status()).await?;
+
+                    if let ipc::instruction::Kind::StatusResponse(response) =
+                        bridge.recv().await?.expect_response()?
+                    {
                         format_daemon_status(&response);
                     }
                     return Ok(());
@@ -93,9 +96,12 @@ impl Dispatch for Action {
                 updateln!("Gistit node started, pid: {}", style(pid).blue());
 
                 bridge.connect_blocking()?;
-                bridge.send(Instruction::Status).await?;
-                if let Instruction::Response(ServerResponse::Status { peer_id, .. }) =
-                    bridge.recv().await?
+                bridge.send(Instruction::request_status()).await?;
+
+                if let ipc::instruction::Kind::StatusResponse(ipc::instruction::StatusResponse {
+                    peer_id,
+                    ..
+                }) = bridge.recv().await?.expect_response()?
                 {
                     finish!(format!("\n    peer id: '{}'\n\n", style(peer_id).bold()));
                 }
@@ -107,7 +113,7 @@ impl Dispatch for Action {
                     fs::remove_file(runtime_dir.join("gistit.log"))?;
 
                     bridge.connect_blocking()?;
-                    bridge.send(Instruction::Shutdown).await?;
+                    bridge.send(Instruction::request_shutdown()).await?;
                     updateln!("Stopped");
                     finish!("");
                 } else {
@@ -120,9 +126,11 @@ impl Dispatch for Action {
                 progress!("Requesting status");
                 if bridge.alive() {
                     bridge.connect_blocking()?;
-                    bridge.send(Instruction::Status).await?;
+                    bridge.send(Instruction::request_status()).await?;
 
-                    if let Instruction::Response(response) = bridge.recv().await? {
+                    if let ipc::instruction::Kind::StatusResponse(response) =
+                        bridge.recv().await?.expect_response()?
+                    {
                         format_daemon_status(&response);
                     }
                 } else {
@@ -135,29 +143,28 @@ impl Dispatch for Action {
     }
 }
 
-fn format_daemon_status(response: &ServerResponse) {
-    if let ServerResponse::Status {
+fn format_daemon_status(response: &ipc::instruction::StatusResponse) {
+    let ipc::instruction::StatusResponse {
         peer_id,
         listeners,
         peer_count,
         pending_connections,
         hosting,
-    } = response
-    {
-        updateln!("Running status");
-        finish!(format!(
-            r#"
+    } = response;
+
+    updateln!("Running status");
+    finish!(format!(
+        r#"
     peer id: '{}'
     hosting: {} gistit
     peers: {}
     pending connections: {}
     listening on: {:?}
         "#,
-            style(peer_id).bold(),
-            hosting,
-            style(peer_count).blue(),
-            pending_connections,
-            listeners
-        ));
-    }
+        style(peer_id).bold(),
+        hosting,
+        style(peer_count).blue(),
+        pending_connections,
+        listeners
+    ));
 }

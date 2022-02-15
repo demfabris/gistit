@@ -23,8 +23,8 @@ use libp2p::request_response::{
 
 use async_trait::async_trait;
 
-use gistit_ipc::bincode;
-use gistit_reference::Gistit;
+use gistit_proto::prost::Message;
+use gistit_proto::Gistit;
 
 use crate::config::Config;
 use crate::Result;
@@ -193,10 +193,10 @@ impl ProtocolName for ExchangeProtocol {
 #[derive(Clone)]
 pub struct ExchangeCodec;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Request(pub Vec<u8>);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Response(pub Gistit);
 
 impl std::fmt::Display for Response {
@@ -240,8 +240,7 @@ impl RequestResponseCodec for ExchangeCodec {
         io: &mut T,
     ) -> io::Result<Self::Response> {
         let bytes = read_length_prefixed(io, MAX_FILE_SIZE).await?;
-        let gistit: Gistit =
-            bincode::deserialize(&bytes).map_err(|_| io::ErrorKind::InvalidInput)?;
+        let gistit = Gistit::decode(&*bytes).map_err(|_| io::ErrorKind::InvalidInput)?;
 
         if bytes.is_empty() {
             Err(io::ErrorKind::UnexpectedEof.into())
@@ -256,8 +255,12 @@ impl RequestResponseCodec for ExchangeCodec {
         io: &mut T,
         Request(gistit): Self::Request,
     ) -> io::Result<()> {
-        let bytes = bincode::serialize(&gistit).map_err(|_| io::ErrorKind::InvalidInput)?;
-        write_length_prefixed(io, bytes).await?;
+        let mut buf = vec![0u8; MAX_FILE_SIZE];
+        gistit
+            .encode(&mut buf)
+            .map_err(|_| io::ErrorKind::InvalidInput)?;
+
+        write_length_prefixed(io, buf).await?;
         io.close().await?;
 
         Ok(())
@@ -272,8 +275,11 @@ impl RequestResponseCodec for ExchangeCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let bytes = bincode::serialize(&gistit).map_err(|_| io::ErrorKind::InvalidInput)?;
-        write_length_prefixed(io, bytes).await?;
+        let mut buf = vec![0u8; MAX_FILE_SIZE];
+        gistit
+            .encode(&mut buf)
+            .map_err(|_| io::ErrorKind::InvalidInput)?;
+        write_length_prefixed(io, buf).await?;
         io.close().await?;
 
         Ok(())

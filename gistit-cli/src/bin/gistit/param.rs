@@ -54,7 +54,7 @@ pub mod check {
 
     const ALLOWED_AUTHOR_CHAR_LENGTH_RANGE: RangeInclusive<usize> = 3..=30;
 
-    const GISTIT_HASH_CHAR_LENGTH: usize = 32;
+    const GISTIT_HASH_CHAR_LENGTH: usize = 64;
 
     pub fn description(description: &str) -> Result<&str> {
         if ALLOWED_DESCRIPTION_CHAR_LENGHT_RANGE.contains(&description.len()) {

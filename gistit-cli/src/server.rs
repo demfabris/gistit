@@ -2,11 +2,6 @@ use std::option_env;
 use url::Url;
 
 use lazy_static::lazy_static;
-use serde::Deserialize;
-
-use gistit_reference::Gistit;
-
-use crate::{Error, Result};
 
 lazy_static! {
     static ref SERVER_URL_BASE: Url =
@@ -33,34 +28,4 @@ lazy_static! {
             .expect("invalid `GISTIT_SERVER_URL` variable")
             .join(SERVER_SUBPATH_TOKEN)
             .unwrap();
-}
-
-#[derive(Deserialize, Debug, Default)]
-pub struct Response {
-    success: Option<Gistit>,
-    error: Option<String>,
-}
-
-pub trait IntoGistit {
-    /// Converts [`Self`] into a [`Gistit`]
-    ///
-    /// # Errors
-    ///
-    /// Fails if payload is corrupted
-    fn into_gistit(self) -> Result<Gistit>;
-}
-
-impl IntoGistit for Response {
-    fn into_gistit(self) -> Result<Gistit> {
-        match self {
-            Self {
-                error: Some(msg), ..
-            } => Err(Error::Server(msg)),
-            Self {
-                success: Some(payload),
-                ..
-            } => Ok(payload),
-            _ => unreachable!("gistit server is unreachable"),
-        }
-    }
 }

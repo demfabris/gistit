@@ -34,15 +34,15 @@ url = "2.2.2"
 reqwest = { version = "0.11.9", features = ["json"] }
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.78"
-base64 = "0.13.0"
 names = { version = "0.12.0", default-features = false }
-md5 = "0.7.0"
 which = "4.2.4"
 rand = "0.8.4"
 phf = { version = "0.10.1", features = ["macros"] }
 thiserror = "1.0.30"
+base64 = "0.13.0"
 gistit-ipc = { version = "0.1.1", path = "../gistit-ipc" }
 gistit-reference = { version = "0.1.0", path = "../gistit-reference" }
+gistit-proto = { version = "0.1.0", path = "../gistit-proto" }
 
 [build-dependencies]
 clap_complete = { version = "3.0.6", optional = true }

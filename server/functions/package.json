@@ -16,7 +16,8 @@
   "dependencies": {
     "cross-fetch": "^3.1.5",
     "firebase-admin": "^9.8.0",
-    "firebase-functions": "^3.14.1"
+    "firebase-functions": "^3.14.1",
+    "protobufjs": "6.11.2"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^3.9.1",

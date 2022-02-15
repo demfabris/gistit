@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package gistit.ipc;
+
+import "payload.proto";
+
+// Communication structure used by gistit-ipc crate
+message Instruction {
+
+  // Request to provide a gistit
+  message ProvideRequest {
+    payload.Gistit gistit = 2;
+  }
+
+  // Request to fetch
+  message FetchRequest {
+    string hash = 1;
+  }
+
+  // Request running status
+  message StatusRequest {}
+
+  // Shutdown
+  message ShutdownRequest {}
+
+  // Response to a `ProvideRequest`. Nulls if failed to provide
+  message ProvideResponse {
+    optional string hash = 1;
+  }
+
+  // Response to a `FetchRequest`
+  message FetchResponse {
+    payload.Gistit gistit = 1;
+  }
+
+  // Response to a `StatusRequest`
+  message StatusResponse {
+    string peer_id = 1;
+
+    uint32 peer_count = 2;
+
+    uint32 pending_connections = 3;
+
+    repeated string listeners = 4;
+
+    uint32 hosting = 5;
+  }
+
+  reserved 5 to 8;
+
+  oneof kind {
+    ProvideRequest provide_request = 1;
+
+    FetchRequest fetch_request = 2;
+
+    StatusRequest status_request = 3;
+
+    ShutdownRequest shutdown_request = 4;
+
+    ProvideResponse provide_response = 9;
+
+    FetchResponse fetch_response = 10;
+
+    StatusResponse status_response = 11;
+  }
+}

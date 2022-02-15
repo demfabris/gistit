@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
 #[allow(clippy::single_match_else)]
 async fn run() -> Result<()> {
     let matches = Box::leak(Box::new(arg::app().get_matches()));
-    gistit_reference::dir::init()?;
+    gistit_reference::project::path::init()?;
 
     let (cmd, args) = if let Some((cmd, args)) = matches.subcommand() {
         (cmd, Some(args))

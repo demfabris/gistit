@@ -29,17 +29,14 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tokio::net::UnixDatagram;
 
-use bincode::{deserialize, serialize};
-use serde::{Deserialize, Serialize};
-
-use gistit_reference::{Gistit, NAMED_SOCKET_0, NAMED_SOCKET_1};
-
-mod error;
-
-pub use bincode;
-pub use error::Error;
+use gistit_proto::bytes::BytesMut;
+use gistit_proto::prost::{self, Message};
+use gistit_proto::Instruction;
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+const NAMED_SOCKET_0: &str = "gistit-0";
+const NAMED_SOCKET_1: &str = "gistit-1";
 
 const READBUF_SIZE: usize = 60_000; // A bit bigger than 50kb because encoding
 const CONNECT_TIMEOUT_SECS: u64 = 3;
@@ -146,9 +143,10 @@ impl Bridge<Server> {
     ///
     /// Fails if the socket is not alive
     pub async fn send(&self, instruction: Instruction) -> Result<()> {
-        let encoded = serialize(&instruction)?;
-        log::trace!("Sending to client {} bytes", encoded.len());
-        self.sock_1.send(&encoded).await?;
+        let mut buf = BytesMut::with_capacity(READBUF_SIZE);
+        instruction.encode(&mut buf)?;
+        log::trace!("Sending to client {} bytes", buf.len());
+        self.sock_1.send(&buf).await?;
         Ok(())
     }
 
@@ -159,8 +157,9 @@ impl Bridge<Server> {
     /// Fails if the socket is not alive
     pub async fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
-        self.sock_0.recv(&mut buf).await?;
-        let target = deserialize(&buf)?;
+        let read = self.sock_0.recv(&mut buf).await?;
+        buf.truncate(read);
+        let target = Instruction::decode(&*buf)?;
         Ok(target)
     }
 }
@@ -185,9 +184,10 @@ impl Bridge<Client> {
     ///
     /// Fails if the socket is not alive
     pub async fn send(&self, instruction: Instruction) -> Result<()> {
-        let encoded = serialize(&instruction)?;
-        log::trace!("Sending to server {} bytes", encoded.len());
-        self.sock_0.send(&encoded).await?;
+        let mut buf = BytesMut::with_capacity(READBUF_SIZE);
+        instruction.encode(&mut buf)?;
+        log::trace!("Sending to server {} bytes", buf.len());
+        self.sock_0.send(&*buf).await?;
         Ok(())
     }
 
@@ -198,52 +198,23 @@ impl Bridge<Client> {
     /// Fails if the socket is not alive
     pub async fn recv(&self) -> Result<Instruction> {
         let mut buf = vec![0u8; READBUF_SIZE];
-        self.sock_1.recv(&mut buf).await?;
-        let target = deserialize(&buf)?;
+        let read = self.sock_1.recv(&mut buf).await?;
+        buf.truncate(read);
+        let target = Instruction::decode(&*buf)?;
         Ok(target)
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub enum Instruction {
-    /// Request to start hosting a file
-    Provide { hash: String, data: Gistit },
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("io error {0}")]
+    IO(#[from] std::io::Error),
 
-    /// Request to find providers and fetch a file
-    Fetch { hash: String },
+    #[error("decode error {0}")]
+    Decode(#[from] prost::DecodeError),
 
-    /// Request server network status
-    Status,
-
-    /// Shutdown (has no server response)
-    Shutdown,
-
-    /// Server responses
-    Response(ServerResponse),
-
-    #[cfg(test)]
-    TestInstructionOne,
-    #[cfg(test)]
-    TestInstructionTwo,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub enum ServerResponse {
-    /// Response for a host request
-    /// None indicates that hosting failed
-    Provide(Option<String>),
-
-    /// Response for a file request
-    Fetch(Gistit),
-
-    /// Response for a status request
-    Status {
-        peer_id: String,
-        peer_count: usize,
-        pending_connections: u32,
-        listeners: Vec<String>,
-        hosting: usize,
-    },
+    #[error("encode error {0}")]
+    Encode(#[from] prost::EncodeError),
 }
 
 #[cfg(test)]
@@ -251,6 +222,14 @@ mod tests {
     use super::*;
     use assert_fs::prelude::*;
     use std::sync::Arc;
+
+    pub fn test_instruction_1() -> Instruction {
+        Instruction::request_status()
+    }
+
+    pub fn test_instruction_2() -> Instruction {
+        Instruction::request_shutdown()
+    }
 
     #[tokio::test]
     async fn ipc_named_socket_spawn() {
@@ -280,17 +259,11 @@ mod tests {
 
         client.connect_blocking().unwrap();
 
-        client.send(Instruction::TestInstructionOne).await.unwrap();
-        client.send(Instruction::TestInstructionTwo).await.unwrap();
+        client.send(test_instruction_1()).await.unwrap();
+        client.send(test_instruction_2()).await.unwrap();
 
-        assert_eq!(
-            server.recv().await.unwrap(),
-            Instruction::TestInstructionOne
-        );
-        assert_eq!(
-            server.recv().await.unwrap(),
-            Instruction::TestInstructionTwo
-        );
+        assert_eq!(server.recv().await.unwrap(), test_instruction_1());
+        assert_eq!(server.recv().await.unwrap(), test_instruction_2());
     }
 
     #[tokio::test]
@@ -301,17 +274,11 @@ mod tests {
 
         server.connect_blocking().unwrap();
 
-        server.send(Instruction::TestInstructionOne).await.unwrap();
-        server.send(Instruction::TestInstructionTwo).await.unwrap();
+        server.send(test_instruction_1()).await.unwrap();
+        server.send(test_instruction_2()).await.unwrap();
 
-        assert_eq!(
-            client.recv().await.unwrap(),
-            Instruction::TestInstructionOne
-        );
-        assert_eq!(
-            client.recv().await.unwrap(),
-            Instruction::TestInstructionTwo
-        );
+        assert_eq!(client.recv().await.unwrap(), test_instruction_1());
+        assert_eq!(client.recv().await.unwrap(), test_instruction_2());
     }
 
     #[tokio::test]
@@ -323,28 +290,16 @@ mod tests {
         client.connect_blocking().unwrap();
         server.connect_blocking().unwrap();
 
-        client.send(Instruction::TestInstructionOne).await.unwrap();
-        client.send(Instruction::TestInstructionTwo).await.unwrap();
+        client.send(test_instruction_1()).await.unwrap();
+        client.send(test_instruction_2()).await.unwrap();
 
-        server.send(Instruction::TestInstructionOne).await.unwrap();
-        server.send(Instruction::TestInstructionTwo).await.unwrap();
+        server.send(test_instruction_1()).await.unwrap();
+        server.send(test_instruction_2()).await.unwrap();
 
-        assert_eq!(
-            client.recv().await.unwrap(),
-            Instruction::TestInstructionOne
-        );
-        assert_eq!(
-            server.recv().await.unwrap(),
-            Instruction::TestInstructionOne
-        );
-        assert_eq!(
-            client.recv().await.unwrap(),
-            Instruction::TestInstructionTwo
-        );
-        assert_eq!(
-            server.recv().await.unwrap(),
-            Instruction::TestInstructionTwo
-        );
+        assert_eq!(client.recv().await.unwrap(), test_instruction_1());
+        assert_eq!(server.recv().await.unwrap(), test_instruction_1());
+        assert_eq!(client.recv().await.unwrap(), test_instruction_2());
+        assert_eq!(server.recv().await.unwrap(), test_instruction_2());
     }
 
     #[tokio::test]
@@ -356,51 +311,27 @@ mod tests {
         client.connect_blocking().unwrap();
         server.connect_blocking().unwrap();
 
-        client.send(Instruction::TestInstructionOne).await.unwrap();
-        client.send(Instruction::TestInstructionTwo).await.unwrap();
+        client.send(test_instruction_1()).await.unwrap();
+        client.send(test_instruction_2()).await.unwrap();
 
-        server.send(Instruction::TestInstructionOne).await.unwrap();
-        server.send(Instruction::TestInstructionTwo).await.unwrap();
+        server.send(test_instruction_1()).await.unwrap();
+        server.send(test_instruction_2()).await.unwrap();
 
-        assert_eq!(
-            client.recv().await.unwrap(),
-            Instruction::TestInstructionOne
-        );
-        assert_eq!(
-            server.recv().await.unwrap(),
-            Instruction::TestInstructionOne
-        );
-        assert_eq!(
-            client.recv().await.unwrap(),
-            Instruction::TestInstructionTwo
-        );
-        assert_eq!(
-            server.recv().await.unwrap(),
-            Instruction::TestInstructionTwo
-        );
+        assert_eq!(client.recv().await.unwrap(), test_instruction_1());
+        assert_eq!(server.recv().await.unwrap(), test_instruction_1());
+        assert_eq!(client.recv().await.unwrap(), test_instruction_2());
+        assert_eq!(server.recv().await.unwrap(), test_instruction_2());
 
-        client.send(Instruction::TestInstructionOne).await.unwrap();
-        client.send(Instruction::TestInstructionTwo).await.unwrap();
+        client.send(test_instruction_1()).await.unwrap();
+        client.send(test_instruction_2()).await.unwrap();
 
-        server.send(Instruction::TestInstructionOne).await.unwrap();
-        server.send(Instruction::TestInstructionTwo).await.unwrap();
+        server.send(test_instruction_1()).await.unwrap();
+        server.send(test_instruction_2()).await.unwrap();
 
-        assert_eq!(
-            client.recv().await.unwrap(),
-            Instruction::TestInstructionOne
-        );
-        assert_eq!(
-            server.recv().await.unwrap(),
-            Instruction::TestInstructionOne
-        );
-        assert_eq!(
-            client.recv().await.unwrap(),
-            Instruction::TestInstructionTwo
-        );
-        assert_eq!(
-            server.recv().await.unwrap(),
-            Instruction::TestInstructionTwo
-        );
+        assert_eq!(client.recv().await.unwrap(), test_instruction_1());
+        assert_eq!(server.recv().await.unwrap(), test_instruction_1());
+        assert_eq!(client.recv().await.unwrap(), test_instruction_2());
+        assert_eq!(server.recv().await.unwrap(), test_instruction_2());
     }
 
     #[tokio::test]
@@ -421,30 +352,18 @@ mod tests {
 
             tokio::spawn(async move {
                 loop {
-                    c.send(Instruction::TestInstructionOne).await.unwrap();
-                    c.send(Instruction::TestInstructionTwo).await.unwrap();
+                    c.send(test_instruction_1()).await.unwrap();
+                    c.send(test_instruction_2()).await.unwrap();
 
-                    s.send(Instruction::TestInstructionOne).await.unwrap();
-                    s.send(Instruction::TestInstructionTwo).await.unwrap();
+                    s.send(test_instruction_1()).await.unwrap();
+                    s.send(test_instruction_2()).await.unwrap();
                 }
             });
 
-            assert_eq!(
-                client.recv().await.unwrap(),
-                Instruction::TestInstructionOne
-            );
-            assert_eq!(
-                server.recv().await.unwrap(),
-                Instruction::TestInstructionOne
-            );
-            assert_eq!(
-                client.recv().await.unwrap(),
-                Instruction::TestInstructionTwo
-            );
-            assert_eq!(
-                server.recv().await.unwrap(),
-                Instruction::TestInstructionTwo
-            );
+            assert_eq!(client.recv().await.unwrap(), test_instruction_1());
+            assert_eq!(server.recv().await.unwrap(), test_instruction_1());
+            assert_eq!(client.recv().await.unwrap(), test_instruction_2());
+            assert_eq!(server.recv().await.unwrap(), test_instruction_2());
         }
     }
 }

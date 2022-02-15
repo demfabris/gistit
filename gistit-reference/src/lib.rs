@@ -19,51 +19,9 @@
         clippy::missing_docs_in_private_items,
     )
 )]
-//! Define some common data structures and project directories for Gistit
-pub mod dir;
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Base64Encoded(pub String);
-
-impl AsRef<[u8]> for Base64Encoded {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Gistit {
-    pub hash: String,
-    pub author: String,
-    pub description: Option<String>,
-    pub timestamp: String,
-    pub inner: Inner,
-}
-
-impl Gistit {
-    #[must_use]
-    pub const fn data(&self) -> &Base64Encoded {
-        &self.inner.data
-    }
-
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.inner.name
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Inner {
-    pub name: String,
-    pub lang: String,
-    pub size: usize,
-    pub data: Base64Encoded,
-}
-
-pub const NAMED_SOCKET_0: &str = "gistit-0";
-pub const NAMED_SOCKET_1: &str = "gistit-1";
+pub mod def;
+pub mod project;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -74,8 +32,8 @@ pub struct Error {
 
 #[derive(Debug)]
 pub enum ErrorKind {
-    IO(std::io::Error),
     Directory(&'static str),
+    IO(std::io::Error),
 }
 
 impl From<std::io::Error> for Error {
@@ -94,7 +52,7 @@ impl From<ErrorKind> for Error {
 
 impl std::error::Error for Error {
     fn description(&self) -> &str {
-        "gistit reference error"
+        Box::leak(format!("{:?}", self.kind).into_boxed_str())
     }
 }
 
