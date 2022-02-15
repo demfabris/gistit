@@ -36,3 +36,7 @@ version = "0.42.2"
 default-features = false
 features = ["noise", "kad", "identify", "mplex", "dns-tokio", "tcp-tokio", "yamux", "request-response", "relay", "autonat", "websocket", "ping"]
 
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "s"

@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_MIN_SRV: "nightly"
+  RUST_MIN_SRV: "stable"
 
 jobs:
     
