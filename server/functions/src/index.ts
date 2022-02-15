@@ -78,12 +78,15 @@ export const load = functions.https.onRequest(async (req, res) => {
       throw Error("File size is not allowed");
     }
 
-    await db.collection("gistits").doc(hash).set({
-      author,
-      description,
-      timestamp: timestamp.toString(),
-      inner: { name, lang, data, size },
-    });
+    await db
+      .collection("gistits")
+      .doc(hash)
+      .set({
+        author,
+        description,
+        timestamp: timestamp.toString(),
+        inner: [{ name, lang, data, size }],
+      });
 
     functions.logger.info("added gistit: ", hash);
     const response = Gistit.encode({
@@ -101,10 +104,6 @@ export const load = functions.https.onRequest(async (req, res) => {
   }
 });
 
-type FetchPayload = {
-  hash: string;
-};
-
 export const get = functions.https.onRequest(async (req, res) => {
   res
     // .setHeader("Access-Control-Allow-Origin", "https://gistit.vercel.app")
@@ -116,16 +115,13 @@ export const get = functions.https.onRequest(async (req, res) => {
       "Access-Control-Allow-Headers, Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers"
     );
 
+  const proto = await protobuf.load("payload.proto");
+  const Gistit = proto.lookupType("gistit.payload.Gistit");
+  const payload = Gistit.decode(req.body);
+
   try {
-    let payload: FetchPayload = { hash: "" };
+    const { hash } = payload as unknown as GistitPayload;
 
-    if (req.body instanceof Object) {
-      payload = req.body as FetchPayload;
-    } else {
-      payload = JSON.parse(req.body) as FetchPayload;
-    }
-
-    const { hash } = payload;
     functions.logger.debug(hash);
 
     if (hash?.length !== GISTIT_HASH_LENGTH)
@@ -134,13 +130,15 @@ export const get = functions.https.onRequest(async (req, res) => {
     const gistitRef = await db.collection("gistits").doc(hash).get();
 
     if (!gistitRef.exists) {
-      res.status(404).send({ error: "Gistit does not exist" });
+      res.status(404).end();
       return;
     }
 
     const gistit = gistitRef.data();
-    res.status(200).send({ success: { ...gistit, hash } });
+    console.log(gistit);
+    const response = Gistit.encode({ ...gistit, hash }).finish();
+    res.status(200).send(response);
   } catch (err) {
-    res.status(400).send({ error: (err as Error).message });
+    res.status(400).end();
   }
 });
