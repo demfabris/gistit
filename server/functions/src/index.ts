@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import protobuf from "protobufjs";
 
 export { auth, token, tokenScheduledCleanup } from "./auth";
 export {
@@ -33,20 +34,23 @@ export type GistitPayload = {
     lang: string;
     data: string;
     size: number;
-  };
+  }[];
 };
 
 export const load = functions.https.onRequest(async (req, res) => {
+  const proto = await protobuf.load("payload.proto");
+  const Gistit = proto.lookupType("gistit.payload.Gistit");
+  const payload = Gistit.decode(req.body);
+
   try {
-    const gistit = req.body;
     const {
       hash,
       author,
       description,
       timestamp,
-      inner: { name, lang, data, size },
-    } = gistit as GistitPayload;
-    functions.logger.log(gistit);
+      inner: [{ name, lang, size, data }],
+    } = payload as unknown as GistitPayload;
+    functions.logger.log(payload);
 
     if (hash?.length !== GISTIT_HASH_LENGTH)
       throw Error("Invalid gistit hash format");
@@ -82,18 +86,18 @@ export const load = functions.https.onRequest(async (req, res) => {
     });
 
     functions.logger.info("added gistit: ", hash);
-    res.send({
-      success: {
-        hash,
-        author,
-        description,
-        timestamp,
-        inner: { name, lang, data: "", size }, // We don't send 'data' back to save bandwidth
-      },
-    });
+    const response = Gistit.encode({
+      hash,
+      author,
+      description,
+      timestamp,
+      inner: [{ name, lang, data: "", size }],
+    }).finish();
+
+    res.send(response);
   } catch (err) {
     functions.logger.error(err);
-    res.status(400).send({ error: (err as Error).message });
+    res.status(400).end();
   }
 });
 

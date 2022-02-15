@@ -191,9 +191,9 @@ impl Dispatch for Action {
 
                 let response = reqwest::Client::new()
                     .post(GITHUB_GISTS_API_URL)
-                    .header("User-Agent", "gistit")
-                    .header("Authorization", format!("token {}", token.access_token))
-                    .header("Accept", "application/vnd.github.v3+json")
+                    .header("user-agent", "gistit")
+                    .header("authorization", format!("token {}", token.access_token))
+                    .header("accept", "application/vnd.github.v3+json")
                     .json(&serde_json::json!({
                         "description": description,
                         "public": true,
@@ -229,6 +229,7 @@ impl Dispatch for Action {
 
             let response = reqwest::Client::new()
                 .post(SERVER_URL_LOAD.to_string())
+                .header("content-type", "application/x-protobuf")
                 .body(gistit.encode_to_vec())
                 .send()
                 .await?;
@@ -257,10 +258,7 @@ impl Dispatch for Action {
                     );
 
                     finish!(format!(
-                        r#"
-            hash: '{}' {}
-            url: 'https://gistit.vercel.app/h/{}'
-            {}      "#,
+                        "\n    hash: '{}' {} \n    url: 'https://gistit.vercel.app/h/{}' {}\n\n",
                         style(&server_hash).bold(),
                         clipboard_msg,
                         style(&server_hash).bold(),

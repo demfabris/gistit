@@ -90,6 +90,7 @@ impl Dispatch for Action {
             let gistit: Gistit = config.try_into()?;
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())
+                .header("content-type", "application/x-protobuf")
                 .body(gistit.encode_to_vec())
                 .send()
                 .await?;
