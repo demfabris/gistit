@@ -1,3 +1,25 @@
+//
+//   ________.__          __  .__  __
+//  /  _____/|__| _______/  |_|__|/  |_
+// /   \  ___|  |/  ___/\   __\  \   __\
+// \    \_\  \  |\___ \  |  | |  ||  |
+//  \______  /__/____  > |__| |__||__|
+//         \/        \/
+//
+#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
+#![cfg_attr(
+    test,
+    allow(
+        unused,
+        clippy::all,
+        clippy::pedantic,
+        clippy::nursery,
+        clippy::dbg_macro,
+        clippy::unwrap_used,
+        clippy::missing_docs_in_private_items,
+    )
+)]
+
 pub const APPLICATION: &str = "Gistit";
 pub const ORGANIZATION: &str = "demfabris";
 pub const QUALIFIER: &str = "io";
@@ -68,4 +90,26 @@ pub mod path {
             .data_dir()
             .to_path_buf())
     }
+}
+
+pub mod env {
+    pub const GISTIT_RUNTIME_VAR: &str = "GISTIT_RUNTIME";
+
+    pub const GISTIT_CONFIG_VAR: &str = "GISTIT_CONFIG";
+}
+
+pub mod var {
+    /// Max gistit size allowed in bytes
+    pub const GISTIT_MAX_SIZE: usize = 50_000;
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("project directory error: {0}")]
+    Directory(&'static str),
+
+    #[error("io error: {0}")]
+    IO(#[from] std::io::Error),
 }

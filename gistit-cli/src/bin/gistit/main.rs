@@ -69,7 +69,7 @@ async fn run() -> Result<()> {
         }
         #[cfg(feature = "host")]
         ("node", Some(args)) => {
-            let action = node::Action::from_args(args);
+            let action = node::Action::from_args(args)?;
             let payload = action.prepare().await?;
             action.dispatch(payload).await?;
         }

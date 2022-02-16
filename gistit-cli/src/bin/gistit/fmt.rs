@@ -94,6 +94,15 @@ macro_rules! finish {
 }
 
 #[macro_export]
+macro_rules! cleanln {
+    ($msg:expr) => {{
+        use crate::fmt::PROGRESS;
+
+        PROGRESS.println(format!("{}", $msg));
+    }};
+}
+
+#[macro_export]
 macro_rules! interruptln {
     () => {{
         use crate::fmt::{PROGRESS, STATUS};

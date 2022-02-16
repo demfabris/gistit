@@ -1,16 +1,21 @@
+use std::env;
+use std::ffi::OsStr;
 use std::fs;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
 use std::process::{Command, Stdio};
+use std::thread::sleep;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
 
 use gistit_proto::{ipc, Instruction};
-use gistit_reference::project;
 
 use crate::arg::app;
 use crate::dispatch::Dispatch;
-use crate::{errorln, finish, interruptln, progress, updateln, Result};
+use crate::{cleanln, errorln, finish, interruptln, progress, updateln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
@@ -18,28 +23,47 @@ pub struct Action {
     pub start: bool,
     pub stop: bool,
     pub status: bool,
+    pub attach: bool,
+    // Hidden args
+    host: &'static str,
+    port: &'static str,
+    maybe_dial: Option<&'static str>,
 }
 
 impl Action {
     pub fn from_args(
         args: &'static ArgMatches,
-    ) -> Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static> {
-        Box::new(Self {
+    ) -> Result<Box<dyn Dispatch<InnerData = Config> + Send + Sync + 'static>> {
+        Ok(Box::new(Self {
             start: args.is_present("start"),
             stop: args.is_present("stop"),
             status: args.is_present("status"),
-        })
+            attach: args.is_present("attach"),
+            host: args
+                .value_of("host")
+                .ok_or(Error::Argument("missing argument", "--host"))?,
+            port: args
+                .value_of("port")
+                .ok_or(Error::Argument("missing argument", "--host"))?,
+            maybe_dial: args.value_of("dial"),
+        }))
     }
 }
 
 enum ProcessCommand {
     Start,
-    Stop,
     Status,
+    Stop,
+    Attach,
 }
 
 pub struct Config {
     command: ProcessCommand,
+    host: &'static str,
+    port: &'static str,
+    maybe_dial: Option<&'static str>,
+    runtime_path: Option<&'static OsStr>,
+    config_path: Option<&'static OsStr>,
 }
 
 #[async_trait]
@@ -49,24 +73,39 @@ impl Dispatch for Action {
     async fn prepare(&self) -> Result<Self::InnerData> {
         progress!("Preparing");
 
-        let command = match (self.start, self.stop, self.status) {
-            (true, false, false) => ProcessCommand::Start,
-            (false, true, false) => ProcessCommand::Stop,
-            (false, false, true) => ProcessCommand::Status,
-            (_, _, _) => {
+        let command = match (self.start, self.stop, self.status, self.attach) {
+            (true, false, false, _) => ProcessCommand::Start,
+            (false, false, true, _) => ProcessCommand::Status,
+            (false, true, false, false) => ProcessCommand::Stop,
+            (false, false, false, true) => ProcessCommand::Attach,
+            (_, _, _, _) => {
                 app().print_help()?;
                 std::process::exit(0);
             }
         };
-        let config = Config { command };
+        let config = Config {
+            command,
+            host: self.host,
+            port: self.port,
+            maybe_dial: self.maybe_dial,
+            runtime_path: env::var_os(gistit_project::env::GISTIT_RUNTIME)
+                .unwrap_or(gistit_project::path::runtime()?),
+            config_path: env::var_os(gistit_project::env::GISTIT_CONFIG)
+                .unwrap_or(gistit_project::path::config()?),
+        };
         updateln!("Prepared");
 
         Ok(config)
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
-        let runtime_dir = project::path::runtime()?;
-        let mut bridge = gistit_ipc::client(&runtime_dir)?;
+        let runtime_path = config
+            .maybe_runtime_path
+            .map_or(gistit_project::path::runtime()?, |t| {
+                Path::new(t).to_path_buf()
+            });
+        let mut bridge = gistit_ipc::client(&runtime_path)?;
 
         match config.command {
             ProcessCommand::Start => {
@@ -74,25 +113,47 @@ impl Dispatch for Action {
                     bridge.connect_blocking()?;
                     bridge.send(Instruction::request_status()).await?;
 
+                    if self.attach {
+                        attach_to_log(&runtime_path)?;
+                    }
+
                     if let ipc::instruction::Kind::StatusResponse(response) =
                         bridge.recv().await?.expect_response()?
                     {
                         format_daemon_status(&response);
                     }
+
                     return Ok(());
                 }
 
                 progress!("Starting gistit node");
                 let pid = {
-                    let stdout = fs::File::create(runtime_dir.join("gistit.log"))?;
+                    let stdout = fs::File::create(runtime_path.join("gistit.log"))?;
                     let daemon =
                         "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
-                    Command::new(daemon)
-                        .arg("--bootstrap")
+
+                    let cmd = Box::leak(Box::new(Command::new(daemon)))
+                        .args(&["--host", config.host])
+                        .args(&["--port", config.port])
                         .stderr(stdout)
-                        .stdout(Stdio::null())
-                        .spawn()?
-                        .id()
+                        .stdout(Stdio::null());
+
+                    if let Some(addr) = config.maybe_dial {
+                        warnln!("dialing address on init: {:?}", addr);
+                        cmd.args(&["--dial", addr]);
+                    }
+
+                    if let Some(path) = config.maybe_runtime_path {
+                        warnln!("using alt. runtime path: {:?}", path);
+                        cmd.args(&["--runtime-path", path.to_str().expect("valid path")]);
+                    }
+
+                    if let Some(path) = config.maybe_config_path {
+                        warnln!("using alt. config path: {:?}", path);
+                        cmd.args(&["--config-path", path.to_str().expect("valid path")]);
+                    }
+
+                    cmd.spawn()?.id()
                 };
                 updateln!("Gistit node started, pid: {}", style(pid).blue());
 
@@ -104,14 +165,18 @@ impl Dispatch for Action {
                     ..
                 }) = bridge.recv().await?.expect_response()?
                 {
-                    finish!(format!("\n    peer id: '{}'\n\n", style(peer_id).bold()));
+                    if self.attach {
+                        attach_to_log(&runtime_path)?;
+                    } else {
+                        finish!(format!("\n    peer id: '{}'\n\n", style(peer_id).bold()));
+                    }
                 }
             }
 
             ProcessCommand::Stop => {
                 progress!("Stopping");
                 if bridge.alive() {
-                    fs::remove_file(runtime_dir.join("gistit.log"))?;
+                    fs::remove_file(runtime_path.join("gistit.log"))?;
 
                     bridge.connect_blocking()?;
                     bridge.send(Instruction::request_shutdown()).await?;
@@ -138,6 +203,10 @@ impl Dispatch for Action {
                     interruptln!();
                     errorln!("gistit node is not running");
                 }
+            }
+
+            ProcessCommand::Attach => {
+                attach_to_log(&runtime_path)?;
             }
         };
         Ok(())
@@ -168,4 +237,32 @@ fn format_daemon_status(response: &ipc::instruction::StatusResponse) {
         pending_connections,
         listeners
     ));
+}
+
+fn attach_to_log(runtime_path: &Path) -> Result<()> {
+    let log_path = runtime_path.join("gistit.log");
+
+    if let Ok(log) = fs::File::open(&log_path) {
+        let mut reader = BufReader::new(&log);
+        let mut buf = String::new();
+        progress!(
+            "Executing {}",
+            style("(CTRL-C exits the process)").italic().dim()
+        );
+
+        loop {
+            let bytes = reader.read_line(&mut buf)?;
+            if bytes > 0 {
+                cleanln!(buf);
+                buf = String::new();
+            } else {
+                sleep(Duration::from_millis(500));
+            }
+        }
+    } else {
+        interruptln!();
+        errorln!("can't attach to log file, is it running?");
+    }
+
+    Ok(())
 }

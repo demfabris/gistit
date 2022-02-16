@@ -122,5 +122,58 @@ to peer file sharing.")
                         .help("Display the status of your gistit network node process")
                         .conflicts_with_all(&["start", "stop"]),
                 )
+                .arg(
+                    Arg::new("attach")
+                        .long("attach")
+                        .help("Attach this terminal session to the running gistit node log stream. Note: If you use this flag with '--start' hitting `CTRL-C` will exit the background process.")
+                        .conflicts_with_all(&["stop"]),
+                )
+                .arg(
+                    Arg::new("dial")
+                        .long("dial")
+                        .help("Dials a peer")
+                        .takes_value(true)
+                        .value_name("multiaddr")
+                        .hide(true)
+                        .conflicts_with_all(&["stop", "status"]),
+                )
+                .arg(
+                    Arg::new("runtime-path")
+                        .long("runtime-path")
+                        .help("Override gistit node's runtime path")
+                        .takes_value(true)
+                        .value_name("path")
+                        .allow_invalid_utf8(true)
+                        .hide(true)
+                    )
+                .arg(
+                    Arg::new("config-path")
+                        .long("config-path")
+                        .help("Override gistit node's config path")
+                        .takes_value(true)
+                        .value_name("path")
+                        .allow_invalid_utf8(true)
+                        .hide(true)
+                    )
+                .arg(
+                    Arg::new("host")
+                        .long("host")
+                        .help("Local host address to listen for connection")
+                        .takes_value(true)
+                        .value_name("ipv4")
+                        .default_value("0.0.0.0")
+                        .hide(true)
+                        .conflicts_with_all(&["stop", "status"]),
+                    )
+                .arg(
+                    Arg::new("port")
+                        .long("port")
+                        .help("Local port to listen for connection")
+                        .takes_value(true)
+                        .value_name("port")
+                        .default_value("0")
+                        .hide(true)
+                        .conflicts_with_all(&["stop", "status"]),
+                    )
         )
 }

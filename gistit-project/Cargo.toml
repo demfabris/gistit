@@ -1,14 +1,15 @@
 [package]
 authors = ["Fabricio <fabricio7p@protonmail.com>"]
-description = "Gistit reference directories and definitions"
+description = "Gistit project definitions"
 categories = ["command-line-utilities", "text-processing"]
 keywords = ["gistit"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
-name = "gistit-reference"
+name = "gistit-project"
 readme = "README.md"
 repository = "https://github.com/fabricio7p/gistit"
 version = "0.1.0"
 
 [dependencies]
 directories = "4.0.1"
+thiserror = "1.0.30"
