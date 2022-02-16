@@ -30,7 +30,7 @@ pub mod path {
 
     use directories::{BaseDirs, ProjectDirs};
 
-    use crate::{ErrorKind, Result};
+    use super::{Error, Result};
 
     use super::{APPLICATION, ORGANIZATION, QUALIFIER};
 
@@ -60,7 +60,7 @@ pub mod path {
     ///
     /// Fails if the system doesn't have a HOME directory
     pub fn runtime() -> Result<PathBuf> {
-        let dirs = BaseDirs::new().ok_or(ErrorKind::Directory("can't open home directory"))?;
+        let dirs = BaseDirs::new().ok_or(Error::Directory("can't open home directory"))?;
 
         Ok(dirs
             .runtime_dir()
@@ -74,7 +74,7 @@ pub mod path {
     /// Fails if the system doesn't have a HOME directory
     pub fn config() -> Result<PathBuf> {
         Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
-            .ok_or(ErrorKind::Directory("can't open home directory"))?
+            .ok_or(Error::Directory("can't open home directory"))?
             .config_dir()
             .to_path_buf())
     }
@@ -86,16 +86,28 @@ pub mod path {
     /// Fails if the system doesn't have a HOME directory
     pub fn data() -> Result<PathBuf> {
         Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
-            .ok_or(ErrorKind::Directory("can't open home directory"))?
+            .ok_or(Error::Directory("can't open home directory"))?
             .data_dir()
             .to_path_buf())
     }
 }
 
 pub mod env {
+    use std::env;
+    use std::path::{Path, PathBuf};
+
     pub const GISTIT_RUNTIME_VAR: &str = "GISTIT_RUNTIME";
 
     pub const GISTIT_CONFIG_VAR: &str = "GISTIT_CONFIG";
+
+    pub const GISTIT_DATA_VAR: &str = "GISTIT_DATA";
+
+    #[must_use]
+    pub fn var_or_default(var: &str, default: PathBuf) -> PathBuf {
+        env::var_os(var)
+            .as_ref()
+            .map_or(default, |t| Path::new(t).to_path_buf())
+    }
 }
 
 pub mod var {

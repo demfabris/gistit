@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
@@ -7,7 +9,8 @@ use serde::Serialize;
 use gistit_proto::ipc::Instruction;
 use gistit_proto::payload::Gistit;
 use gistit_proto::prost::Message;
-use gistit_reference::project;
+
+use gistit_project::{env, path};
 
 use libgistit::file::File;
 use libgistit::server::SERVER_URL_GET;
@@ -42,6 +45,9 @@ pub struct Config {
     hash: &'static str,
     colorscheme: &'static str,
     save: bool,
+    runtime_path: PathBuf,
+    config_path: PathBuf,
+    data_path: PathBuf,
 }
 
 impl TryFrom<Config> for Gistit {
@@ -69,13 +75,15 @@ impl Dispatch for Action {
             hash,
             colorscheme,
             save: self.save,
+            runtime_path: env::var_or_default(env::GISTIT_RUNTIME_VAR, path::runtime()?),
+            config_path: env::var_or_default(env::GISTIT_CONFIG_VAR, path::config()?),
+            data_path: env::var_or_default(env::GISTIT_DATA_VAR, path::data()?),
         })
     }
 
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
         progress!("Fetching");
-        let runtime_dir = project::path::runtime()?;
-        let mut bridge = gistit_ipc::client(&runtime_dir)?;
+        let mut bridge = gistit_ipc::client(&config.runtime_path)?;
 
         if bridge.alive() {
             warnln!("gistit-daemon running, looking in the DHT");
@@ -87,7 +95,9 @@ impl Dispatch for Action {
             let _a = bridge.recv().await?;
             warnln!("{:?}", _a);
         } else {
+            let save_location = config.data_path.clone();
             let gistit: Gistit = config.try_into()?;
+
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())
                 .header("content-type", "application/x-protobuf")
@@ -104,7 +114,6 @@ impl Dispatch for Action {
                     let mut file = File::from_data(&inner.data, &inner.name)?;
 
                     if self.save {
-                        let save_location = project::path::data()?;
                         let file_path = save_location.join(file.name());
                         file.save_as(&file_path)?;
 

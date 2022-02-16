@@ -13,7 +13,6 @@ version = "0.1.2"
 [dependencies]
 log = "0.4.14"
 tokio = { version = "1.16.1", default-features = false, features = ["net", "rt", "macros"] }
-gistit-reference = { version = "0.1.0", path = "../gistit-reference" }
 gistit-proto = { version = "0.1.0", path = "../gistit-proto" }
 thiserror = "1.0.30"
 

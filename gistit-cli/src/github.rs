@@ -9,8 +9,6 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use gistit_reference::project;
-
 use crate::patch::webbrowser::{self, BrowserOptions};
 use crate::server::SERVER_URL_TOKEN;
 use crate::{Error, Result};
@@ -57,7 +55,7 @@ impl Oauth {
     ///
     /// Fails if cannot read token file
     pub fn new() -> Result<Self> {
-        let config = project::path::config()?;
+        let config = gistit_project::path::config()?;
         let token_path = config.join("github");
         let state = unguessable_state();
 
@@ -130,7 +128,7 @@ impl Oauth {
             }
         };
 
-        let config = project::path::config()?;
+        let config = gistit_project::path::config()?;
         fs::File::create(config.join("github"))?.write_all(&serde_json::to_vec(&token)?)?;
 
         self.token = Some(token);

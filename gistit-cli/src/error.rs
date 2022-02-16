@@ -24,7 +24,7 @@ pub enum Error {
     Ipc(#[from] gistit_ipc::Error),
 
     #[error("{0}")]
-    Reference(#[from] gistit_reference::Error),
+    Project(#[from] gistit_project::Error),
 
     #[error("{0}")]
     Proto(#[from] gistit_proto::Error),

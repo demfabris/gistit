@@ -1,8 +1,6 @@
-use std::env;
-use std::ffi::OsStr;
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
@@ -11,6 +9,7 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
 
+use gistit_project::{env, path};
 use gistit_proto::{ipc, Instruction};
 
 use crate::arg::app;
@@ -62,8 +61,8 @@ pub struct Config {
     host: &'static str,
     port: &'static str,
     maybe_dial: Option<&'static str>,
-    runtime_path: Option<&'static OsStr>,
-    config_path: Option<&'static OsStr>,
+    runtime_path: PathBuf,
+    config_path: PathBuf,
 }
 
 #[async_trait]
@@ -72,7 +71,6 @@ impl Dispatch for Action {
 
     async fn prepare(&self) -> Result<Self::InnerData> {
         progress!("Preparing");
-
         let command = match (self.start, self.stop, self.status, self.attach) {
             (true, false, false, _) => ProcessCommand::Start,
             (false, false, true, _) => ProcessCommand::Status,
@@ -83,15 +81,14 @@ impl Dispatch for Action {
                 std::process::exit(0);
             }
         };
+
         let config = Config {
             command,
             host: self.host,
             port: self.port,
             maybe_dial: self.maybe_dial,
-            runtime_path: env::var_os(gistit_project::env::GISTIT_RUNTIME)
-                .unwrap_or(gistit_project::path::runtime()?),
-            config_path: env::var_os(gistit_project::env::GISTIT_CONFIG)
-                .unwrap_or(gistit_project::path::config()?),
+            runtime_path: env::var_or_default(env::GISTIT_RUNTIME_VAR, path::runtime()?),
+            config_path: env::var_or_default(env::GISTIT_CONFIG_VAR, path::config()?),
         };
         updateln!("Prepared");
 
@@ -100,12 +97,7 @@ impl Dispatch for Action {
 
     #[allow(clippy::too_many_lines)]
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
-        let runtime_path = config
-            .maybe_runtime_path
-            .map_or(gistit_project::path::runtime()?, |t| {
-                Path::new(t).to_path_buf()
-            });
-        let mut bridge = gistit_ipc::client(&runtime_path)?;
+        let mut bridge = gistit_ipc::client(&config.runtime_path)?;
 
         match config.command {
             ProcessCommand::Start => {
@@ -114,7 +106,7 @@ impl Dispatch for Action {
                     bridge.send(Instruction::request_status()).await?;
 
                     if self.attach {
-                        attach_to_log(&runtime_path)?;
+                        attach_to_log(&config.runtime_path)?;
                     }
 
                     if let ipc::instruction::Kind::StatusResponse(response) =
@@ -128,29 +120,21 @@ impl Dispatch for Action {
 
                 progress!("Starting gistit node");
                 let pid = {
-                    let stdout = fs::File::create(runtime_path.join("gistit.log"))?;
+                    let stdout = fs::File::create(config.runtime_path.join("gistit.log"))?;
                     let daemon =
                         "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
 
                     let cmd = Box::leak(Box::new(Command::new(daemon)))
                         .args(&["--host", config.host])
                         .args(&["--port", config.port])
+                        .args(&["--runtime-path", &*config.runtime_path.to_string_lossy()])
+                        .args(&["--config-path", &*config.config_path.to_string_lossy()])
                         .stderr(stdout)
                         .stdout(Stdio::null());
 
                     if let Some(addr) = config.maybe_dial {
                         warnln!("dialing address on init: {:?}", addr);
                         cmd.args(&["--dial", addr]);
-                    }
-
-                    if let Some(path) = config.maybe_runtime_path {
-                        warnln!("using alt. runtime path: {:?}", path);
-                        cmd.args(&["--runtime-path", path.to_str().expect("valid path")]);
-                    }
-
-                    if let Some(path) = config.maybe_config_path {
-                        warnln!("using alt. config path: {:?}", path);
-                        cmd.args(&["--config-path", path.to_str().expect("valid path")]);
                     }
 
                     cmd.spawn()?.id()
@@ -166,7 +150,7 @@ impl Dispatch for Action {
                 }) = bridge.recv().await?.expect_response()?
                 {
                     if self.attach {
-                        attach_to_log(&runtime_path)?;
+                        attach_to_log(&config.runtime_path)?;
                     } else {
                         finish!(format!("\n    peer id: '{}'\n\n", style(peer_id).bold()));
                     }
@@ -176,7 +160,7 @@ impl Dispatch for Action {
             ProcessCommand::Stop => {
                 progress!("Stopping");
                 if bridge.alive() {
-                    fs::remove_file(runtime_path.join("gistit.log"))?;
+                    fs::remove_file(config.runtime_path.join("gistit.log"))?;
 
                     bridge.connect_blocking()?;
                     bridge.send(Instruction::request_shutdown()).await?;
@@ -206,7 +190,7 @@ impl Dispatch for Action {
             }
 
             ProcessCommand::Attach => {
-                attach_to_log(&runtime_path)?;
+                attach_to_log(&config.runtime_path)?;
             }
         };
         Ok(())

@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -12,7 +12,8 @@ use reqwest::StatusCode;
 use gistit_proto::payload::{hash, Gistit};
 use gistit_proto::prost::Message;
 use gistit_proto::{ipc, Instruction};
-use gistit_reference::project;
+
+use gistit_project::{env, path};
 
 use libgistit::clipboard::Clipboard;
 use libgistit::file::File;
@@ -58,6 +59,7 @@ pub struct Config {
     description: Option<&'static str>,
     clipboard: bool,
     github_token: Option<github::Token>,
+    runtime_path: PathBuf,
 }
 
 impl TryFrom<Config> for Gistit {
@@ -135,7 +137,7 @@ impl Dispatch for Action {
                 oauth.poll_token().await?;
                 warnln!(
                     "storing github token at: '{}'",
-                    project::path::config()?.to_string_lossy()
+                    gistit_project::path::config()?.to_string_lossy()
                 );
             }
             updateln!("Authorized");
@@ -150,15 +152,15 @@ impl Dispatch for Action {
             author,
             clipboard: self.clipboard,
             github_token,
+            runtime_path: env::var_or_default(env::GISTIT_RUNTIME_VAR, path::runtime()?),
         })
     }
 
     #[allow(clippy::too_many_lines)]
     async fn dispatch(&self, config: Self::InnerData) -> Result<()> {
-        let runtime_dir = project::path::runtime()?;
         let clipboard = config.clipboard;
 
-        let mut bridge = gistit_ipc::client(&runtime_dir)?;
+        let mut bridge = gistit_ipc::client(&config.runtime_path)?;
         if bridge.alive() {
             // Daemon is running, hosting with p2p
             progress!("Hosting");

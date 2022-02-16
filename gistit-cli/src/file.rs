@@ -13,7 +13,7 @@ use std::str;
 use phf::{phf_map, Map};
 use rand::{distributions::Alphanumeric, Rng};
 
-use gistit_reference::def::GISTIT_MAX_SIZE;
+use gistit_project::var::GISTIT_MAX_SIZE;
 
 use crate::Result;
 

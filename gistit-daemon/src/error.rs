@@ -20,7 +20,7 @@ pub enum Error {
     Multiaddr(#[from] libp2p::multiaddr::Error),
 
     #[error("reference error, {0}")]
-    Reference(#[from] gistit_reference::Error),
+    Project(#[from] gistit_project::Error),
 
     #[error("p2p transport error, {0}")]
     Transport(#[from] libp2p::TransportError<std::io::Error>),
