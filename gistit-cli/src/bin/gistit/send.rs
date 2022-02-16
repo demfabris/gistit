@@ -13,7 +13,7 @@ use gistit_proto::payload::{hash, Gistit};
 use gistit_proto::prost::Message;
 use gistit_proto::{ipc, Instruction};
 
-use gistit_project::{env, path};
+use gistit_project::path;
 
 use libgistit::clipboard::Clipboard;
 use libgistit::file::File;
@@ -152,7 +152,7 @@ impl Dispatch for Action {
             author,
             clipboard: self.clipboard,
             github_token,
-            runtime_path: env::var_or_default(env::GISTIT_RUNTIME_VAR, path::runtime()?),
+            runtime_path: path::runtime()?,
         })
     }
 

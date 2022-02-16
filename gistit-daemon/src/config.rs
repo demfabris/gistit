@@ -44,7 +44,7 @@ impl Config {
     ) -> Result<Self> {
         gistit_project::path::init()?;
 
-        let host = host.unwrap_or(Ipv4Addr::new(0, 0, 0, 0));
+        let host = host.unwrap_or_else(|| Ipv4Addr::new(0, 0, 0, 0));
         let port = port.unwrap_or(0_u16);
         let multiaddr = multiaddr!(Ip4(host), Tcp(port));
 

@@ -9,11 +9,12 @@ use async_trait::async_trait;
 use clap::ArgMatches;
 use console::style;
 
-use gistit_project::{env, path};
+use gistit_project::path;
 use gistit_proto::{ipc, Instruction};
 
 use crate::arg::app;
 use crate::dispatch::Dispatch;
+use crate::param::check;
 use crate::{cleanln, errorln, finish, interruptln, progress, updateln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]
@@ -78,17 +79,18 @@ impl Dispatch for Action {
             (false, false, false, true) => ProcessCommand::Attach,
             (_, _, _, _) => {
                 app().print_help()?;
-                std::process::exit(0);
+                std::process::exit(1);
             }
         };
 
+        let (host, port) = check::host_port(self.host, self.port)?;
         let config = Config {
             command,
-            host: self.host,
-            port: self.port,
+            host,
+            port,
             maybe_dial: self.maybe_dial,
-            runtime_path: env::var_or_default(env::GISTIT_RUNTIME_VAR, path::runtime()?),
-            config_path: env::var_or_default(env::GISTIT_CONFIG_VAR, path::config()?),
+            runtime_path: path::runtime()?,
+            config_path: path::config()?,
         };
         updateln!("Prepared");
 
@@ -121,6 +123,7 @@ impl Dispatch for Action {
                 progress!("Starting gistit node");
                 let pid = {
                     let stdout = fs::File::create(config.runtime_path.join("gistit.log"))?;
+                    // FIXME: Fix this before release
                     let daemon =
                         "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
 

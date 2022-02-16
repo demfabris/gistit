@@ -10,7 +10,7 @@ use gistit_proto::ipc::Instruction;
 use gistit_proto::payload::Gistit;
 use gistit_proto::prost::Message;
 
-use gistit_project::{env, path};
+use gistit_project::path;
 
 use libgistit::file::File;
 use libgistit::server::SERVER_URL_GET;
@@ -75,9 +75,9 @@ impl Dispatch for Action {
             hash,
             colorscheme,
             save: self.save,
-            runtime_path: env::var_or_default(env::GISTIT_RUNTIME_VAR, path::runtime()?),
-            config_path: env::var_or_default(env::GISTIT_CONFIG_VAR, path::config()?),
-            data_path: env::var_or_default(env::GISTIT_DATA_VAR, path::data()?),
+            runtime_path: path::runtime()?,
+            config_path: path::config()?,
+            data_path: path::data()?,
         })
     }
 

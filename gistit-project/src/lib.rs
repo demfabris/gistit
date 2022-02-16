@@ -21,7 +21,9 @@
 )]
 
 pub const APPLICATION: &str = "Gistit";
+
 pub const ORGANIZATION: &str = "demfabris";
+
 pub const QUALIFIER: &str = "io";
 
 pub mod path {
@@ -30,7 +32,7 @@ pub mod path {
 
     use directories::{BaseDirs, ProjectDirs};
 
-    use super::{Error, Result};
+    use super::{env, Error, Result};
 
     use super::{APPLICATION, ORGANIZATION, QUALIFIER};
 
@@ -60,11 +62,11 @@ pub mod path {
     ///
     /// Fails if the system doesn't have a HOME directory
     pub fn runtime() -> Result<PathBuf> {
-        let dirs = BaseDirs::new().ok_or(Error::Directory("can't open home directory"))?;
-
-        Ok(dirs
+        let default = BaseDirs::new()
+            .ok_or(Error::Directory("can't open home directory"))?
             .runtime_dir()
-            .map_or_else(std::env::temp_dir, Path::to_path_buf))
+            .map_or_else(std::env::temp_dir, Path::to_path_buf);
+        Ok(env::var_or_default(env::GISTIT_RUNTIME_VAR, default))
     }
 
     /// Returns the config path of this program
@@ -73,10 +75,11 @@ pub mod path {
     ///
     /// Fails if the system doesn't have a HOME directory
     pub fn config() -> Result<PathBuf> {
-        Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
+        let default = ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
             .ok_or(Error::Directory("can't open home directory"))?
             .config_dir()
-            .to_path_buf())
+            .to_path_buf();
+        Ok(env::var_or_default(env::GISTIT_CONFIG_VAR, default))
     }
 
     /// Returns the data path of this program
@@ -85,10 +88,11 @@ pub mod path {
     ///
     /// Fails if the system doesn't have a HOME directory
     pub fn data() -> Result<PathBuf> {
-        Ok(ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
+        let default = ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
             .ok_or(Error::Directory("can't open home directory"))?
             .data_dir()
-            .to_path_buf())
+            .to_path_buf();
+        Ok(env::var_or_default(env::GISTIT_DATA_VAR, default))
     }
 }
 
@@ -102,6 +106,8 @@ pub mod env {
 
     pub const GISTIT_DATA_VAR: &str = "GISTIT_DATA";
 
+    pub const GISTIT_SERVER_URL: &str = "GISTIT_SERVER_URL";
+
     #[must_use]
     pub fn var_or_default(var: &str, default: PathBuf) -> PathBuf {
         env::var_os(var)
@@ -113,6 +119,9 @@ pub mod env {
 pub mod var {
     /// Max gistit size allowed in bytes
     pub const GISTIT_MAX_SIZE: usize = 50_000;
+
+    /// Default server base url
+    pub const GISTIT_SERVER_URL_BASE: &str = "https://us-central1-gistit-base.cloudfunctions.net/";
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

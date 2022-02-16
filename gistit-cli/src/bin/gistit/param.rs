@@ -43,6 +43,7 @@ pub mod check {
 
     use std::ffi::OsStr;
     use std::fs;
+    use std::net::Ipv4Addr;
     use std::ops::RangeInclusive;
 
     use libgistit::file::EXTENSION_TO_LANG_MAPPING;
@@ -120,5 +121,15 @@ pub mod check {
         } else {
             Err(Error::Argument("invalid gistit hash format.", "--hash"))
         }
+    }
+
+    pub fn host_port<'a, 'b>(host: &'a str, port: &'b str) -> Result<(&'a str, &'b str)> {
+        let _host: Ipv4Addr = host
+            .parse()
+            .map_err(|_| Error::Argument("invalid host", "--host"))?;
+        let _port: u16 = port
+            .parse()
+            .map_err(|_| Error::Argument("invalid port", "--port"))?;
+        Ok((host, port))
     }
 }
