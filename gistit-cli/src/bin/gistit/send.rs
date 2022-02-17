@@ -173,8 +173,25 @@ impl Dispatch for Action {
                 hash: Some(hash),
             }) = bridge.recv().await?.expect_response()?
             {
+                if clipboard {
+                    Clipboard::new(&hash)
+                        .try_into_selected()?
+                        .into_provider()
+                        .set_contents()?;
+                }
+
+                let clipboard_msg = if self.clipboard {
+                    style("(copied to clipboard)").italic().dim().to_string()
+                } else {
+                    "".to_string()
+                };
+
                 updateln!("Hosted");
-                finish!(format!("\n    hash: '{}'\n\n", style(hash).bold()));
+                finish!(format!(
+                    "\n    hash: '{}' {}\n\n",
+                    style(hash).bold(),
+                    style(clipboard_msg).italic().dim()
+                ));
             } else {
                 interruptln!();
                 errorln!("failed to provide gistit, check gistit-daemon logs");
