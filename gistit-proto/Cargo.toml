@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 name = "gistit-proto"
 readme = "README.md"
 repository = "https://github.com/fabricio7p/gistit"
-version = "0.1.0"
+version = "0.1.2"
 build = "./build.rs"
 
 [dependencies]
