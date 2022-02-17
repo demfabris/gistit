@@ -16,7 +16,7 @@ use libp2p::core::either::EitherError;
 use libp2p::core::{self, Multiaddr, PeerId};
 use libp2p::futures::future::poll_fn;
 use libp2p::futures::StreamExt;
-use libp2p::multiaddr::multiaddr;
+use libp2p::multiaddr::Protocol;
 use libp2p::swarm::{ProtocolsHandlerUpgrErr, SwarmBuilder, SwarmEvent};
 use libp2p::{dns, mplex, noise, tcp, websocket, yamux, Swarm, Transport};
 
@@ -46,6 +46,7 @@ pub struct Node {
 
     /// Stack of request file (`key`) events
     pub to_request: Vec<(Key, HashSet<PeerId>)>,
+    pub pending_receive_file: HashSet<Key>,
 
     /// Addresses that can be used as relay
     pub relays: HashSet<Multiaddr>,
@@ -93,6 +94,7 @@ impl Node {
             pending_start_providing: HashSet::default(),
             pending_get_providers: HashSet::default(),
             pending_request_file: HashSet::default(),
+            pending_receive_file: HashSet::default(),
 
             to_provide: HashMap::default(),
             to_request: Vec::default(),
@@ -128,16 +130,28 @@ impl Node {
     async fn handle_request_event(&mut self, event: (Key, HashSet<PeerId>)) -> Result<()> {
         let (key, providers) = event;
 
-        for p in providers {
-            let address = multiaddr!(P2p(p));
-            self.swarm.dial(address)?;
+        self.pending_receive_file.insert(key.clone());
+        for peer in providers {
+            for relay in &self.relays {
+                // Skip if we are trying to relay over the destination peer itself
+                if relay
+                    .iter()
+                    .any(|protocol| protocol == Protocol::P2p(peer.into()))
+                {
+                    info!("TRYIED TO RELAY OVER THE DEST PEER");
+                    continue;
+                }
+
+                let relayed_addr = relay.clone().with(Protocol::P2p(peer.into()));
+                self.swarm.dial(relayed_addr)?;
+            }
 
             let request_id = self
                 .swarm
                 .behaviour_mut()
                 .request_response
-                .send_request(&p, Request(key.to_vec()));
-            info!("Requesting gistit from {:?}", p);
+                .send_request(&peer, Request(key.to_vec()));
+            info!("Requesting gistit from {:?}", peer);
 
             self.pending_request_file.insert(request_id);
         }

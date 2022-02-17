@@ -40,11 +40,14 @@ pub async fn handle_request_response(
                 response,
             } => {
                 info!("Request response 'Message::Response'");
+                let gistit = response.0;
+                let key = Key::new(&gistit.hash.as_bytes());
+
+                if node.pending_receive_file.remove(&key) {
+                    node.bridge.connect_blocking()?;
+                    node.bridge.send(Instruction::respond_fetch(gistit)).await?;
+                }
                 node.pending_request_file.remove(&request_id);
-                node.bridge.connect_blocking()?;
-                node.bridge
-                    .send(Instruction::respond_fetch(response.0))
-                    .await?;
             }
         },
         RequestResponseEvent::OutboundFailure {
@@ -54,7 +57,7 @@ pub async fn handle_request_response(
             node.pending_request_file.remove(&request_id);
         }
         RequestResponseEvent::InboundFailure { error, .. } => {
-            debug!("Request response inbound failure {:?}", error);
+            error!("Request response inbound failure {:?}", error);
         }
         RequestResponseEvent::ResponseSent { .. } => (),
     }
@@ -122,7 +125,7 @@ pub fn handle_identify(node: &mut Node, event: IdentifyEvent) -> Result<()> {
             },
     } = event
     {
-        info!("Identify: {:?}, protocols: {:?}", listen_addrs, protocols);
+        debug!("Identify: {:?}, protocols: {:?}", listen_addrs, protocols);
         if protocols.iter().any(|p| p.as_bytes() == KADEMLIA_PROTO) {
             for addr in &listen_addrs {
                 node.swarm
