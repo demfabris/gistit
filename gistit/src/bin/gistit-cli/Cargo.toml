@@ -1,32 +1,24 @@
 [package]
 authors = ["Fabricio <fabricio7p@protonmail.com>"]
 categories = ["command-line-utilities", "text-processing"]
-description = "Quick and easy code snippet sharing tool"
+description = "Cli tool for gistit"
 edition = "2021"
-keywords = ["code", "snippets", "share", "hash", "gist", "github"]
+keywords = ["gistit"]
 license = "MIT OR Apache-2.0"
-name = "gistit"
+name = "gistit-cli"
 readme = "README.md"
 repository = "https://github.com/fabricio7p/gistit"
-version = "0.2.0"
+version = "0.1.0"
 
 [[bin]]
-path = "src/bin/gistit-cli/src/bin/gistit/main.rs"
-name = "gistit"
-
-[[bin]]
-path = "src/bin/gistit-daemon/src/main.rs"
-name = "gistit-daemon"
+path = "src/bin/gistit/main.rs"
+name = "gistit-cli"
 
 [lib]
-path = "src/bin/gistit-cli/src/lib.rs"
+path = "src/lib.rs"
 name = "libgistit"
 
 [dependencies]
-log = "0.4.14"
-either = "1.6.1"
-void = "1.0.2"
-env_logger = { version = "0.9.0", default-features = false, features = ["termcolor", "atty", "humantime"] }
 async-trait = "0.1.52"
 lazy_static = "1.4.0"
 ngrammatic = "0.3.5"
@@ -42,14 +34,18 @@ rand = "0.8.5"
 phf = { version = "0.10.1", features = ["macros"] }
 thiserror = "1.0.30"
 base64 = "0.13.0"
-zeroize = "1.5.2"
 gistit-ipc = { version = "0.2.0", path = "../gistit-ipc" }
 gistit-project = { version = "0.1.0", path = "../gistit-project" }
 gistit-proto = { version = "0.1.2", path = "../gistit-proto" }
 
+[build-dependencies]
+clap_complete = { version = "3.1.0" }
+clap = { version = "3.1.0", features = ["cargo"] }
+names = { version = "0.12.0", default-features = false }
+
 [dependencies.clap]
 version = "3.1.0"
-features = ["cargo", "derive"]
+features = ["cargo"]
 
 [dependencies.bat]
 version = "0.19.0"
@@ -64,25 +60,14 @@ features = ["windows-console-colors"]
 features = ["macros", "fs", "rt", "rt-multi-thread", "sync", "io-util"]
 version = "1.17.0"
 
-[dependencies.libp2p]
-version = "0.42.2"
-default-features = false
-features = ["noise", "kad", "identify", "mplex", "dns-tokio", "tcp-tokio", "yamux", "request-response", "relay", "autonat", "websocket", "ping"]
-
 [dev-dependencies]
 assert_fs = "1.0.7"
 assert_cmd = "2.0.4"
 predicates = "2.1.1"
 
-[build-dependencies]
-clap_complete = { version = "3.1.0" }
-clap = { version = "3.1.0", features = ["cargo"] }
-names = { version = "0.12.0", default-features = false }
-gistit-cli = "0.1.0"
-
 [profile.release]
 lto = true
 codegen-units = 1
 opt-level = "s"
+# strip = true # cargo 1.59.0 only
 # panic = "abort"
-# strip = true
