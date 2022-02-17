@@ -24,7 +24,7 @@ base64 = "0.13.0"
 zeroize = "1.5.2"
 gistit-ipc = { version = "0.2.0", path = "../gistit-ipc" }
 gistit-project = { version = "0.1.0", path = "../gistit-project" }
-gistit-proto = { version = "0.1.0", path = "../gistit-proto" }
+gistit-proto = { version = "0.1.2", path = "../gistit-proto" }
 
 [dependencies.tokio]
 features = ["macros", "fs", "rt", "rt-multi-thread", "sync", "io-util"]
