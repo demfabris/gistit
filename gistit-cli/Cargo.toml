@@ -5,18 +5,10 @@ description = "Cli tool for gistit"
 edition = "2021"
 keywords = ["gistit"]
 license = "MIT OR Apache-2.0"
-name = "gistit-cli"
+name = "gistit"
 readme = "README.md"
 repository = "https://github.com/fabricio7p/gistit"
-version = "0.1.0"
-
-[[bin]]
-path = "src/bin/gistit/main.rs"
-name = "gistit-cli"
-
-[lib]
-path = "src/lib.rs"
-name = "libgistit"
+version = "0.2.0"
 
 [dependencies]
 async-trait = "0.1.52"

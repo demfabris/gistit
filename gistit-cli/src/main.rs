@@ -30,7 +30,14 @@ mod send;
 mod stdin;
 mod node;
 
-pub use libgistit::error::Error;
+pub mod clipboard;
+pub mod error;
+pub mod file;
+pub mod github;
+pub mod patch;
+pub mod server;
+
+pub use error::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[tokio::main]

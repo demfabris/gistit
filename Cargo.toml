@@ -5,6 +5,5 @@ members = [
   "gistit-daemon",
   "gistit-ipc",
   "gistit-proto",
-  "gistit-project",
-  "gistit"
+  "gistit-project"
 ]

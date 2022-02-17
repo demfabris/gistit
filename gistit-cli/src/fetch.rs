@@ -12,11 +12,10 @@ use gistit_proto::prost::Message;
 
 use gistit_project::path;
 
-use libgistit::file::File;
-use libgistit::server::SERVER_URL_GET;
-
 use crate::dispatch::Dispatch;
+use crate::file::File;
 use crate::param::check;
+use crate::server::SERVER_URL_GET;
 use crate::{errorln, finish, interruptln, progress, updateln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]

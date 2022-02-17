@@ -46,8 +46,8 @@ pub mod check {
     use std::net::Ipv4Addr;
     use std::ops::RangeInclusive;
 
-    use libgistit::file::EXTENSION_TO_LANG_MAPPING;
-    use libgistit::{Error, Result};
+    use crate::file::EXTENSION_TO_LANG_MAPPING;
+    use crate::{Error, Result};
 
     const ALLOWED_FILE_SIZE_RANGE: RangeInclusive<u64> = 20..=50_000;
 

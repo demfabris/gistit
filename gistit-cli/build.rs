@@ -2,7 +2,7 @@ use clap_complete::{generate_to, Shell};
 
 const BIN_NAME: &str = "gistit";
 
-include!("src/bin/gistit/arg.rs");
+include!("src/arg.rs");
 
 fn main() -> Result<(), String> {
     let mut app = app();
