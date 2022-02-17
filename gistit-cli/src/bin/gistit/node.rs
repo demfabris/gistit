@@ -174,14 +174,14 @@ impl Dispatch for Action {
                     let pid = {
                         let stdout = fs::File::create(config.runtime_path.join("gistit.log"))?;
                         // FIXME: Fix this before release
-                        let daemon =
-                            "/home/fabricio7p/Documents/Projects/gistit/target/debug/gistit-daemon";
+                        let daemon = "gistit-daemon";
 
                         Command::new(daemon)
                             .args(&["--host", config.host])
                             .args(&["--port", config.port])
                             .args(&["--runtime-path", &*config.runtime_path.to_string_lossy()])
                             .args(&["--config-path", &*config.config_path.to_string_lossy()])
+                            .arg("--bootstrap")
                             .stderr(stdout)
                             .stdout(Stdio::null())
                             .spawn()?
@@ -268,7 +268,6 @@ impl Dispatch for Action {
 fn format_daemon_status(response: &ipc::instruction::StatusResponse) {
     let ipc::instruction::StatusResponse {
         peer_id,
-        listeners,
         peer_count,
         pending_connections,
         hosting,
@@ -281,13 +280,11 @@ fn format_daemon_status(response: &ipc::instruction::StatusResponse) {
     hosting: {} gistit
     peers: {}
     pending connections: {}
-    listening on: {:?}
         "#,
         style(peer_id).bold(),
         hosting,
         style(peer_count).blue(),
         pending_connections,
-        listeners
     ));
 }
 

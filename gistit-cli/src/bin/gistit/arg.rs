@@ -1,13 +1,13 @@
 /// Gistit command line interface
-use clap::{crate_authors, crate_description, crate_version, App, Arg, ArgGroup, ValueHint};
+use clap::{crate_authors, crate_description, crate_version, Arg, ArgGroup, Command, ValueHint};
 
 /// The gistit application
 #[allow(clippy::too_many_lines)]
 #[must_use]
-pub fn app() -> App<'static> {
+pub fn app() -> Command<'static> {
     let random_name = Box::leak(Box::new(names::Generator::default().next().unwrap()));
 
-    App::new("gistit-cli")
+    Command::new("gistit-cli")
         .version(crate_version!())
         .about(crate_description!())
         .author(crate_authors!())
@@ -63,7 +63,7 @@ This is our best efforts at persisting the hash into the system clipboard after 
                 .help("List available colorschemes"),
         )
         .subcommand(
-            App::new("fetch")
+            Command::new("fetch")
                 .alias("f")
                 .about("Fetch a gistit wherever it is")
                 .arg(
@@ -94,7 +94,7 @@ Run `gistit --colorschemes` to list available ones.",
                 )
         )
         .subcommand(
-            App::new("node")
+            Command::new("node")
                 .alias("n")
                 .about("Start a p2p gistit node for file transfer")
                 .group(ArgGroup::new("daemon_cmd"))

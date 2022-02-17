@@ -276,8 +276,6 @@ impl Node {
                 let peer_id = self.swarm.local_peer_id().to_string();
                 let peer_count = network_info.num_peers() as u32;
                 let pending_connections = network_info.connection_counters().num_pending();
-                let listeners: Vec<String> =
-                    self.swarm.listeners().map(ToString::to_string).collect();
                 let hosting = self.to_provide.len() as u32;
 
                 self.bridge.connect_blocking()?;
@@ -286,7 +284,6 @@ impl Node {
                         peer_id,
                         peer_count,
                         pending_connections,
-                        listeners,
                         hosting,
                     ))
                     .await?;

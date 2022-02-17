@@ -45,9 +45,7 @@ message Instruction {
 
     uint32 pending_connections = 3;
 
-    repeated string listeners = 4;
-
-    uint32 hosting = 5;
+    uint32 hosting = 4;
   }
 
   reserved 6 to 8;

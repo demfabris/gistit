@@ -19,7 +19,7 @@ pub enum Error {
     #[error("fail to parse multiaddr: {0}")]
     Multiaddr(#[from] libp2p::multiaddr::Error),
 
-    #[error("reference error, {0}")]
+    #[error("project path error, {0}")]
     Project(#[from] gistit_project::Error),
 
     #[error("p2p transport error, {0}")]

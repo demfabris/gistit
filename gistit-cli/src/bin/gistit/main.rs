@@ -28,8 +28,6 @@ mod fmt;
 mod param;
 mod send;
 mod stdin;
-
-#[cfg(feature = "host")]
 mod node;
 
 pub use libgistit::error::Error;
@@ -67,7 +65,6 @@ async fn run() -> Result<()> {
             let payload = action.prepare().await?;
             action.dispatch(payload).await?;
         }
-        #[cfg(feature = "host")]
         ("node", Some(args)) => {
             let action = node::Action::from_args(args)?;
             let payload = action.prepare().await?;

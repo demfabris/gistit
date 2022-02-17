@@ -1,14 +1,9 @@
 use clap_complete::{generate_to, Shell};
-use std::env;
 
 const BIN_NAME: &str = "gistit";
 
-include!("src/bin/cli/args.rs");
+include!("src/bin/gistit/arg.rs");
 
-#[cfg(not(feature = "application"))]
-fn main() {}
-
-#[cfg(feature = "application")]
 fn main() -> Result<(), String> {
     let mut app = app();
     let out_path =

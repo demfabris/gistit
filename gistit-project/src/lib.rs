@@ -44,12 +44,17 @@ pub mod path {
     pub fn init() -> Result<()> {
         let config = config()?;
         if fs::metadata(&config).is_err() {
-            fs::create_dir(&config)?;
+            fs::create_dir_all(&config)?;
+        }
+
+        let runtime = runtime()?;
+        if fs::metadata(&runtime).is_err() {
+            fs::create_dir_all(&runtime)?;
         }
 
         let data = data()?;
         if fs::metadata(&data).is_err() {
-            fs::create_dir(&data)?;
+            fs::create_dir_all(&data)?;
         }
 
         Ok(())

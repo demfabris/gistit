@@ -145,7 +145,6 @@ pub mod ipc {
             peer_id: String,
             peer_count: u32,
             pending_connections: u32,
-            listeners: Vec<String>,
             hosting: u32,
         ) -> Self {
             Self {
@@ -154,7 +153,6 @@ pub mod ipc {
                         peer_id,
                         peer_count,
                         pending_connections,
-                        listeners,
                         hosting,
                     },
                 )),
@@ -278,7 +276,7 @@ mod tests {
         let res2 = Instruction::respond_provide(None)
             .expect_response()
             .unwrap();
-        let res3 = Instruction::respond_status(String::new(), 0, 0, Vec::new(), 0)
+        let res3 = Instruction::respond_status(String::new(), 0, 0, 0)
             .expect_response()
             .unwrap();
 
