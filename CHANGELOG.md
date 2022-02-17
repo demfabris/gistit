@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # Added
 - Add `gistit-reference`
 - Add `gistit-proto`
+- Add `gistit` (install crate)
+- P2p file sharing working
+- More cli flags (`host`, `port`, `dial`)
 
 # Changed
 - BREAKING: Gistit hash is now 64bits (sha256)
