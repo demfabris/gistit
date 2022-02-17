@@ -226,7 +226,7 @@ impl RequestResponseCodec for ExchangeCodec {
         io: &mut T,
     ) -> io::Result<Self::Request> {
         let hash = read_length_prefixed(io, var::GISTIT_HASH_LENGTH).await?;
-        log::warn!("Read request {:?}", std::str::from_utf8(&hash).unwrap());
+        log::debug!("Read request {:?}", std::str::from_utf8(&hash).unwrap());
 
         if hash.is_empty() {
             Err(io::ErrorKind::UnexpectedEof.into())
@@ -242,7 +242,7 @@ impl RequestResponseCodec for ExchangeCodec {
     ) -> io::Result<Self::Response> {
         let bytes = read_length_prefixed(io, var::GISTIT_MAX_SIZE).await?;
         let gistit = Gistit::decode(&*bytes).map_err(|_| io::ErrorKind::InvalidInput)?;
-        log::warn!("Read response: {:?}", gistit);
+        log::debug!("Read response: {:?}", gistit);
 
         if bytes.is_empty() {
             Err(io::ErrorKind::UnexpectedEof.into())
@@ -257,7 +257,7 @@ impl RequestResponseCodec for ExchangeCodec {
         io: &mut T,
         Request(req): Self::Request,
     ) -> io::Result<()> {
-        log::warn!("Write request {:?}", std::str::from_utf8(&req).unwrap());
+        log::debug!("Write request {:?}", std::str::from_utf8(&req).unwrap());
         write_length_prefixed(io, req).await?;
         io.close().await?;
         Ok(())
@@ -276,7 +276,7 @@ impl RequestResponseCodec for ExchangeCodec {
         gistit
             .encode(&mut buf)
             .map_err(|_| io::ErrorKind::InvalidInput)?;
-        log::warn!("Write response {:?} bytes", buf.len());
+        log::debug!("Write response {:?} bytes", buf.len());
 
         write_length_prefixed(io, buf).await?;
         io.close().await?;

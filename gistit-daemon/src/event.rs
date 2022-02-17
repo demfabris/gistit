@@ -103,15 +103,28 @@ pub async fn handle_kademlia(node: &mut Node, event: KademliaEvent) -> Result<()
         } => {
             info!("Kademlia get providers: {:?}", maybe_providers);
             node.pending_get_providers.remove(&id);
+            let mut failed = false;
 
             match maybe_providers {
                 Ok(GetProvidersOk { key, providers, .. }) => {
-                    node.to_request.push((key, providers));
+                    // Finding zero providers is also an error
+                    if providers.is_empty() {
+                        failed = true;
+                    } else {
+                        node.to_request.push((key, providers));
+                    }
                 }
                 Err(GetProvidersError::Timeout { key, .. }) => {
+                    failed = true;
                     error!("No providers for {:?}", key);
                 }
             }
+
+            if failed {
+                node.bridge.connect_blocking()?;
+                node.bridge.send(Instruction::respond_fetch(None)).await?;
+            }
+
             Ok(())
         }
         _ => Ok(()),

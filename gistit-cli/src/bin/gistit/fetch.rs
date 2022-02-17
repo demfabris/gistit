@@ -34,7 +34,9 @@ impl Action {
             hash: args
                 .value_of("HASH")
                 .ok_or(Error::Argument("missing arugment", "--hash"))?,
-            colorscheme: args.value_of("colorscheme").unwrap_or("ansi"),
+            colorscheme: args
+                .value_of("colorscheme")
+                .unwrap_or("Monokai Extended Origin"), // This is the most decent looking
             save: args.is_present("save"),
         }))
     }
@@ -50,10 +52,10 @@ pub struct Config {
     data_path: PathBuf,
 }
 
-impl TryFrom<Config> for Gistit {
+impl TryFrom<&Config> for Gistit {
     type Error = Error;
 
-    fn try_from(value: Config) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &Config) -> std::result::Result<Self, Self::Error> {
         Ok(Self {
             hash: value.hash.to_owned(),
             ..Self::default()
@@ -96,14 +98,13 @@ impl Dispatch for Action {
                 gistit: Some(gistit),
             }) = bridge.recv().await?.expect_response()?
             {
-                warnln!("yey {:?}", gistit);
+                preview_or_save(&gistit, self.save, &config)?;
             } else {
                 interruptln!();
-                errorln!("failed to fetch gistit from the DHT");
+                errorln!("gistit hash not found");
             }
         } else {
-            let save_location = config.data_path.clone();
-            let gistit: Gistit = config.try_into()?;
+            let gistit: Gistit = (&config).try_into()?;
 
             let response = reqwest::Client::new()
                 .post(SERVER_URL_GET.to_string())
@@ -116,40 +117,7 @@ impl Dispatch for Action {
             match response.status() {
                 StatusCode::OK => {
                     let gistit = Gistit::from_bytes(response.bytes().await?)?;
-                    // NOTE: Currently we support one file
-                    let inner = gistit.inner.first().expect("to have at least one file");
-                    let mut file = File::from_data(&inner.data, &inner.name)?;
-
-                    if self.save {
-                        let file_path = save_location.join(file.name());
-                        file.save_as(&file_path)?;
-
-                        warnln!("gistit saved at: `{}`", file_path.to_string_lossy());
-                        finish!("💾  Saved");
-                    } else {
-                        finish!("👀  Preview");
-                        let mut header_string = style(&inner.name).green().to_string();
-                        header_string
-                            .push_str(&format!(" | {}", style(&gistit.author).blue().bold()));
-
-                        if let Some(ref description) = gistit.description {
-                            header_string.push_str(&format!(" | {}", style(description).italic()));
-                        }
-
-                        let input = bat::Input::from_reader(&*file)
-                            .name(&inner.name)
-                            .title(header_string);
-
-                        bat::PrettyPrinter::new()
-                            .header(true)
-                            .grid(true)
-                            .input(input)
-                            .line_numbers(true)
-                            .theme(self.colorscheme)
-                            .use_italics(true)
-                            .paging_mode(bat::PagingMode::QuitIfOneScreen)
-                            .print()?;
-                    }
+                    preview_or_save(&gistit, self.save, &config)?;
                 }
                 StatusCode::NOT_FOUND => {
                     return Err(Error::Server("gistit hash not found"));
@@ -160,4 +128,42 @@ impl Dispatch for Action {
 
         Ok(())
     }
+}
+
+pub fn preview_or_save(gistit: &Gistit, save: bool, config: &Config) -> Result<()> {
+    // NOTE: Currently we support one file
+    let inner = gistit.inner.first().expect("to have at least one file");
+    let mut file = File::from_data(&inner.data, &inner.name)?;
+    let save_location = &config.data_path;
+
+    if save {
+        let file_path = save_location.join(file.name());
+        file.save_as(&file_path)?;
+
+        warnln!("gistit saved at: `{}`", file_path.to_string_lossy());
+        finish!("💾  Saved");
+    } else {
+        finish!("👀  Preview");
+        let mut header_string = style(&inner.name).green().to_string();
+        header_string.push_str(&format!(" | {}", style(&gistit.author).blue().bold()));
+
+        if let Some(ref description) = gistit.description {
+            header_string.push_str(&format!(" | {}", style(description).italic()));
+        }
+
+        let input = bat::Input::from_reader(&*file)
+            .name(&inner.name)
+            .title(header_string);
+
+        bat::PrettyPrinter::new()
+            .header(true)
+            .grid(true)
+            .input(input)
+            .line_numbers(true)
+            .theme(config.colorscheme)
+            .use_italics(true)
+            .paging_mode(bat::PagingMode::QuitIfOneScreen)
+            .print()?;
+    }
+    Ok(())
 }
