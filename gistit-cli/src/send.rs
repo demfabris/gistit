@@ -16,11 +16,11 @@ use gistit_proto::{ipc, Instruction};
 use gistit_project::path;
 
 use crate::clipboard::Clipboard;
+use crate::dispatch::Dispatch;
 use crate::file::File;
 use crate::github::{self, CreateResponse, GITHUB_GISTS_API_URL};
-use crate::server::SERVER_URL_LOAD;
-use crate::dispatch::Dispatch;
 use crate::param::check;
+use crate::server::SERVER_URL_LOAD;
 use crate::{errorln, finish, interruptln, progress, updateln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]

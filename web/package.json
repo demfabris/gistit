@@ -15,7 +15,8 @@
     "react-dom": "17.0.2",
     "react-icons": "^4.2.0",
     "react-syntax-highlighter": "^15.4.4",
-    "zustand": "^3.6.9"
+    "zustand": "^3.6.9",
+    "protobufjs": "6.11.2"
   },
   "devDependencies": {
     "@testing-library/react": "^12.1.0",

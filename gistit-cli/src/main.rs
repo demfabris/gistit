@@ -25,10 +25,10 @@ mod arg;
 mod dispatch;
 mod fetch;
 mod fmt;
+mod node;
 mod param;
 mod send;
 mod stdin;
-mod node;
 
 pub mod clipboard;
 pub mod error;
