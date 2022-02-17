@@ -34,7 +34,7 @@ message Instruction {
 
   // Response to a `FetchRequest`
   message FetchResponse {
-    payload.Gistit gistit = 1;
+    optional payload.Gistit gistit = 1;
   }
 
   // Response to a `StatusRequest`

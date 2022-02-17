@@ -162,12 +162,10 @@ pub mod ipc {
         }
 
         #[must_use]
-        pub const fn respond_fetch(gistit: Gistit) -> Self {
+        pub const fn respond_fetch(gistit: Option<Gistit>) -> Self {
             Self {
                 kind: Some(instruction::Kind::FetchResponse(
-                    instruction::FetchResponse {
-                        gistit: Some(gistit),
-                    },
+                    instruction::FetchResponse { gistit },
                 )),
             }
         }
@@ -274,7 +272,7 @@ mod tests {
             .expect_request()
             .unwrap();
 
-        let res1 = Instruction::respond_fetch(Gistit::default())
+        let res1 = Instruction::respond_fetch(Some(Gistit::default()))
             .expect_response()
             .unwrap();
         let res2 = Instruction::respond_provide(None)

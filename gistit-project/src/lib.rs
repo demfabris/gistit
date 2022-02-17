@@ -120,6 +120,9 @@ pub mod var {
     /// Max gistit size allowed in bytes
     pub const GISTIT_MAX_SIZE: usize = 50_000;
 
+    /// Gistit hash size (sha256)
+    pub const GISTIT_HASH_LENGTH: usize = 64;
+
     /// Default server base url
     pub const GISTIT_SERVER_URL_BASE: &str = "https://us-central1-gistit-base.cloudfunctions.net/";
 }

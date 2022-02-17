@@ -45,7 +45,9 @@ pub async fn handle_request_response(
 
                 if node.pending_receive_file.remove(&key) {
                     node.bridge.connect_blocking()?;
-                    node.bridge.send(Instruction::respond_fetch(gistit)).await?;
+                    node.bridge
+                        .send(Instruction::respond_fetch(Some(gistit)))
+                        .await?;
                 }
                 node.pending_request_file.remove(&request_id);
             }
@@ -55,6 +57,8 @@ pub async fn handle_request_response(
         } => {
             error!("Request response outbound failure {:?}", error);
             node.pending_request_file.remove(&request_id);
+            node.bridge.connect_blocking()?;
+            node.bridge.send(Instruction::respond_fetch(None)).await?;
         }
         RequestResponseEvent::InboundFailure { error, .. } => {
             error!("Request response inbound failure {:?}", error);

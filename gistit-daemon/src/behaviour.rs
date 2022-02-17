@@ -3,6 +3,9 @@ use std::iter::once;
 use std::str::{self, FromStr};
 use std::time::Duration;
 
+use gistit_project::var;
+use gistit_proto::bytes::BytesMut;
+
 use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed};
 use libp2p::core::ProtocolName;
 use libp2p::futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
@@ -211,9 +214,6 @@ impl std::error::Error for Response {
     }
 }
 
-const MAX_FILE_SIZE: usize = 50_000;
-const HASH_SIZE: usize = 32;
-
 #[async_trait]
 impl RequestResponseCodec for ExchangeCodec {
     type Protocol = ExchangeProtocol;
@@ -225,7 +225,8 @@ impl RequestResponseCodec for ExchangeCodec {
         _: &Self::Protocol,
         io: &mut T,
     ) -> io::Result<Self::Request> {
-        let hash = read_length_prefixed(io, HASH_SIZE).await?;
+        let hash = read_length_prefixed(io, var::GISTIT_HASH_LENGTH).await?;
+        log::warn!("Read request {:?}", std::str::from_utf8(&hash).unwrap());
 
         if hash.is_empty() {
             Err(io::ErrorKind::UnexpectedEof.into())
@@ -239,8 +240,9 @@ impl RequestResponseCodec for ExchangeCodec {
         _: &Self::Protocol,
         io: &mut T,
     ) -> io::Result<Self::Response> {
-        let bytes = read_length_prefixed(io, MAX_FILE_SIZE).await?;
+        let bytes = read_length_prefixed(io, var::GISTIT_MAX_SIZE).await?;
         let gistit = Gistit::decode(&*bytes).map_err(|_| io::ErrorKind::InvalidInput)?;
+        log::warn!("Read response: {:?}", gistit);
 
         if bytes.is_empty() {
             Err(io::ErrorKind::UnexpectedEof.into())
@@ -253,16 +255,11 @@ impl RequestResponseCodec for ExchangeCodec {
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
-        Request(gistit): Self::Request,
+        Request(req): Self::Request,
     ) -> io::Result<()> {
-        let mut buf = vec![0u8; MAX_FILE_SIZE];
-        gistit
-            .encode(&mut buf)
-            .map_err(|_| io::ErrorKind::InvalidInput)?;
-
-        write_length_prefixed(io, buf).await?;
+        log::warn!("Write request {:?}", std::str::from_utf8(&req).unwrap());
+        write_length_prefixed(io, req).await?;
         io.close().await?;
-
         Ok(())
     }
 
@@ -275,10 +272,12 @@ impl RequestResponseCodec for ExchangeCodec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let mut buf = vec![0u8; MAX_FILE_SIZE];
+        let mut buf = BytesMut::with_capacity(var::GISTIT_MAX_SIZE);
         gistit
             .encode(&mut buf)
             .map_err(|_| io::ErrorKind::InvalidInput)?;
+        log::warn!("Write response {:?} bytes", buf.len());
+
         write_length_prefixed(io, buf).await?;
         io.close().await?;
 

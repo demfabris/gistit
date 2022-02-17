@@ -138,12 +138,15 @@ impl Node {
                     .iter()
                     .any(|protocol| protocol == Protocol::P2p(peer.into()))
                 {
-                    info!("TRYIED TO RELAY OVER THE DEST PEER");
                     continue;
                 }
 
-                let relayed_addr = relay.clone().with(Protocol::P2p(peer.into()));
-                self.swarm.dial(relayed_addr)?;
+                self.swarm
+                    .behaviour_mut()
+                    .request_response
+                    .add_address(&peer, relay.clone());
+                // let relayed_addr = relay.clone().with(Protocol::P2p(peer.into()));
+                // self.swarm.dial(relayed_addr)?;
             }
 
             let request_id = self

@@ -6,7 +6,7 @@ use console::style;
 use reqwest::StatusCode;
 use serde::Serialize;
 
-use gistit_proto::ipc::Instruction;
+use gistit_proto::ipc::{self, Instruction};
 use gistit_proto::payload::Gistit;
 use gistit_proto::prost::Message;
 
@@ -17,7 +17,7 @@ use libgistit::server::SERVER_URL_GET;
 
 use crate::dispatch::Dispatch;
 use crate::param::check;
-use crate::{finish, progress, updateln, warnln, Error, Result};
+use crate::{errorln, finish, interruptln, progress, updateln, warnln, Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Action {
@@ -92,8 +92,15 @@ impl Dispatch for Action {
                 .send(Instruction::request_fetch(self.hash.to_owned()))
                 .await?;
 
-            let _a = bridge.recv().await?;
-            warnln!("{:?}", _a);
+            if let ipc::instruction::Kind::FetchResponse(ipc::instruction::FetchResponse {
+                gistit: Some(gistit),
+            }) = bridge.recv().await?.expect_response()?
+            {
+                warnln!("yey {:?}", gistit);
+            } else {
+                interruptln!();
+                errorln!("failed to fetch gistit from the DHT");
+            }
         } else {
             let save_location = config.data_path.clone();
             let gistit: Gistit = config.try_into()?;
