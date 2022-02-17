@@ -106,21 +106,21 @@ Run `gistit --colorschemes` to list available ones.",
                         .long_help(
                             "Spawn the gistit network node background process to enable peer 
 to peer file sharing.")
-                        .conflicts_with_all(&["stop", "status"]),
+                        // .conflicts_with_all(&["stop", "status"]),
                 )
                 .arg(
                     Arg::new("stop")
                         .long("stop")
                         .group("daemon_cmd")
                         .help("Stop gistit node background process")
-                        .conflicts_with_all(&["start", "status"]),
+                        // .conflicts_with_all(&["start", "status"]),
                 )
                 .arg(
                     Arg::new("status")
                         .long("status")
                         .group("daemon_cmd")
                         .help("Display the status of your gistit network node process")
-                        .conflicts_with_all(&["start", "stop"]),
+                        // .conflicts_with_all(&["start", "stop"]),
                 )
                 .arg(
                     Arg::new("attach")
@@ -131,11 +131,11 @@ to peer file sharing.")
                 .arg(
                     Arg::new("dial")
                         .long("dial")
-                        .help("Dials a peer")
+                        .help("Dials a peer given the background process is running")
                         .takes_value(true)
                         .value_name("multiaddr")
                         .hide(true)
-                        .conflicts_with_all(&["stop", "status"]),
+                        .conflicts_with_all(&["stop"]),
                 )
                 .arg(
                     Arg::new("host")

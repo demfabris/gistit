@@ -23,6 +23,10 @@ message Instruction {
   // Shutdown
   message ShutdownRequest {}
 
+  message DialRequest {
+    string address = 1;
+  }
+
   // Response to a `ProvideRequest`. Nulls if failed to provide
   message ProvideResponse {
     optional string hash = 1;
@@ -46,7 +50,7 @@ message Instruction {
     uint32 hosting = 5;
   }
 
-  reserved 5 to 8;
+  reserved 6 to 8;
 
   oneof kind {
     ProvideRequest provide_request = 1;
@@ -56,6 +60,8 @@ message Instruction {
     StatusRequest status_request = 3;
 
     ShutdownRequest shutdown_request = 4;
+
+    DialRequest dial_request = 5;
 
     ProvideResponse provide_response = 9;
 

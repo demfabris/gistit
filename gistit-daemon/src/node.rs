@@ -275,6 +275,12 @@ impl Node {
                     .await?;
             }
 
+            ipc::instruction::Kind::DialRequest(ipc::instruction::DialRequest { address }) => {
+                warn!("Instruction: Dial");
+                let multiaddr: Multiaddr = address.parse()?;
+                self.swarm.dial(multiaddr)?;
+            }
+
             ipc::instruction::Kind::ShutdownRequest(ipc::instruction::ShutdownRequest {}) => {
                 warn!("Exiting...");
                 std::process::exit(0);

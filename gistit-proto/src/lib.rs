@@ -132,6 +132,15 @@ pub mod ipc {
         }
 
         #[must_use]
+        pub const fn request_dial(address: String) -> Self {
+            Self {
+                kind: Some(instruction::Kind::DialRequest(instruction::DialRequest {
+                    address,
+                })),
+            }
+        }
+
+        #[must_use]
         pub const fn respond_status(
             peer_id: String,
             peer_count: u32,
