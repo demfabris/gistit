@@ -276,7 +276,7 @@ impl Dispatch for Action {
                     );
 
                     finish!(format!(
-                        "\n    hash: '{}' {} \n    url: 'https://gistit.vercel.app/h/{}' {}\n\n",
+                        "\n    hash: '{}' {} \n    url: 'https://gistit.vercel.app/h/{}' \n    {}\n\n",
                         style(&server_hash).bold(),
                         clipboard_msg,
                         style(&server_hash).bold(),
