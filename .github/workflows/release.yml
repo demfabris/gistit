@@ -28,16 +28,16 @@ jobs:
           chmod +x gistit
           tar -czf gistit-linux-x86_64.tar.gz gistit
           rm gistit
-          # # install aarch64 gnu linker
-          # sudo apt-get install gcc-aarch64-linux-gnu musl-tools
-          # export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-          # export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
-          # rustup target add x86_64-unknown-linux-musl
-          # cargo build --release --target x86_64-unknown-linux-musl
-          # mv target/x86_64-unknown-linux-musl/release/gistit ./gistit
-          # chmod +x gistit
-          # tar -czf gistit-alpine-x86_64.tar.gz gistit
-          # rm gistit
+          # install aarch64 gnu linker
+          sudo apt-get install gcc-aarch64-linux-gnu musl-tools
+          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
+          rustup target add x86_64-unknown-linux-musl
+          cargo build --release --target x86_64-unknown-linux-musl
+          mv target/x86_64-unknown-linux-musl/release/gistit ./gistit
+          chmod +x gistit
+          tar -czf gistit-alpine-x86_64.tar.gz gistit
+          rm gistit
           # arm64 builds
           # rustup target add aarch64-unknown-linux-gnu
           # cargo build --release --target aarch64-unknown-linux-gnu
