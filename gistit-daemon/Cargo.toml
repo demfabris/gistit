@@ -9,6 +9,12 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/fabricio7p/gistit"
 readme = "./README.md"
 version = "0.2.0"
+homepage = "https://gistit.vercel.app/"
+
+[features]
+# Force openssl-sys to staticly link in the openssl library. Necessary when
+# cross compiling to x86_64-unknown-linux-musl.
+vendored = ["openssl-sys/vendored"]
 
 [dependencies]
 async-trait = "0.1.52"
@@ -25,6 +31,9 @@ zeroize = "1.5.2"
 gistit-ipc = { version = "0.2.0", path = "../gistit-ipc" }
 gistit-project = { version = "0.1.0", path = "../gistit-project" }
 gistit-proto = { version = "0.1.2", path = "../gistit-proto" }
+# Add openssl-sys as a direct dependency so it can be cross compiled to
+# x86_64-unknown-linux-musl using the "vendored" feature below
+openssl-sys = "*"
 
 [dependencies.tokio]
 features = ["macros", "fs", "rt", "rt-multi-thread", "sync", "io-util"]
