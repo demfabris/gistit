@@ -24,27 +24,20 @@ jobs:
           # build x86_64
           sudo apt-get -y install pkg-config libssl-dev
           cargo build --release --target x86_64-unknown-linux-gnu
-          mv target/x86_64-unknown-linux-gnu/release/gistit ./gistit
-          chmod +x gistit
-          tar -czf gistit-linux-x86_64.tar.gz gistit
-          rm gistit
-          # # install aarch64 gnu linker
-          # sudo apt-get install gcc-aarch64-linux-gnu musl-tools
-          # export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-          # export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
-          # rustup target add x86_64-unknown-linux-musl
-          # cargo build --release --target x86_64-unknown-linux-musl
-          # mv target/x86_64-unknown-linux-musl/release/gistit ./gistit
-          # chmod +x gistit
-          # tar -czf gistit-alpine-x86_64.tar.gz gistit
-          # rm gistit
-          # arm64 builds
-          # rustup target add aarch64-unknown-linux-gnu
-          # cargo build --release --target aarch64-unknown-linux-gnu
-          # mv target/aarch64-unknown-linux-gnu/release/gistit ./gistit
-          # chmod +x gistit
-          # tar -czf gistit-linux-aarch64.tar.gz gistit
-          # rm gistit
+          chmod +x target/x86_64-unknown-linux-gnu/release/gistit
+          chmod +x target/x86_64-unknown-linux-gnu/release/gistit-daemon
+          tar -czf gistit-linux-x86_64.tar.gz target/x86_64-unknown-linux-gnu/release/gistit
+          tar -czf gistit-daemon-linux-x86_64.tar.gz target/x86_64-unknown-linux-gnu/release/gistit-daemon
+          # install aarch64 gnu linker
+          sudo apt-get install gcc-aarch64-linux-gnu musl-tools
+          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
+          rustup target add x86_64-unknown-linux-musl
+          cargo build --release --target x86_64-unknown-linux-musl --features vendored
+          chmod +x target/x86_64-unknown-linux-musl/release/gistit
+          chmod +x target/x86_64-unknown-linux-musl/release/gistit-daemon
+          tar -czf gistit-musl-x86_64.tar.gz target/x86_64-unknown-linux-musl/release/gistit
+          tar -czf gistit-daemon-musl-x86_64.tar.gz target/x86_64-unknown-linux-musl/release/gistit-daemon
       - name: Publish release
         uses: softprops/action-gh-release@v1
         with:
@@ -66,15 +59,16 @@ jobs:
       - name: Build
         run: |
           cargo build --release --target x86_64-apple-darwin
-          mv target/x86_64-apple-darwin/release/gistit ./gistit
-          chmod +x gistit
-          tar -czf gistit-darwin-x86_64.tar.gz gistit
-          rm gistit
+          chmod +x target/x86_64-apple-darwin/release/gistit
+          chmod +x target/x86_64-apple-darwin/release/gistit-daemon
+          tar -czf gistit-darwin-x86_64.tar.gz target/x86_64-apple-darwin/release/gistit
+          tar -czf gistit-daemon-darwin-x86_64.tar.gz target/x86_64-apple-darwin/release/gistit-daemon
           rustup target add aarch64-apple-darwin
-          cargo build --release --target aarch64-apple-darwin
-          mv target/aarch64-apple-darwin/release/gistit ./gistit
-          chmod +x gistit
-          tar -czf gistit-darwin-arm64.tar.gz gistit
+          cargo build --release --target aarch64-apple-darwin --features vendored
+          chmod +x target/aarch64-apple-darwin/release/gistit
+          chmod +x target/aarch64-apple-darwin/release/gistit-daemon
+          tar -czf gistit-darwin-arm64.tar.gz target/aarch64-apple-darwin/release/gistit
+          tar -czf gistit-daemon-darwin-arm64.tar.gz target/aarch64-apple-darwin/release/gistit-daemon
       - name: Publish release
         uses: softprops/action-gh-release@v1
         with:
