@@ -36,11 +36,12 @@ A feature packed, hash based `code` snippet sharing tool focused on ease of use 
 - **Open source** - Independent web application and server, open source top to bottom.
 - **Integrated** - Integration with GitHub Gists.
 - **Handy** - system clipboard integration that actually works.
-- **Trendy** - peer to peer file sharing through [IPFS](https://ipfs.io/) _(uses [libp2p](https://github.com/libp2p/rust-libp2p))_. :globe_with_meridians: **Soon**
+- **Peer to peer** - peer to peer file sharing via [libp2p](https://github.com/libp2p/rust-libp2p). The network stach behind [IPFS](https://ipfs.io/). :globe_with_meridians:
 
 ### Feature requests
 
 [I want a feature](https://github.com/fabricio7p/gistit/issues/new)
+
 _Windows support comming soon_
 
 ## CLI
@@ -72,7 +73,7 @@ Copy hash to system clipboard.
 
 ```shell
 $ gistit myfile.txt -c
-# Hash is now on your <Ctrl-V>
+# Hash is now on your clipboard
 ```
 
 Fetching gistits
@@ -84,6 +85,23 @@ $ gistit f 8765d324ddd800f1112e77fece3d3ff2
 # Fetch and save to local data directory
 $ gistit f 8765d324ddd800f1112e77fece3d3ff2 --save
 ```
+
+## P2p
+
+Peer to peer file sharing is opt in. Simply install `gistit-daemon` and start the background process.
+
+```shell
+# Start
+$ gistit node --start
+
+# Check network status
+$ gistit node --status
+
+# Stop
+$ gistit node --stop
+```
+
+If `gistit-daemon` is running **sending** and **fetching** gistits will be automatically done via **IPFS** network.
 
 ## Installation
 
@@ -98,10 +116,10 @@ Check [releases](https://github.com/demfabris/gistit/releases)
 **From [crates.io](https://crates.io/crates/gistit/)**
 
 ```shell
-cargo install gistit
+cargo install gistit gistit-daemon
 ```
 
-**From source** _(msrv 1.60 nightly)_
+**From source** _(msrv 1.58)_
 
 ```shell
 # Clone
