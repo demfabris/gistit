@@ -37,11 +37,7 @@ export const Sidebar = ({ sidebarHandler }: Props) => {
           <VscChromeClose size={24} />
         </button>
         <nav className="w-full pt-24">
-          <Navigation
-            text="Search"
-            href="/search"
-            icon={<VscSearch size={20} />}
-          />
+          <Navigation text="Search" href="/h" icon={<VscSearch size={20} />} />
           <NavigationDropDown
             text="Documentation"
             icon={<VscLibrary size={20} />}
@@ -49,7 +45,7 @@ export const Sidebar = ({ sidebarHandler }: Props) => {
           <Navigation
             text="Github"
             icon={<VscGithub size={20} />}
-            href="https://github.com/fabricio7p"
+            href="https://github.com/demfabris/gistit.git"
           />
           <Navigation
             text="Mode"
@@ -106,12 +102,12 @@ const NavigationDropDown = ({ text, icon }: NavigationDropDownProps) => {
       <ul className={`${drop ? 'flex flex-col h-full' : 'hidden'}`}>
         <SubNavigation
           text="Installation"
-          href="#"
+          href="/"
           icon={<VscDesktopDownload size={18} />}
         />
         <SubNavigation
           text="Features"
-          href="#"
+          href="/"
           icon={<VscLightbulb size={18} />}
         />
         <SubNavigation text="CLI" href="#" icon={<VscTerminal size={18} />} />

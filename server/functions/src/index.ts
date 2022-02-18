@@ -117,7 +117,16 @@ export const get = functions.https.onRequest(async (req, res) => {
 
   const proto = await protobuf.load("payload.proto");
   const Gistit = proto.lookupType("gistit.payload.Gistit");
-  const payload = Gistit.decode(req.body);
+  let data = Buffer.from([]);
+
+  // FIXME: I cant send a raw Buffer from the browser fetch api, so I JSON encoded it.
+  // IF you know how to solve it let me know
+  if (typeof req.body === "string") {
+    data = Buffer.from(JSON.parse(req.body));
+  } else {
+    data = req.body;
+  }
+  const payload = Gistit.decode(data);
 
   try {
     const { hash } = payload as unknown as GistitPayload;

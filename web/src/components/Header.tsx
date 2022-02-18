@@ -1,6 +1,7 @@
 import { useColorMode, useColorStore } from 'hooks'
 import { Dispatch, Fragment, SetStateAction, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/router'
 import {
   VscMenu,
   VscGithub,
@@ -65,7 +66,7 @@ const Navigation = () => {
       <NavigationButton
         text="Docs"
         icon={<VscLibrary size={18} className="mr-2" />}
-        href="/docs"
+        href="https://github.com/demfabris/gistit"
       />
       <NavigationButton
         text="Color Mode"
@@ -113,6 +114,7 @@ const NavigationButton = ({
 const Search = () => {
   const [focus, setFocus] = useState(false)
   const innerRef = useRef<HTMLInputElement>(null!)
+  const router = useRouter()
 
   function handleOpen() {
     setFocus(true)
@@ -139,10 +141,16 @@ const Search = () => {
         <input
           type="text"
           className={`bg-transparent outline-none transition-all z-10 text-gray-800 dark:text-white transform-gpu font-medium w-0 ${
-            focus ? 'pl-3 w-44' : 'w-0'
+            focus ? 'pl-3 w-64' : 'w-0'
           }`}
           ref={innerRef}
-          placeholder="Hash, title or author..."
+          onChange={(e) => {
+            let hash = e.target.value
+            if (hash.length === 64) {
+              router.push(`/h/${hash}`)
+            }
+          }}
+          placeholder="Insert a hash"
         />
       </span>
     </div>

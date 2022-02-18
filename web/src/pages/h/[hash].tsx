@@ -1,8 +1,9 @@
 import { Layout, Snippet } from 'components'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
+import protobuf, { Root } from 'protobufjs'
 
-type GistitPayload = {
+export type GistitPayload = {
   hash: string
   author: string
   description: string
@@ -12,12 +13,7 @@ type GistitPayload = {
     lang: string
     data: string
     size: number
-  }
-}
-
-type ResponsePayload = {
-  success: GistitPayload
-  error: string
+  }[]
 }
 
 const SnippetPage = () => {
@@ -30,11 +26,15 @@ const SnippetPage = () => {
   useEffect(() => {
     if (hash)
       (async () => {
+        const proto = await protobuf.load(
+          'https://raw.githubusercontent.com/demfabris/gistit/master/gistit-proto/src/payload.proto'
+        )
+        const Gistit = proto.lookupType('gistit.payload.Gistit')
+        const body = Gistit.encode({ hash }).finish()
+
         const response = await fetch(url, {
           method: 'POST',
-          body: JSON.stringify({
-            hash
-          })
+          body: JSON.stringify(Buffer.from(body))
         })
 
         if (
@@ -45,9 +45,12 @@ const SnippetPage = () => {
           setError(true)
         }
 
-        const gistit = (await response.json()) as ResponsePayload
+        const buffer = await response.arrayBuffer()
+        const gistit = Gistit.decode(
+          new Uint8Array(buffer)
+        ) as unknown as GistitPayload
 
-        setGistit(gistit.success)
+        setGistit(gistit)
       })()
   }, [hash, url])
 
@@ -67,10 +70,10 @@ const SnippetPage = () => {
               </span>
             )}
             <Snippet
-              name={gistit.inner.name}
-              size={gistit.inner.size}
-              code={Buffer.from(gistit.inner.data, 'base64').toString()}
-              lang={gistit.inner.lang}
+              name={gistit.inner[0].name}
+              size={gistit.inner[0].size}
+              code={gistit.inner[0].data}
+              lang={gistit.inner[0].lang}
             />
           </>
         ) : (
