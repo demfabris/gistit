@@ -39,17 +39,18 @@ const Home: NextPage = () => {
             </span>
           </li>
           <li className="flex flex-col w-full">
-            <h2 className="mb-3 text-xl font-semibold">Rust-Powered</h2>
+            <h2 className="mb-3 text-xl font-semibold">Peer to peer</h2>
             <span className="font-thin leading-7">
-              Fast, safe, and lightweight <b>cli</b> application to just run,
-              share and move on with your life.
+              Gistit enables peer to peer file sharing via <b>libp2p</b>. The
+              network stack behind <b>IPFS</b>
             </span>
           </li>
         </ul>
         <video
-          src="/clipboard.webm"
+          src="/recording.mp4"
           autoPlay={true}
           loop={true}
+          muted={true}
           width="768px"
           className="my-20 bg-gray-200 border-gray-700 rounded-lg dark:bg-gray-700 border-[1px]"
         />
@@ -61,7 +62,7 @@ const Home: NextPage = () => {
           />
           <SubHeading text="Clipboard" />
           <div className="pl-6">
-            <DocText text="For clipboard features make sure you have a working clipboard backend." />
+            <DocText text="For clipboard features make sure you have a working clipboard backend. (e.g. 'xclip', 'wl-copy' on Linux. 'pbcopy' on MacOs)" />
           </div>
           <SubHeading text="Terminal colors" />
           <div className="pl-6">
@@ -82,6 +83,33 @@ const Home: NextPage = () => {
               text="Github"
               href="https://github.com/fabricio7p/gistit/releases"
             />
+          </div>
+          <Heading text="Basic usage" id="basic-usage" href="#basic-usage" />
+          <SubHeading text="Sending" />
+          <div className="pl-6">
+            <div className="mb-4">
+              <DocText text="Send a gistit: " />
+              <Code
+                codeString="gistit send file.txt [-c] [--author AUTHOR] [--description DESCRIPTION]"
+                lang="sh"
+              />
+            </div>
+            <div className="mb-4">
+              <DocText text="Send stdin: " />
+              <Code codeString="ls | gistit" lang="sh" />
+            </div>
+            <div className="mb-4">
+              <DocText text="Post to " />
+              <DocLink text="Github Gist" href="https://gist.github.com/" />
+              <Code codeString="gistit file.txt --github" lang="sh" />
+            </div>
+          </div>
+          <SubHeading text="Fetching" />
+          <div className="pl-6">
+            <div className="mb-4">
+              <DocText text="Fetching a gistit: " />
+              <Code codeString="gistit f [HASH] [--save]" lang="sh" />
+            </div>
           </div>
         </article>
       </>

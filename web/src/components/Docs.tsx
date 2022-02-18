@@ -81,7 +81,7 @@ interface CodeProps {
 export const Code = ({ lang, codeString = '' }: CodeProps) => {
   SyntaxHighlighter.registerLanguage('bash', sh)
   return (
-    <div className="relative w-72 sm:w-full">
+    <div className="relative w-72 sm:w-full my-1">
       <span className="absolute text-xs text-gray-400 top-2 right-2">
         {lang}
       </span>
@@ -91,7 +91,7 @@ export const Code = ({ lang, codeString = '' }: CodeProps) => {
         style={codeStyle}
         customStyle={{
           fontSize: '0.95em',
-          lineHeight: '3em',
+          lineHeight: '2.5em',
           background: '#374151'
         }}
         codeTagProps={{
