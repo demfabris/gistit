@@ -109,9 +109,9 @@ If `gistit-daemon` is running **sending** and **fetching** gistits will be autom
 
 Check [releases](https://github.com/demfabris/gistit/releases)
 
-**With** _\<my favorite package manager here\>_
-- **AUR** - Upcomming
-- You tell me
+**With AUR**
+
+[gistit-bin](https://aur.archlinux.org/packages/gistit-bin)
 
 **From [crates.io](https://crates.io/crates/gistit/)**
 
