@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 name = "gistit"
 readme = "README.md"
 repository = "https://github.com/fabricio7p/gistit"
-version = "0.2.1"
+version = "0.2.2"
 homepage = "https://gistit.vercel.app/"
 
 [features]
@@ -37,7 +37,7 @@ gistit-project = { version = "0.1.0", path = "../gistit-project" }
 gistit-proto = { version = "0.1.2", path = "../gistit-proto" }
 # Add openssl-sys as a direct dependency so it can be cross compiled to
 # x86_64-unknown-linux-musl using the "vendored" feature below
-openssl-sys = "*"
+openssl-sys = "0.9"
 
 [build-dependencies]
 clap_complete = { version = "3.1.0" }
