@@ -1,0 +1,36 @@
+{
+  "nested": {
+    "gistit": {
+      "nested": {
+        "payload": {
+          "nested": {
+            "Gistit": {
+              "oneofs": { "_description": { "oneof": ["description"] } },
+              "fields": {
+                "hash": { "type": "string", "id": 1 },
+                "author": { "type": "string", "id": 2 },
+                "description": {
+                  "type": "string",
+                  "id": 3,
+                  "options": { "proto3_optional": true }
+                },
+                "timestamp": { "type": "string", "id": 4 },
+                "inner": { "rule": "repeated", "type": "Inner", "id": 5 }
+              },
+              "nested": {
+                "Inner": {
+                  "fields": {
+                    "name": { "type": "string", "id": 1 },
+                    "lang": { "type": "string", "id": 2 },
+                    "size": { "type": "uint32", "id": 3 },
+                    "data": { "type": "string", "id": 4 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

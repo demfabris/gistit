@@ -1,7 +1,8 @@
 import { Layout, Snippet } from 'components'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
-import protobuf, { Root } from 'protobufjs'
+import protobuf from 'protobufjs'
+import payload from '../../../public/payload.json'
 
 export type GistitPayload = {
   hash: string
@@ -26,9 +27,7 @@ const SnippetPage = () => {
   useEffect(() => {
     if (hash)
       (async () => {
-        const proto = await protobuf.load(
-          'https://raw.githubusercontent.com/demfabris/gistit/master/gistit-proto/src/payload.proto'
-        )
+        const proto = await protobuf.Root.fromJSON(payload)
         const Gistit = proto.lookupType('gistit.payload.Gistit')
         const body = Gistit.encode({ hash }).finish()
 
