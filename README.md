@@ -36,7 +36,7 @@ A feature packed, hash based `code` snippet sharing tool focused on ease of use 
 - **Open source** - Independent web application and server, open source top to bottom.
 - **Integrated** - Integration with GitHub Gists.
 - **Handy** - system clipboard integration that actually works.
-- **Peer to peer** - peer to peer file sharing via [libp2p](https://github.com/libp2p/rust-libp2p). The network stach behind [IPFS](https://ipfs.io/). :globe_with_meridians:
+- **Peer to peer** - peer to peer file sharing via [libp2p](https://github.com/libp2p/rust-libp2p). The network stack behind [IPFS](https://ipfs.io/). :globe_with_meridians:
 
 ### Feature requests
 
